@@ -54,7 +54,7 @@ export default function Configurator(props) {
           <DrawerHeader pt="24px" px="24px">
             <DrawerCloseButton />
             <Text fontSize="xl" fontWeight="bold" mt="16px">
-              Purity UI Configurator
+              POS UI Configurator
             </Text>
             <Text fontSize="md" mb="16px">
               See your dashboard options.
@@ -135,7 +135,7 @@ export default function Configurator(props) {
               </Flex>
 
               <Separator />
-              <Box mt="24px">
+              {/* <Box mt="24px">
                 <Text fontSize="md" fontWeight="600">
                   Sidenav Type
                 </Text>
@@ -221,7 +221,7 @@ export default function Configurator(props) {
                     </Link>
                   </Flex>
                 </Box>
-              </Box>
+              </Box> */}
             </Flex>
           </DrawerBody>
         </DrawerContent>

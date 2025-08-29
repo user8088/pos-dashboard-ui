@@ -3,6 +3,7 @@ import {
   AvatarGroup,
   Flex,
   Icon,
+  Image,
   Progress,
   Td,
   Text,
@@ -14,12 +15,21 @@ import React from "react";
 function DashboardTableRow(props) {
   const { logo, name, members, budget, progression } = props;
   const textColor = useColorModeValue("gray.700", "white");
+  
+  // Check if logo is a string (image path) or component (icon)
+  const isImagePath = typeof logo === 'string';
+  
   return (
     <Tr>
       <Td minWidth={{ sm: "250px" }} pl="0px">
         <Flex align="center" py=".8rem" minWidth="100%" flexWrap="nowrap">
-          <Icon as={logo} h={"24px"} w={"24px"} pe="5px" />
+          {isImagePath ? (
+            <Image src={logo} h={"24px"} w={"24px"}  alt={name} />
+          ) : (
+            <Icon as={logo} h={"24px"} w={"24px"} pe="5px" />
+          )}
           <Text
+          ps={"10px"}
             fontSize="md"
             color={textColor}
             fontWeight="bold"
@@ -32,7 +42,7 @@ function DashboardTableRow(props) {
 
       <Td>
         <AvatarGroup size="sm">
-          {members.map((member) => {
+          {Array.isArray(members) ? members.map((member) => {
             return (
               <Avatar
                 name="Ryan Florence"
@@ -41,7 +51,13 @@ function DashboardTableRow(props) {
                 _hover={{ zIndex: "3", cursor: "pointer" }}
               />
             );
-          })}
+          }) : (
+            <Text fontSize="md"
+            color={textColor}
+            fontWeight="bold">
+              {members}
+            </Text>
+          )}
         </AvatarGroup>
       </Td>
       <Td>

@@ -83,7 +83,7 @@ const BuiltByDevelopers = ({ title, name, description, image }) => {
               <Text fontSize={{ base: '1xl', md: '2xl' }} fontWeight='extrabold' lineHeight='1.1'>
                 Factory Dashboard
               </Text>
-              <Text fontSize={{ base: 'sm', md: 'md' }} lineHeight='1.6' opacity={0.95}>
+              <Text fontSize={{ base: 'sm', md: 'sm' }} lineHeight='1.6' opacity={0.95}>
                 {description}
               </Text>
             </Flex>

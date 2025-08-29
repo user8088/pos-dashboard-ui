@@ -1,4 +1,7 @@
 // Chakra imports
+import { BsArrowRight } from "react-icons/bs";
+import { Button } from "@chakra-ui/react";
+
 import {
   Flex,
   Icon,
@@ -37,9 +40,9 @@ const Projects = ({ title, amount, captions, data }) => {
             />
             <Text fontSize='sm' color='gray.400' fontWeight='normal'>
               <Text fontWeight='bold' as='span'>
-                {amount} done
+                {amount} Products
               </Text>{" "}
-              this month.
+              Stocked this month.
             </Text>
           </Flex>
         </Flex>
@@ -71,6 +74,35 @@ const Projects = ({ title, amount, captions, data }) => {
           })}
         </Tbody>
       </Table>
+      <Flex align='center'>
+              <Button
+                p='0px'
+                variant='no-hover'
+                bg='transparent'
+                my={{ sm: "1.5rem", lg: "0px" }}>
+                <Text
+                  fontSize='sm'
+                  color={textColor}
+                  fontWeight='bold'
+                  cursor='pointer'
+                  transition='all .5s ease'
+                  my={{ sm: "1.5rem", lg: "0px" }}
+                  _hover={{ me: "4px" }}>
+                  Manage Stock
+                </Text>
+                <Icon
+                  as={BsArrowRight}
+                  w='20px'
+                  h='20px'
+                  fontSize='2xl'
+                  transition='all .5s ease'
+                  ms='8px'
+                  cursor='pointer'
+                  pt='2px'
+                  _hover={{ transform: "translateX(20%)" }}
+                />
+              </Button>
+            </Flex>
     </Card>
   );
 };

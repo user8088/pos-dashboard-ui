@@ -8,6 +8,8 @@ import avatar7 from "assets/img/avatars/avatar7.png";
 import avatar8 from "assets/img/avatars/avatar8.png";
 import avatar9 from "assets/img/avatars/avatar9.png";
 import avatar10 from "assets/img/avatars/avatar10.png";
+import placeholder from "assets/img/avatars/placeholder.png";   
+
 // Custom icons
 import {
   AdobexdLogo,
@@ -31,45 +33,45 @@ import { SiDropbox } from "react-icons/si";
 
 export const dashboardTableData = [
   {
-    logo: AdobexdLogo,
-    name: "Purity UI Version",
-    members: [avatar1, avatar2, avatar3, avatar4, avatar5],
-    budget: "$14,000",
+    logo: placeholder,
+    name: "Electrical Wires",
+    members: 'PKR. 14,000',
+    budget: 'PKR. 50,000',
     progression: 60,
   },
   {
-    logo: AtlassianLogo,
-    name: "Add Progress Track",
-    members: [avatar3, avatar2],
-    budget: "$3,000",
+    logo: placeholder,
+    name: "Electric Drill",
+    members: 'PKR. 14,000',
+    budget: 'PKR. 50,000',
     progression: 10,
   },
   {
-    logo: SlackLogo,
-    name: "Fix Platform Errors",
-    members: [avatar10, avatar4],
-    budget: "Not set",
+    logo: placeholder,
+    name: "Sockets",
+    members: 'PKR. 14,000',
+    budget: 'PKR. 50,000',
     progression: 100,
   },
   {
-    logo: SpotifyLogo,
-    name: "Launch our Mobile App",
-    members: [avatar2, avatar3, avatar7, avatar8],
-    budget: "$32,000",
+    logo: placeholder,
+    name: "Rubber Hammer",
+    members: 'PKR. 14,000',
+    budget: 'PKR. 50,000',
     progression: 100,
   },
   {
-    logo: JiraLogo,
-    name: "Add the New Pricing Page",
-    members: [avatar10, avatar3, avatar7, avatar2, avatar8],
-    budget: "$400",
+    logo: placeholder,
+    name: "Nails",
+    members: 'PKR. 14,000',
+    budget: 'PKR. 50,000',
     progression: 25,
   },
   {
-    logo: InvisionLogo,
-    name: "Redesign New Online Shop",
-    members: [avatar9, avatar3, avatar2],
-    budget: "$7,600",
+    logo: placeholder,
+    name: "Plumbing Pipes",
+    members: 'PKR. 14,000',
+    budget: 'PKR. 50,000',
     progression: 40,
   },
 ];
@@ -77,38 +79,39 @@ export const dashboardTableData = [
 export const timelineData = [
   {
     logo: FaBell,
-    title: "$2400, Design changes",
+    title: "PKR. 2400, Due Amount for Customer A",
     date: "22 DEC 7:20 PM",
+    color: "red",
+  },
+  {
+    logo: FaBell,
+    title: "PKR. 2400, Pending Amount by Customer A",
+    date: "21 DEC 11:21 PM",
     color: "teal.300",
   },
   {
-    logo: FaHtml5,
-    title: "New order #4219423",
-    date: "21 DEC 11:21 PM",
-    color: "orange",
-  },
-  {
-    logo: FaShoppingCart,
-    title: "Server Payments for April",
+    logo: FaBell,
+    title: "PKR. 2400, Pending Amount by Customer B",
     date: "21 DEC 9:28 PM",
-    color: "blue.400",
+    color: "teal.300",
   },
   {
-    logo: FaCreditCard,
-    title: "New card added for order #3210145",
+    logo: FaBell,
+    title: "PKR. 2400, Pending Amount by Customer C",
     date: "20 DEC 3:52 PM",
-    color: "orange.300",
+    color: "teal.300",
   },
   {
-    logo: SiDropbox,
-    title: "Unlock packages for Development",
+    logo: FaBell,
+    title: "PKR. 2400, Pending Amount by Customer D",
     date: "19 DEC 11:35 PM",
-    color: "purple",
+    color: "teal.300",
   },
   {
-    logo: AdobexdLogo,
-    title: "New order #9851258",
+    logo: FaBell,
+    title: "PKR. 2400, Pending Amount by Customer E",
     date: "18 DEC 4:41 PM",
+    color: "teal.300",
   },
 ];
 export const rtlDashboardTableData = [

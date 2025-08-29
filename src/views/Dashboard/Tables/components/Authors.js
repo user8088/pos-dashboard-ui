@@ -12,23 +12,128 @@ import {
 import Card from "components/Card/Card.js";
 import CardBody from "components/Card/CardBody.js";
 import CardHeader from "components/Card/CardHeader.js";
-import TablesTableRow from "components/Tables/TablesTableRow";
+import StockTableRow from "components/Tables/StockTableRow";
 import React from "react";
+import logo from "assets/img/avatars/placeholder.png";
 
 const Authors = ({ title, captions, data }) => {
   const textColor = useColorModeValue("gray.700", "white");
+  
+  // Stock management data based on the image
+  const stockData = [
+    {
+      logo: logo,
+      name: "Tools & Hardware",
+      quantity: "200 Kilograms",
+      category: "Construction Material",
+      status: "In Stock",
+      stockValue: "PKR.15,000"
+    },
+    {
+      logo: logo,
+      name: "Tools & Hardware",
+      quantity: "800 Units",
+      category: "Electrical Accessories",
+      status: "Out of Stock",
+      stockValue: "PKR.15,000"
+    },
+    {
+      logo: logo,
+      name: "Tools & Hardware",
+      quantity: "200 Kilograms",
+      category: "Electrical Accessories",
+      status: "Low Stock",
+      stockValue: "PKR.15,000"
+    },
+    {
+      logo: logo,
+      name: "Tools & Hardware",
+      quantity: "800 Units",
+      category: "Electrical Accessories",
+      status: "In Stock",
+      stockValue: "PKR.15,000"
+    },
+    {
+      logo: logo,
+      name: "Tools & Hardware",
+      quantity: "200 Kilograms",
+      category: "Construction Material",
+      status: "In Stock",
+      stockValue: "PKR.15,000"
+    },
+    {
+      logo: logo,
+      name: "Tools & Hardware",
+      quantity: "800 Units",
+      category: "Electrical Accessories",
+      status: "In Stock",
+      stockValue: "PKR.15,000"
+    },
+    {
+      logo: logo,
+      name: "Tools & Hardware",
+      quantity: "200 Kilograms",
+      category: "Electrical Accessories",
+      status: "In Stock",
+      stockValue: "PKR.15,000"
+    },
+    {
+      logo: logo,
+      name: "Tools & Hardware",
+      quantity: "800 Units",
+      category: "Electrical Accessories",
+      status: "In Stock",
+      stockValue: "PKR.15,000"
+    },
+    {
+      logo: logo,
+      name: "Tools & Hardware",
+      quantity: "200 Kilograms",
+      category: "Construction Material",
+      status: "In Stock",
+      stockValue: "PKR.15,000"
+    },
+    {
+      logo: logo,
+      name: "Tools & Hardware",
+      quantity: "800 Units",
+      category: "Electrical Accessories",
+      status: "In Stock",
+      stockValue: "PKR.15,000"
+    },
+    {
+      logo: logo,
+      name: "Tools & Hardware",
+      quantity: "200 Kilograms",
+      category: "Electrical Accessories",
+      status: "In Stock",
+      stockValue: "PKR.15,000"
+    },
+    {
+      logo: logo,
+      name: "Tools & Hardware",
+      quantity: "800 Units",
+      category: "Electrical Accessories",
+      status: "In Stock",
+      stockValue: "PKR.15,000"
+    }
+  ];
+
+  // Stock management captions
+  const stockCaptions = ["Products", "QUANTITY PER UNIT", "CATEGORY", "STATUS", "Stock Value", ""];
+
   return (
     <Card overflowX={{ sm: "scroll", xl: "hidden" }}>
       <CardHeader p='6px 0px 22px 0px'>
         <Text fontSize='xl' color={textColor} fontWeight='bold'>
-          {title}
+          Stock Management
         </Text>
       </CardHeader>
       <CardBody>
         <Table variant='simple' color={textColor}>
           <Thead>
             <Tr my='.8rem' pl='0px' color='gray.400'>
-              {captions.map((caption, idx) => {
+              {stockCaptions.map((caption, idx) => {
                 return (
                   <Th color='gray.400' key={idx} ps={idx === 0 ? "0px" : null}>
                     {caption}
@@ -38,17 +143,16 @@ const Authors = ({ title, captions, data }) => {
             </Tr>
           </Thead>
           <Tbody>
-            {data.map((row) => {
+            {stockData.map((row, index) => {
               return (
-                <TablesTableRow
-                  key={`${row.email}-${row.name}`}
-                  name={row.name}
+                <StockTableRow
+                  key={`${row.name}-${index}`}
                   logo={row.logo}
-                  email={row.email}
-                  subdomain={row.subdomain}
-                  domain={row.domain}
+                  name={row.name}
+                  quantity={row.quantity}
+                  category={row.category}
                   status={row.status}
-                  date={row.date}
+                  stockValue={row.stockValue}
                 />
               );
             })}

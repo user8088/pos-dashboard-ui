@@ -9,7 +9,6 @@ import {
   useColorModeValue,
 } from "@chakra-ui/react";
 import {
-  CreativeTimLogo,
   DocumentIcon,
   HomeIcon,
   PersonIcon,
@@ -79,7 +78,6 @@ export default function AuthNavbar(props) {
       alignItems="center"
       color={mainText}
     >
-      <CreativeTimLogo w="32px" h="32px" me="10px" />
       <Text fontSize="sm" mt="3px">
         {logoText}
       </Text>
@@ -184,7 +182,7 @@ export default function AuthNavbar(props) {
           />
         </Box>
         {linksAuth}
-        <Link href="https://creative-tim.com/product/purity-ui-dashboard">
+        <Link>
           <Button
             bg={bgButton}
             color={colorButton}
@@ -197,7 +195,7 @@ export default function AuthNavbar(props) {
               lg: "flex",
             }}
           >
-            Free Download
+           Contact Developer
           </Button>
         </Link>
       </Flex>

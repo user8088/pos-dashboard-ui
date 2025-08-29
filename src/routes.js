@@ -4,6 +4,7 @@ import Tables from "views/Dashboard/Tables";
 import Billing from "views/Dashboard/Billing";
 import RTLPage from "views/Dashboard/RTL";
 import Profile from "views/Dashboard/Profile";
+import InProgress from "views/Dashboard/InProgress";
 import SignIn from "views/Auth/SignIn.js";
 import SignUp from "views/Auth/SignUp.js";
 
@@ -16,6 +17,7 @@ import {
   RocketIcon,
   SupportIcon,
 } from "components/Icons/Icons";
+import { SettingsIcon } from "@chakra-ui/icons";
 
 var dashRoutes = [
   {
@@ -27,29 +29,30 @@ var dashRoutes = [
     layout: "/admin",
   },
   {
-    path: "/tables",
-    name: "Tables",
+    path: "/sales-analytics",
+    name: "Sales & Analytics",
     rtlName: "لوحة القيادة",
     icon: <StatsIcon color="inherit" />,
+    component: InProgress,
+    layout: "/admin",
+  },
+  {
+    path: "/stock-management",
+    name: "Stock Management",
+    rtlName: "لوحة القيادة",
+    icon: <SettingsIcon color="inherit" />,
     component: Tables,
     layout: "/admin",
   },
   {
-    path: "/billing",
-    name: "Billing",
+    path: "/expenses-cashflow",
+    name: "Expenses & Cashflow",
     rtlName: "لوحة القيادة",
     icon: <CreditIcon color="inherit" />,
-    component: Billing,
+    component: InProgress,
     layout: "/admin",
   },
-  {
-    path: "/rtl-support-page",
-    name: "RTL",
-    rtlName: "آرتيإل",
-    icon: <SupportIcon color="inherit" />,
-    component: RTLPage,
-    layout: "/rtl",
-  },
+
   {
     name: "ACCOUNT PAGES",
     category: "account",
@@ -62,7 +65,7 @@ var dashRoutes = [
         rtlName: "لوحة القيادة",
         icon: <PersonIcon color="inherit" />,
         secondaryNavbar: true,
-        component: Profile,
+        component: InProgress,
         layout: "/admin",
       },
       {

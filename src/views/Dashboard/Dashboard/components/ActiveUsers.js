@@ -70,24 +70,30 @@ const ActiveUsers = ({ title, percentage, chart }) => {
               title={"Top Product"}
               amount={"PKR. 82,984"}
               percentage={20}
+              category={"Electric Drill"}
               icon={<WalletIcon h={"15px"} w={"15px"} color={iconBoxInside} />}
             />
             <ChartStatistics
-              title={"Total Sales"}
-              amount={"PKR. 2,420,000"}
-              percentage={80}
+              title={"Top Category"}
+              amount={"PKR. 100,000"}
+              percentage={20}
+              category={"Construction Materials"}
               icon={<RocketIcon h={"15px"} w={"15px"} color={iconBoxInside} />}
             />
             <ChartStatistics
               title={"Total Profit"}
               amount={"PKR.320,000"}
-              percentage={30}
+              percentage={20}
+              changeIndicator={"(+23) than last week"}
+              changeType={"positive"}
               icon={<CartIcon h={"15px"} w={"15px"} color={iconBoxInside} />}
             />
             <ChartStatistics
               title={"Total Loss"}
               amount={"PKR.44,000"}
-              percentage={40}
+              percentage={20}
+              changeIndicator={"(-10) than last week"}
+              changeType={"negative"}
               icon={<StatsIcon h={"15px"} w={"15px"} color={iconBoxInside} />}
             />
           </SimpleGrid>
