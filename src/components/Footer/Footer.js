@@ -35,7 +35,7 @@ export default function Footer(props) {
         </Text>
         <Link
           // color={linkTeal}
-          color="teal.400"
+          color="#FF8D28"
           href="https://www.creative-tim.com"
           target="_blank"
         >
@@ -46,7 +46,7 @@ export default function Footer(props) {
         &
         <Link
           // color={linkTeal}
-          color="teal.400"
+          color="#FF8D28"
           href="https://www.simmmple.com"
           target="_blank"
         >

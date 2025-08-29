@@ -20,7 +20,7 @@ const BuiltByDevelopers = ({ title, name, description, image }) => {
   return (
     <Card minHeight='290.5px' p='1.2rem'>
       <CardBody w='100%'>
-        <Flex flexDirection={{ sm: "column", lg: "row" }} w='100%'>
+        <Flex flexDirection={{ sm: "column", lg: "row" }} w='100%' align='stretch' gap={{ sm: "20px", lg: "24px" }}>
           <Flex
             flexDirection='column'
             h='100%'
@@ -58,9 +58,9 @@ const BuiltByDevelopers = ({ title, name, description, image }) => {
                   h='20px'
                   fontSize='2xl'
                   transition='all .5s ease'
-                  mx='.3rem'
+                  ms='8px'
                   cursor='pointer'
-                  pt='4px'
+                  pt='2px'
                   _hover={{ transform: "translateX(20%)" }}
                 />
               </Button>
@@ -68,13 +68,31 @@ const BuiltByDevelopers = ({ title, name, description, image }) => {
           </Flex>
           <Spacer />
           <Flex
-            bg='teal.300'
-            align='center'
-            justify='center'
+            bg='brand.500'
+            color='white'
+            flexDirection='column'
+            justify='space-between'
             borderRadius='15px'
             width={{ lg: "40%" }}
-            minHeight={{ sm: "250px" }}>
-            {image}
+            minHeight={{ sm: "250px" }}
+            p={{ base: '22px', md: '28px' }}>
+            <Flex direction='column' gap='10px'>
+              <Text fontSize='sm' fontWeight='bold'>
+                {title}
+              </Text>
+              <Text fontSize={{ base: '1xl', md: '2xl' }} fontWeight='extrabold' lineHeight='1.1'>
+                {name}
+              </Text>
+              <Text fontSize={{ base: 'sm', md: 'md' }} lineHeight='1.6' opacity={0.95}>
+                {description}
+              </Text>
+            </Flex>
+            <Button p='0' variant='no-hover' bg='transparent' alignSelf='flex-start'>
+              <Text fontSize={{ base: 'sm', md: 'md' }} fontWeight='bold' color='white'>
+                Switch to {name}
+              </Text>
+              <Icon as={BsArrowRight} w='22px' h='22px' ms='10px' pt='2px' />
+            </Button>
           </Flex>
         </Flex>
       </CardBody>

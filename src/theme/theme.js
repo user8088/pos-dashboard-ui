@@ -12,8 +12,32 @@ import { MainPanelComponent } from './additions/layout/MainPanel';
 import { PanelContentComponent } from './additions/layout/PanelContent';
 import { PanelContainerComponent } from './additions/layout/PanelContainer';
 // import { mode } from "@chakra-ui/theme-tools";
+const colors = {
+	brand: {
+		50: '#FFF3E9',
+		100: '#FFE0C2',
+		200: '#FFCC9C',
+		300: '#FFB975',
+		400: '#FFA54F',
+		500: '#FF8D28',
+		600: '#E6781F',
+		700: '#BF6017',
+		800: '#994A10',
+		900: '#73350A'
+	}
+};
+
+const components = {
+	Button: {
+		defaultProps: { colorScheme: 'brand' }
+	},
+	Badge: {
+		defaultProps: { colorScheme: 'brand' }
+	}
+};
+
 export default extendTheme(
-	{ breakpoints }, // Breakpoints
+	{ breakpoints, colors, components }, // Breakpoints and brand colors
 	globalStyles,
 	buttonStyles, // Button styles
 	badgeStyles, // Badge styles
