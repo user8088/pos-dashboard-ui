@@ -32,7 +32,7 @@ const BuiltByDevelopers = ({ title, name, description, image }) => {
             <Text fontSize='lg' color={textColor} fontWeight='bold' pb='.5rem'>
               {name}
             </Text>
-            <Text fontSize='sm' color='gray.400' fontWeight='normal'>
+            <Text fontSize='lg' color='gray.400' fontWeight='normal'>
               {description}
             </Text>
             <Spacer />
@@ -50,7 +50,7 @@ const BuiltByDevelopers = ({ title, name, description, image }) => {
                   transition='all .5s ease'
                   my={{ sm: "1.5rem", lg: "0px" }}
                   _hover={{ me: "4px" }}>
-                  Read more
+                  Manage Staff
                 </Text>
                 <Icon
                   as={BsArrowRight}
@@ -78,10 +78,10 @@ const BuiltByDevelopers = ({ title, name, description, image }) => {
             p={{ base: '22px', md: '28px' }}>
             <Flex direction='column' gap='10px'>
               <Text fontSize='sm' fontWeight='bold'>
-                {title}
+                You are viewing
               </Text>
               <Text fontSize={{ base: '1xl', md: '2xl' }} fontWeight='extrabold' lineHeight='1.1'>
-                {name}
+                Factory Dashboard
               </Text>
               <Text fontSize={{ base: 'sm', md: 'md' }} lineHeight='1.6' opacity={0.95}>
                 {description}
@@ -89,7 +89,7 @@ const BuiltByDevelopers = ({ title, name, description, image }) => {
             </Flex>
             <Button p='0' variant='no-hover' bg='transparent' alignSelf='flex-start'>
               <Text fontSize={{ base: 'sm', md: 'md' }} fontWeight='bold' color='white'>
-                Switch to {name}
+                Switch to Factory Dashboard
               </Text>
               <Icon as={BsArrowRight} w='22px' h='22px' ms='10px' pt='2px' />
             </Button>

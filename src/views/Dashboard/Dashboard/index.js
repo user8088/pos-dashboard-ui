@@ -36,25 +36,25 @@ export default function Dashboard() {
       <SimpleGrid columns={{ sm: 1, md: 2, xl: 4 }} spacing='24px'>
         <MiniStatistics
           title={"Today's Moneys"}
-          amount={"$53,000"}
+          amount={"PKR. 53,000"}
           percentage={55}
           icon={<WalletIcon h={"24px"} w={"24px"} color={iconBoxInside} />}
         />
         <MiniStatistics
-          title={"Today's Users"}
+          title={"Customers Today"}
           amount={"2,300"}
           percentage={5}
           icon={<GlobeIcon h={"24px"} w={"24px"} color={iconBoxInside} />}
         />
         <MiniStatistics
-          title={"New Clients"}
-          amount={"+3,020"}
+          title={"Comparitive Loss"}
+          amount={"PKR. 3,020"}
           percentage={-14}
           icon={<DocumentIcon h={"24px"} w={"24px"} color={iconBoxInside} />}
         />
         <MiniStatistics
           title={"Total Sales"}
-          amount={"$173,000"}
+          amount={"PKR. 173,000"}
           percentage={8}
           icon={<CartIcon h={"24px"} w={"24px"} color={iconBoxInside} />}
         />
@@ -65,10 +65,10 @@ export default function Dashboard() {
         my='26px'
         gap='24px'>
         <BuiltByDevelopers
-          title={"Built by Developers"}
-          name={"Purity UI Dashboard"}
+          title={"You are viewing"}
+          name={"Store Dashboard"}
           description={
-            "From colors, cards, typography to complex elements, you will find the full documentation."
+            "Manage cash flow, track raw material usage, manage salaries and store related expenses."
           }
           image={
             <Image
@@ -80,7 +80,7 @@ export default function Dashboard() {
         />
         <WorkWithTheRockets
           backgroundImage={peopleImage}
-          title={"Work with the rockets"}
+          title={"Manage Customers & Invoices"}
           description={
             "Wealth creation is a revolutionary recent positive-sum game. It is all about who takes the opportunity first."
           }
@@ -92,7 +92,7 @@ export default function Dashboard() {
         gap='24px'
         mb={{ lg: "26px" }}>
         <ActiveUsers
-          title={"Active Users"}
+          title={"Sales & Analytics"}
           percentage={23}
           chart={<BarChart />}
         />

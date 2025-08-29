@@ -1,5 +1,6 @@
 // Chakra imports
-import { Flex, SimpleGrid, Text, useColorModeValue } from "@chakra-ui/react";
+import { Button, Flex, Icon, SimpleGrid, Text, useColorModeValue  } from "@chakra-ui/react";
+import { BsArrowRight } from "react-icons/bs";
 // Custom components
 import Card from "components/Card/Card.js";
 import CardBody from "components/Card/CardBody.js";
@@ -21,7 +22,7 @@ const ActiveUsers = ({ title, percentage, chart }) => {
       <CardBody>
         <Flex direction='column' w='100%'>
           {chart}
-          <Flex direction='column' mt='24px' mb='36px' alignSelf='flex-start'>
+          <Flex direction='column' mt='24px' mb='26px' alignSelf='flex-start'>
             <Text fontSize='lg' color={textColor} fontWeight='bold' mb='6px'>
               {title}
             </Text>
@@ -34,29 +35,58 @@ const ActiveUsers = ({ title, percentage, chart }) => {
               </Text>{" "}
               than last week
             </Text>
+            <Flex align='center'>
+              <Button
+                p='0px'
+                variant='no-hover'
+                bg='transparent'
+                my={{ sm: "1.5rem", lg: "0px" }}>
+                <Text
+                  fontSize='sm'
+                  color={textColor}
+                  fontWeight='bold'
+                  cursor='pointer'
+                  transition='all .5s ease'
+                  my={{ sm: "1.5rem", lg: "0px" }}
+                  _hover={{ me: "4px" }}>
+                  Manage Analytics
+                </Text>
+                <Icon
+                  as={BsArrowRight}
+                  w='20px'
+                  h='20px'
+                  fontSize='2xl'
+                  transition='all .5s ease'
+                  ms='8px'
+                  cursor='pointer'
+                  pt='2px'
+                  _hover={{ transform: "translateX(20%)" }}
+                />
+              </Button>
+            </Flex>
           </Flex>
           <SimpleGrid gap={{ sm: "12px" }} columns={4}>
             <ChartStatistics
-              title={"Users"}
-              amount={"32,984"}
+              title={"Top Product"}
+              amount={"PKR. 82,984"}
               percentage={20}
               icon={<WalletIcon h={"15px"} w={"15px"} color={iconBoxInside} />}
             />
             <ChartStatistics
-              title={"Clicks"}
-              amount={"2.42m"}
+              title={"Total Sales"}
+              amount={"PKR. 2,420,000"}
               percentage={80}
               icon={<RocketIcon h={"15px"} w={"15px"} color={iconBoxInside} />}
             />
             <ChartStatistics
-              title={"Sales"}
-              amount={"2,400$"}
+              title={"Total Profit"}
+              amount={"PKR.320,000"}
               percentage={30}
               icon={<CartIcon h={"15px"} w={"15px"} color={iconBoxInside} />}
             />
             <ChartStatistics
-              title={"Items"}
-              amount={"320"}
+              title={"Total Loss"}
+              amount={"PKR.44,000"}
               percentage={40}
               icon={<StatsIcon h={"15px"} w={"15px"} color={iconBoxInside} />}
             />
