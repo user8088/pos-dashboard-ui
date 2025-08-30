@@ -22,11 +22,20 @@ const ActiveUsers = ({ title, percentage, chart }) => {
       <CardBody>
         <Flex direction='column' w='100%'>
           {chart}
-          <Flex direction='column' mt='24px' mb='26px' alignSelf='flex-start'>
-            <Text fontSize='lg' color={textColor} fontWeight='bold' mb='6px'>
+          <Flex direction='column' mt={{ base: '20px', sm: '22px', md: '24px' }} mb={{ base: '20px', sm: '24px', md: '26px' }} alignSelf='flex-start'>
+            <Text 
+              fontSize={{ base: 'md', sm: 'lg', md: 'lg' }} 
+              color={textColor} 
+              fontWeight='bold' 
+              mb={{ base: '4px', sm: '5px', md: '6px' }}
+            >
               {title}
             </Text>
-            <Text fontSize='md' fontWeight='medium' color='gray.400'>
+            <Text 
+              fontSize={{ base: 'sm', sm: 'md', md: 'md' }} 
+              fontWeight='medium' 
+              color='gray.400'
+            >
               <Text
                 as='span'
                 color={percentage > 0 ? "#FF8D28" : "red.400"}
@@ -65,36 +74,40 @@ const ActiveUsers = ({ title, percentage, chart }) => {
               </Button>
             </Flex>
           </Flex>
-          <SimpleGrid gap={{ sm: "12px" }} columns={4}>
+                                           <SimpleGrid 
+              gap={{ base: "8px", sm: "10px", md: "12px", lg: "20px" }} 
+              columns={{ base: 2, sm: 2, md: 2, lg: 4 }}
+              spacing={{ base: "8px", sm: "10px", md: "12px", lg: "20px" }}
+            >
             <ChartStatistics
               title={"Top Product"}
               amount={"PKR. 82,984"}
               percentage={20}
               category={"Electric Drill"}
-              icon={<WalletIcon h={"15px"} w={"15px"} color={iconBoxInside} />}
-            />
-            <ChartStatistics
-              title={"Top Category"}
-              amount={"PKR. 100,000"}
-              percentage={20}
-              category={"Construction Materials"}
-              icon={<RocketIcon h={"15px"} w={"15px"} color={iconBoxInside} />}
-            />
-            <ChartStatistics
-              title={"Total Profit"}
-              amount={"PKR.320,000"}
-              percentage={20}
-              changeIndicator={"(+23) than last week"}
-              changeType={"positive"}
-              icon={<CartIcon h={"15px"} w={"15px"} color={iconBoxInside} />}
-            />
-            <ChartStatistics
-              title={"Total Loss"}
-              amount={"PKR.44,000"}
-              percentage={20}
-              changeIndicator={"(-10) than last week"}
-              changeType={"negative"}
-              icon={<StatsIcon h={"15px"} w={"15px"} color={iconBoxInside} />}
+                             icon={<WalletIcon h={{ base: "12px", sm: "13px", md: "15px", lg: "16px" }} w={{ base: "12px", sm: "13px", md: "15px", lg: "16px" }} color={iconBoxInside} />}
+             />
+             <ChartStatistics
+               title={"Top Category"}
+               amount={"PKR. 100,000"}
+               percentage={20}
+               category={"Construction Materials"}
+               icon={<RocketIcon h={{ base: "12px", sm: "13px", md: "15px", lg: "16px" }} w={{ base: "12px", sm: "13px", md: "15px", lg: "16px" }} color={iconBoxInside} />}
+             />
+             <ChartStatistics
+               title={"Total Profit"}
+               amount={"PKR.320,000"}
+               percentage={20}
+               changeIndicator={"(+23) than last week"}
+               changeType={"positive"}
+               icon={<CartIcon h={{ base: "12px", sm: "13px", md: "15px", lg: "16px" }} w={{ base: "12px", sm: "13px", md: "15px", lg: "16px" }} color={iconBoxInside} />}
+             />
+             <ChartStatistics
+               title={"Total Loss"}
+               amount={"PKR.44,000"}
+               percentage={20}
+               changeIndicator={"(-10) than last week"}
+               changeType={"negative"}
+               icon={<StatsIcon h={{ base: "12px", sm: "13px", md: "15px", lg: "16px" }} w={{ base: "12px", sm: "13px", md: "15px", lg: "16px" }} color={iconBoxInside} />}
             />
           </SimpleGrid>
         </Flex>

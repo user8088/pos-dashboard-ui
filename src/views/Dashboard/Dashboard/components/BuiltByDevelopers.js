@@ -26,15 +26,15 @@ const BuiltByDevelopers = ({ title, name, description, image }) => {
             h='100%'
             lineHeight='1.6'
             width={{ lg: "45%" }}>
-            <Text fontSize='sm' color='gray.400' fontWeight='bold'>
+            <Text fontSize={{ base: 'xs', sm: 'sm', md: 'md', lg: 'md' }} color='gray.400' fontWeight='bold'>
               {title}
             </Text>
-            <Text fontSize='lg' color={textColor} fontWeight='bold' pb='.5rem'>
-              {name}
-            </Text>
-            <Text fontSize='lg' color='gray.400' fontWeight='normal'>
-              {description}
-            </Text>
+                         <Text fontSize={{ base: 'md', sm: 'lg', md: 'xl', lg: 'xl' }} color={textColor} fontWeight='bold' pb='.5rem'>
+               {name}
+             </Text>
+                         <Text fontSize={{ base: 'sm', sm: 'md', md: 'lg', lg: 'lg' }} color='gray.400' fontWeight='normal'>
+               {description}
+             </Text>
             <Spacer />
             <Flex align='center'>
               <Button
@@ -42,27 +42,27 @@ const BuiltByDevelopers = ({ title, name, description, image }) => {
                 variant='no-hover'
                 bg='transparent'
                 my={{ sm: "1.5rem", lg: "0px" }}>
-                <Text
-                  fontSize='sm'
-                  color={textColor}
-                  fontWeight='bold'
-                  cursor='pointer'
-                  transition='all .5s ease'
-                  my={{ sm: "1.5rem", lg: "0px" }}
-                  _hover={{ me: "4px" }}>
-                  Manage Staff
-                </Text>
-                <Icon
-                  as={BsArrowRight}
-                  w='20px'
-                  h='20px'
-                  fontSize='2xl'
-                  transition='all .5s ease'
-                  ms='8px'
-                  cursor='pointer'
-                  pt='2px'
-                  _hover={{ transform: "translateX(20%)" }}
-                />
+                                 <Text
+                   fontSize={{ base: 'xs', sm: 'sm', md: 'md', lg: 'md' }}
+                   color={textColor}
+                   fontWeight='bold'
+                   cursor='pointer'
+                   transition='all .5s ease'
+                   my={{ sm: "1.5rem", lg: "0px" }}
+                   _hover={{ me: "4px" }}>
+                   Manage Staff
+                 </Text>
+                                 <Icon
+                   as={BsArrowRight}
+                   w={{ base: '18px', sm: '20px', md: '22px', lg: '22px' }}
+                   h={{ base: '18px', sm: '20px', md: '22px', lg: '22px' }}
+                   fontSize='2xl'
+                   transition='all .5s ease'
+                   ms='8px'
+                   cursor='pointer'
+                   pt='2px'
+                   _hover={{ transform: "translateX(20%)" }}
+                 />
               </Button>
             </Flex>
           </Flex>
@@ -77,21 +77,21 @@ const BuiltByDevelopers = ({ title, name, description, image }) => {
             minHeight={{ sm: "250px" }}
             p={{ base: '22px', md: '28px' }}>
             <Flex direction='column' gap='10px'>
-              <Text fontSize='sm' fontWeight='bold'>
+              <Text fontSize={{ base: 'xs', sm: 'sm', md: 'md', lg: 'md' }} fontWeight='bold'>
                 You are viewing
               </Text>
-              <Text fontSize={{ base: '1xl', md: '2xl' }} fontWeight='extrabold' lineHeight='1.1'>
-                Factory Dashboard
-              </Text>
-              <Text fontSize={{ base: 'sm', md: 'sm' }} lineHeight='1.6' opacity={0.95}>
-                {description}
-              </Text>
+                             <Text fontSize={{ base: 'md', sm: 'lg', md: 'xl', lg: 'xl' }} fontWeight='extrabold' lineHeight='1.1'>
+                 Factory Dashboard
+               </Text>
+                             <Text fontSize={{ base: 'xs', sm: 'xs', md: 'sm', lg: 'sm' }} lineHeight='1.6' opacity={0.95}>
+                 {description}
+               </Text>
             </Flex>
             <Button p='0' variant='no-hover' bg='transparent' alignSelf='flex-start'>
-              <Text fontSize={{ base: 'sm', md: 'md' }} fontWeight='bold' color='white'>
-                Switch to Factory Dashboard
-              </Text>
-              <Icon as={BsArrowRight} w='22px' h='22px' ms='10px' pt='2px' />
+                             <Text fontSize={{ base: 'xs', sm: 'xs', md: 'sm', lg: 'sm' }} fontWeight='bold' color='white'>
+                 Switch to Factory Dashboard
+               </Text>
+                             <Icon as={BsArrowRight} w={{ base: '14px', sm: '16px', md: '18px', lg: '18px' }} h={{ base: '14px', sm: '16px', md: '18px', lg: '18px' }} ms='10px' pt='2px' />
             </Button>
           </Flex>
         </Flex>

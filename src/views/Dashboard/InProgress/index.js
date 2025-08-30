@@ -43,6 +43,11 @@ export default function InProgress() {
       justify="center"
       px={4}
       py={8}
+      w="100vw"
+      h="100vh"
+      position="fixed"
+      top="0"
+      left="0"
     >
       <Card 
         maxW="600px" 
@@ -55,7 +60,7 @@ export default function InProgress() {
         overflow="hidden"
       >
         <CardBody p={{ base: "40px 24px", md: "60px 40px" }}>
-          <VStack spacing="32px" textAlign="center" align="center" justify="center">
+          <VStack spacing="32px" textAlign="center" align="center" justify="center" w="100%" mx="auto">
             {/* Animated Icon */}
             <Box
               bg='brand.500'
