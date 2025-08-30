@@ -34,15 +34,15 @@ function Billing() {
             gap='26px'>
             <CreditCard
               backgroundImage={BackgroundCard1}
-              title={"Purity UI"}
-              number={"7812 2139 0823 XXXX"}
+              title={"Total Revenue"}
+              number={"PKR. 1,000,000"}
               validity={{
-                name: "VALID THRU",
+                name: "Your Total Business & Personal Income",
                 data: "05/24",
               }}
               cvv={{
-                name: "CVV",
-                code: "09x",
+                name: "Updated:",
+                code: "Today",
               }}
               icon={
                 <Icon

@@ -49,7 +49,7 @@ var dashRoutes = [
     name: "Expenses & Cashflow",
     rtlName: "لوحة القيادة",
     icon: <CreditIcon color="inherit" />,
-    component: InProgress,
+    component: Billing,
     layout: "/admin",
   },
 
