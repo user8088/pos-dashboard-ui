@@ -11,7 +11,7 @@ import {
 import React from "react";
 
 function StockTableRow(props) {
-  const { logo, name, quantity, category, status, stockValue } = props;
+  const { logo, name, quantity, category, status, stockValue, onEdit } = props;
   const textColor = useColorModeValue("gray.700", "white");
 
   // Status color mapping
@@ -76,7 +76,7 @@ function StockTableRow(props) {
       </Td>
 
       <Td>
-        <Button p="0px" bg="transparent" variant="no-hover">
+        <Button p="0px" bg="transparent" variant="no-hover" onClick={onEdit}>
           <Text
             fontSize="md"
             color="gray.400"

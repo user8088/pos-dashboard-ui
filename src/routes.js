@@ -5,6 +5,8 @@ import Billing from "views/Dashboard/Billing";
 import RTLPage from "views/Dashboard/RTL";
 import Profile from "views/Dashboard/Profile";
 import InProgress from "views/Dashboard/InProgress";
+import SalesAnalytics from "views/Dashboard/SalesAnalytics";
+import CustomerManagement from "views/Dashboard/CustomerManagement";
 import SignIn from "views/Auth/SignIn.js";
 import SignUp from "views/Auth/SignUp.js";
 
@@ -33,7 +35,7 @@ var dashRoutes = [
     name: "Sales & Analytics",
     rtlName: "لوحة القيادة",
     icon: <StatsIcon color="inherit" />,
-    component: InProgress,
+    component: SalesAnalytics,
     layout: "/admin",
   },
   {
@@ -42,6 +44,14 @@ var dashRoutes = [
     rtlName: "لوحة القيادة",
     icon: <SettingsIcon color="inherit" />,
     component: Tables,
+    layout: "/admin",
+  },
+  {
+    path: "/customer-management",
+    name: "Customer Management",
+    rtlName: "لوحة القيادة",
+    icon: <PersonIcon color="inherit" />,
+    component: CustomerManagement,
     layout: "/admin",
   },
   {
@@ -59,15 +69,15 @@ var dashRoutes = [
     rtlName: "صفحات",
     state: "pageCollapse",
     views: [
-      {
-        path: "/profile",
-        name: "Profile",
-        rtlName: "لوحة القيادة",
-        icon: <PersonIcon color="inherit" />,
-        secondaryNavbar: true,
-        component: InProgress,
-        layout: "/admin",
-      },
+      // {
+      //   path: "/profile",
+      //   name: "Profile",
+      //   rtlName: "لوحة القيادة",
+      //   icon: <PersonIcon color="inherit" />,
+      //   secondaryNavbar: true,
+      //   component: InProgress,
+      //   layout: "/admin",
+      // },
       {
         path: "/signin",
         name: "Sign In",
