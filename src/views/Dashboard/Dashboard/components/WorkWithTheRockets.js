@@ -14,9 +14,22 @@ import CardBody from "components/Card/CardBody.js";
 import React from "react";
 // react icons
 import { BsArrowRight } from "react-icons/bs";
+import { useHistory, useLocation } from "react-router-dom";
 
 const WorkWithTheRockets = ({ title, description, backgroundImage }) => {
   const overlayRef = React.useRef();
+  const history = useHistory();
+  const location = useLocation();
+  
+  const isFactoryDashboard = location.pathname.includes('/factory');
+  
+  const switchDashboard = () => {
+    if (isFactoryDashboard) {
+      history.push('/admin/dashboard');
+    } else {
+      history.push('/factory/dashboard');
+    }
+  };
   return (
     <Card maxHeight='290.5px' p='1rem'>
       <CardBody
@@ -50,13 +63,13 @@ const WorkWithTheRockets = ({ title, description, backgroundImage }) => {
             </Text>
             <Spacer />
             <Flex align='center' mt={{ sm: "20px", lg: "40px", xl: "90px" }}>
-              <Button p='0px' variant='no-hover' bg='transparent' mt='12px'>
+              <Button p='0px' variant='no-hover' bg='transparent' mt='12px' onClick={switchDashboard}>
                 <Text
                   fontSize='sm'
                   fontWeight='bold'
                   _hover={{ me: "4px" }}
                   transition='all .5s ease'>
-                  Manage Customers
+                  {isFactoryDashboard ? 'Switch to Store Dashboard' : 'Manage Customers'}
                 </Text>
                 <Icon
                   as={BsArrowRight}
