@@ -3,6 +3,7 @@ import FactoryDashboard from "views/Factory/Dashboard";
 import ManufacturingReports from "views/Factory/ManufacturingReports";
 import RawMaterialManagement from "views/Factory/RawMaterialManagement";
 import FactoryExpensesCashflow from "views/Factory/ExpensesCashflow";
+import SupplierManagement from "views/Factory/SupplierManagement";
 import Profile from "views/Dashboard/Profile";
 import SignIn from "views/Auth/SignIn.js";
 import SignUp from "views/Auth/SignUp.js";
@@ -41,6 +42,14 @@ var factoryRoutes = [
     rtlName: "إدارة المواد الخام",
     icon: <SettingsIcon color="inherit" />,
     component: RawMaterialManagement,
+    layout: "/factory",
+  },
+  {
+    path: "/supplier-management",
+    name: "Supplier Management",
+    rtlName: "إدارة الموردين",
+    icon: <SettingsIcon color="inherit" />,
+    component: SupplierManagement,
     layout: "/factory",
   },
   {
