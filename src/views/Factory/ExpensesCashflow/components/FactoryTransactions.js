@@ -1,4 +1,4 @@
-// This is a wrapper component that uses the existing Transactions component
+// This is a wrapper component that uses the existing Transactions component 
 // but with factory-specific data and styling
 import Transactions from "views/Dashboard/Billing/components/Transactions";
 
