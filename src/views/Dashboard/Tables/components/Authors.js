@@ -24,6 +24,7 @@ import {
   Select,
   InputGroup,
   InputRightElement,
+  useToast,
 } from "@chakra-ui/react";
 // Custom components
 import Card from "components/Card/Card.js";
@@ -32,12 +33,14 @@ import CardHeader from "components/Card/CardHeader.js";
 import StockTableRow from "components/Tables/StockTableRow";
 import React from "react";
 import logo from "assets/img/avatars/placeholder.png";
-import { FaPlus, FaFileCsv } from "react-icons/fa";
+import { FaPlus, FaFileCsv, FaRuler } from "react-icons/fa";
 
 const Authors = ({ title, captions, data }) => {
   const textColor = useColorModeValue("gray.700", "white");
+  const toast = useToast();
   const { isOpen, onOpen, onClose } = useDisclosure();
   const { isOpen: isEditOpen, onOpen: onEditOpen, onClose: onEditClose } = useDisclosure();
+  const { isOpen: isUnitOpen, onOpen: onUnitOpen, onClose: onUnitClose } = useDisclosure();
   const [newStock, setNewStock] = React.useState({
     name: "",
     quantity: "",
@@ -49,6 +52,44 @@ const Authors = ({ title, captions, data }) => {
   });
   const [editingStock, setEditingStock] = React.useState(null);
   const [editIndex, setEditIndex] = React.useState(-1);
+  const [newUnit, setNewUnit] = React.useState({
+    unitName: "",
+    unitMetric: "",
+    customMetric: ""
+  });
+  const [customUnits, setCustomUnits] = React.useState([]);
+  
+  // Fetch units on component mount
+  React.useEffect(() => {
+    fetchUnits();
+  }, []);
+
+  const fetchUnits = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000/api'}/core/unit`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json',
+        },
+      });
+
+      if (response.ok) {
+        const units = await response.json();
+        const formattedUnits = units.map(unit => ({
+          unitName: unit.unit_name,
+          unitMetric: unit.metric,
+          unitId: unit.unit_id
+        }));
+        setCustomUnits(formattedUnits);
+      } else {
+        console.error('Failed to fetch units');
+      }
+    } catch (error) {
+      console.error('Error fetching units:', error);
+    }
+  };
   
   // Stock management data based on the image
   const stockData = [
@@ -243,6 +284,83 @@ const Authors = ({ title, captions, data }) => {
     input.click();
   };
 
+  const handleAddUnit = async () => {
+    if (!newUnit.unitName || !newUnit.unitMetric) return;
+    
+    const finalMetric = newUnit.unitMetric === "Custom" ? newUnit.customMetric : newUnit.unitMetric;
+    
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000/api'}/core/unit`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify({
+          unit_name: newUnit.unitName,
+          metric: finalMetric,
+          custom_metric: newUnit.unitMetric === "Custom" ? newUnit.customMetric : null
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        // Add to custom units list with API response data
+        const unitData = {
+          unitName: data.unit_name,
+          unitMetric: data.metric,
+          unitId: data.unit_id
+        };
+        
+        setCustomUnits([...customUnits, unitData]);
+        
+        // Show success message
+        toast({
+          title: "Unit Added Successfully",
+          description: `Unit "${data.unit_name}" has been added to the system.`,
+          status: "success",
+          duration: 3000,
+          isClosable: true,
+        });
+        
+        // Reset form
+        setNewUnit({
+          unitName: "",
+          unitMetric: "",
+          customMetric: ""
+        });
+        
+        onUnitClose();
+      } else {
+        // Handle API errors
+        const errorMessage = data.message || 'Failed to add unit';
+        toast({
+          title: "Failed to Add Unit",
+          description: errorMessage,
+          status: "error",
+          duration: 5000,
+          isClosable: true,
+        });
+        
+        if (data.errors) {
+          console.error('Validation errors:', data.errors);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to add unit:', error);
+      toast({
+        title: "Network Error",
+        description: "Unable to connect to the server. Please try again.",
+        status: "error",
+        duration: 5000,
+        isClosable: true,
+      });
+    }
+  };
+
   return (
     <Card overflowX={{ sm: "scroll", xl: "hidden" }}>
       <CardHeader p='6px 0px 22px 0px'>
@@ -261,6 +379,17 @@ const Authors = ({ title, captions, data }) => {
               p='8px 24px'
               onClick={handleImportCSV}>
               IMPORT CSV
+            </Button>
+            <Button
+              leftIcon={<FaRuler />}
+              colorScheme='teal'
+              borderColor='#FF8D28'
+              color='#FF8D28'
+              variant='outline'
+              fontSize='xs'
+              p='8px 24px'
+              onClick={onUnitOpen}>
+              ADD UNIT
             </Button>
             <Button
               leftIcon={<FaPlus />}
@@ -349,6 +478,11 @@ const Authors = ({ title, captions, data }) => {
                   <option value='Meters'>Meters</option>
                   <option value='Centimeters'>Centimeters</option>
                   <option value='Pieces'>Pieces</option>
+                  {customUnits.map((unit, index) => (
+                    <option key={index} value={unit.unitName}>
+                      {unit.unitName} ({unit.unitMetric})
+                    </option>
+                  ))}
                   <option value='Custom'>Custom</option>
                 </Select>
               </FormControl>
@@ -450,6 +584,11 @@ const Authors = ({ title, captions, data }) => {
                      <option value='Meters'>Meters</option>
                      <option value='Centimeters'>Centimeters</option>
                      <option value='Pieces'>Pieces</option>
+                     {customUnits.map((unit, index) => (
+                       <option key={index} value={unit.unitName}>
+                         {unit.unitName} ({unit.unitMetric})
+                       </option>
+                     ))}
                      <option value='Custom'>Custom</option>
                    </Select>
                  </FormControl>
@@ -506,6 +645,71 @@ const Authors = ({ title, captions, data }) => {
                  </Button>
                </VStack>
              )}
+           </ModalBody>
+         </ModalContent>
+       </Modal>
+
+       {/* Add Unit Modal */}
+       <Modal isOpen={isUnitOpen} onClose={onUnitClose} size='md' motionPreset='slideInBottom'>
+         <ModalOverlay bg='rgba(0,0,0,0.4)' backdropFilter='blur(6px)' />
+         <ModalContent>
+           <ModalHeader color={textColor}>Add New Unit</ModalHeader>
+           <ModalCloseButton />
+           <ModalBody pb='24px'>
+             <VStack spacing='16px'>
+               <FormControl isRequired>
+                 <FormLabel color={textColor}>Unit Name</FormLabel>
+                 <Input
+                   placeholder='Enter unit name (e.g., Boxes, Pallets, etc.)'
+                   value={newUnit.unitName}
+                   onChange={(e) => setNewUnit({...newUnit, unitName: e.target.value})}
+                 />
+               </FormControl>
+               
+               <FormControl isRequired>
+                 <FormLabel color={textColor}>Unit Metric</FormLabel>
+                 <Select
+                   value={newUnit.unitMetric}
+                   onChange={(e) => setNewUnit({...newUnit, unitMetric: e.target.value})}
+                   placeholder='Select metric type'>
+                   <option value='kg'>Kilograms (kg)</option>
+                   <option value='g'>Grams (g)</option>
+                   <option value='lbs'>Pounds (lbs)</option>
+                   <option value='oz'>Ounces (oz)</option>
+                   <option value='l'>Liters (l)</option>
+                   <option value='ml'>Milliliters (ml)</option>
+                   <option value='gal'>Gallons (gal)</option>
+                   <option value='m'>Meters (m)</option>
+                   <option value='cm'>Centimeters (cm)</option>
+                   <option value='ft'>Feet (ft)</option>
+                   <option value='in'>Inches (in)</option>
+                   <option value='pcs'>Pieces (pcs)</option>
+                   <option value='units'>Units</option>
+                   <option value='Custom'>Custom</option>
+                 </Select>
+               </FormControl>
+               
+               {newUnit.unitMetric === "Custom" && (
+                 <FormControl isRequired>
+                   <FormLabel color={textColor}>Custom Metric</FormLabel>
+                   <Input
+                     placeholder='Enter custom metric (e.g., tons, yards, etc.)'
+                     value={newUnit.customMetric}
+                     onChange={(e) => setNewUnit({...newUnit, customMetric: e.target.value})}
+                   />
+                 </FormControl>
+               )}
+               
+               <Button
+                 colorScheme='teal'
+                 bg='#FF8D28'
+                 color='white'
+                 _hover={{ bg: '#E67E22' }}
+                 w='100%'
+                 onClick={handleAddUnit}>
+                 ADD UNIT
+               </Button>
+             </VStack>
            </ModalBody>
          </ModalContent>
        </Modal>
