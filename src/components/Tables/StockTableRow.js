@@ -7,11 +7,13 @@ import {
   Text,
   Tr,
   useColorModeValue,
+  HStack,
 } from "@chakra-ui/react";
 import React from "react";
+import { FaTrash } from "react-icons/fa";
 
 function StockTableRow(props) {
-  const { logo, name, quantity, category, status, stockValue, onEdit } = props;
+  const { logo, name, quantity, category, status, stockValue, onEdit, onDelete } = props;
   const textColor = useColorModeValue("gray.700", "white");
 
   // Status color mapping
@@ -21,7 +23,7 @@ function StockTableRow(props) {
         return "green";
       case "Out of Stock":
         return "red";
-      case "Low Stock":
+      case "Pending":
         return "yellow";
       default:
         return "gray";
@@ -76,17 +78,32 @@ function StockTableRow(props) {
       </Td>
 
       <Td>
-        <Button p="0px" bg="transparent" variant="no-hover" onClick={onEdit}>
-          <Text
-            fontSize="md"
-            color="gray.400"
-            fontWeight="bold"
-            cursor="pointer"
-            _hover={{ color: "brand.500" }}
+        <HStack spacing="12px">
+          <Button p="0px" bg="transparent" variant="no-hover" onClick={onEdit}>
+            <Text
+              fontSize="md"
+              color="gray.400"
+              fontWeight="bold"
+              cursor="pointer"
+              _hover={{ color: "brand.500" }}
+            >
+              Edit
+            </Text>
+          </Button>
+          <Button 
+            p="0px" 
+            bg="transparent" 
+            variant="no-hover" 
+            onClick={onDelete}
+            _hover={{ bg: "transparent" }}
           >
-            Edit
-          </Text>
-        </Button>
+            <FaTrash 
+              color="#FF8D28" 
+              size="16px" 
+              style={{ cursor: "pointer" }}
+            />
+          </Button>
+        </HStack>
       </Td>
     </Tr>
   );

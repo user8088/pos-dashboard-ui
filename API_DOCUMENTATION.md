@@ -228,9 +228,79 @@ Authorization: Bearer {token}
 
 ---
 
+### 6. Add Category
+**POST** `/core/category`
+
+Add a new category to the system.
+
+**Headers:**
+```
+Authorization: Bearer {token}
+Content-Type: application/json
+```
+
+**Request Body:**
+```json
+{
+    "category_name": "Food Items"
+}
+```
+
+**Response (200):**
+```json
+{
+    "category_id": 1,
+    "category_name": "Food Items",
+    "created_at": "2025-09-14T10:00:00.000000Z",
+    "updated_at": "2025-09-14T10:00:00.000000Z"
+}
+```
+
+**Validation Errors (422):**
+```json
+{
+    "message": "The given data was invalid.",
+    "errors": {
+        "category_name": ["The category name field is required."]
+    }
+}
+```
+
+---
+
+### 7. Get All Categories
+**GET** `/core/category`
+
+Retrieve all categories from the system.
+
+**Headers:**
+```
+Authorization: Bearer {token}
+```
+
+**Response (200):**
+```json
+[
+    {
+        "category_id": 1,
+        "category_name": "Food Items",
+        "created_at": "2025-09-14T10:00:00.000000Z",
+        "updated_at": "2025-09-14T10:00:00.000000Z"
+    },
+    {
+        "category_id": 2,
+        "category_name": "Beverages",
+        "created_at": "2025-09-14T10:05:00.000000Z",
+        "updated_at": "2025-09-14T10:05:00.000000Z"
+    }
+]
+```
+
+---
+
 ## Stock Management Endpoints
 
-### 7. Add Stock Item
+### 8. Add Stock Item
 **POST** `/core/stock`
 
 Add a new stock item to the inventory.
@@ -247,9 +317,13 @@ Content-Type: application/json
     "item_name": "Rice",
     "unit_id": 1,
     "category_id": 1,
-    "quantity_per_unit": 50.00
+    "quantity_per_unit": 50.00,
+    "stock_value": 150.00,
+    "stock_status": "in_stock"
 }
 ```
+
+**Note:** `category_id` is optional and can be `null` if the item doesn't need to be categorized.
 
 **Response (200):**
 ```json
@@ -259,8 +333,24 @@ Content-Type: application/json
     "unit_id": 1,
     "quantity_per_unit": "50.00",
     "category_id": 1,
+    "stock_value": "150.00",
+    "stock_status": "in_stock",
     "created_at": "2025-09-14T10:00:00.000000Z",
-    "updated_at": "2025-09-14T10:00:00.000000Z"
+    "updated_at": "2025-09-14T10:00:00.000000Z",
+    "category": {
+        "category_id": 1,
+        "category_name": "Food Items",
+        "created_at": "2025-09-14T10:00:00.000000Z",
+        "updated_at": "2025-09-14T10:00:00.000000Z"
+    },
+    "unit": {
+        "unit_id": 1,
+        "unit_name": "Kilogram",
+        "metric": "kg",
+        "custom_metric": "Weight unit",
+        "created_at": "2025-09-14T10:00:00.000000Z",
+        "updated_at": "2025-09-14T10:00:00.000000Z"
+    }
 }
 ```
 
@@ -275,9 +365,11 @@ Content-Type: application/json
 }
 ```
 
+**Note:** If `category_id` is provided, it must exist in the categories table. If not provided, it will be stored as `null`.
+
 ---
 
-### 8. Get All Stock Items
+### 9. Get All Stock Items
 **GET** `/core/stock`
 
 Retrieve all stock items from the inventory.
@@ -297,7 +389,21 @@ Authorization: Bearer {token}
         "quantity_per_unit": "50.00",
         "category_id": 1,
         "created_at": "2025-09-14T10:00:00.000000Z",
-        "updated_at": "2025-09-14T10:00:00.000000Z"
+        "updated_at": "2025-09-14T10:00:00.000000Z",
+        "category": {
+            "category_id": 1,
+            "category_name": "Food Items",
+            "created_at": "2025-09-14T10:00:00.000000Z",
+            "updated_at": "2025-09-14T10:00:00.000000Z"
+        },
+        "unit": {
+            "unit_id": 1,
+            "unit_name": "Kilogram",
+            "metric": "kg",
+            "custom_metric": "Weight unit",
+            "created_at": "2025-09-14T10:00:00.000000Z",
+            "updated_at": "2025-09-14T10:00:00.000000Z"
+        }
     },
     {
         "item_id": 2,
@@ -306,16 +412,112 @@ Authorization: Bearer {token}
         "quantity_per_unit": "25.50",
         "category_id": 2,
         "created_at": "2025-09-14T10:05:00.000000Z",
-        "updated_at": "2025-09-14T10:05:00.000000Z"
+        "updated_at": "2025-09-14T10:05:00.000000Z",
+        "category": {
+            "category_id": 2,
+            "category_name": "Beverages",
+            "created_at": "2025-09-14T10:05:00.000000Z",
+            "updated_at": "2025-09-14T10:05:00.000000Z"
+        },
+        "unit": {
+            "unit_id": 1,
+            "unit_name": "Kilogram",
+            "metric": "kg",
+            "custom_metric": "Weight unit",
+            "created_at": "2025-09-14T10:00:00.000000Z",
+            "updated_at": "2025-09-14T10:00:00.000000Z"
+        }
     }
 ]
 ```
 
 ---
 
+### 10. Update Stock Item
+**PUT** `/core/stock/{id}`
+
+Update an existing stock item.
+
+**Headers:**
+```
+Authorization: Bearer {token}
+Content-Type: application/json
+```
+
+**Request Body:**
+```json
+{
+    "item_name": "Rice (Updated)",
+    "unit_id": 1,
+    "category_id": 1,
+    "quantity_per_unit": 75.00,
+    "stock_value": 200.00,
+    "stock_status": "in_stock"
+}
+```
+
+**Response (200):**
+```json
+{
+    "item_id": 1,
+    "item_name": "Rice (Updated)",
+    "unit_id": 1,
+    "quantity_per_unit": "75.00",
+    "category_id": 1,
+    "stock_value": "200.00",
+    "stock_status": "in_stock",
+    "created_at": "2025-09-14T10:00:00.000000Z",
+    "updated_at": "2025-09-14T10:15:00.000000Z",
+    "category": {
+        "category_id": 1,
+        "category_name": "Food Items",
+        "created_at": "2025-09-14T10:00:00.000000Z",
+        "updated_at": "2025-09-14T10:00:00.000000Z"
+    },
+    "unit": {
+        "unit_id": 1,
+        "unit_name": "Kilogram",
+        "metric": "kg",
+        "custom_metric": "Weight unit",
+        "created_at": "2025-09-14T10:00:00.000000Z",
+        "updated_at": "2025-09-14T10:00:00.000000Z"
+    }
+}
+```
+
+**Note:** All fields are optional for updates. Only provided fields will be updated.
+
+---
+
+### 11. Delete Stock Item
+**DELETE** `/core/stock/{id}`
+
+Delete a stock item from the inventory.
+
+**Headers:**
+```
+Authorization: Bearer {token}
+```
+
+**Response (200):**
+```json
+{
+    "message": "Stock item deleted successfully"
+}
+```
+
+**Error (404):**
+```json
+{
+    "message": "No query results for model [App\\Models\\Stock] 1"
+}
+```
+
+---
+
 ## User Management Endpoints
 
-### 9. Get Current User (Sanctum Default)
+### 12. Get Current User (Sanctum Default)
 **GET** `/user`
 
 Get the currently authenticated user's information (Laravel Sanctum default route).
@@ -415,7 +617,9 @@ Authorization: Bearer {token}
     "item_name": "string",
     "unit_id": "integer (foreign key)",
     "quantity_per_unit": "decimal(10,2)",
-    "category_id": "integer (foreign key)",
+    "category_id": "integer|null (foreign key, optional)",
+    "stock_value": "decimal(10,2)|null (monetary value, optional)",
+    "stock_status": "enum (in_stock|out_of_stock|pending, default: in_stock)",
     "created_at": "timestamp",
     "updated_at": "timestamp"
 }
@@ -425,9 +629,7 @@ Authorization: Bearer {token}
 ```json
 {
     "category_id": "integer",
-    "item_name": "string",
-    "unit": "string",
-    "quantity_per_unit": "decimal(10,2)",
+    "category_name": "string",
     "created_at": "timestamp",
     "updated_at": "timestamp"
 }
@@ -510,14 +712,13 @@ curl -X POST http://localhost:8000/api/core/unit \
 1. **Authentication**: All core endpoints require authentication via Bearer token
 2. **CORS**: Make sure your frontend domain is configured in the CORS settings
 3. **Validation**: All input data is validated according to Laravel validation rules
-4. **Relationships**: Stock items are linked to Units and Categories via foreign keys
+4. **Relationships**: Stock items are linked to Units via foreign keys, and optionally to Categories
 5. **Decimal Precision**: Quantity fields use decimal(10,2) for precise calculations
 
 ## Missing Endpoints
 
 The following endpoints are not yet implemented but would be useful:
-- Update/Delete operations for Units, Categories, and Stock items
-- Category management endpoints (add/get categories)
+- Update/Delete operations for Units and Categories
 - Bulk operations for stock management
 - Search and filtering capabilities
 - Pagination for large datasets
