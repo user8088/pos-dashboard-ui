@@ -26,6 +26,15 @@ import {
   InputRightElement,
   useToast,
   Spinner,
+  Checkbox,
+  CheckboxGroup,
+  SimpleGrid,
+  Divider,
+  NumberInput,
+  NumberInputField,
+  NumberInputStepper,
+  NumberIncrementStepper,
+  NumberDecrementStepper,
 } from "@chakra-ui/react";
 // Custom components
 import Card from "components/Card/Card.js";
@@ -34,7 +43,7 @@ import CardHeader from "components/Card/CardHeader.js";
 import StockTableRow from "components/Tables/StockTableRow";
 import React from "react";
 import logo from "assets/img/avatars/placeholder.png";
-import { FaPlus, FaFileCsv, FaRuler, FaTags, FaTrash } from "react-icons/fa";
+import { FaPlus, FaFileCsv, FaRuler, FaTags, FaTrash, FaCog } from "react-icons/fa";
 
 const Authors = ({ title, captions, data }) => {
   const textColor = useColorModeValue("gray.700", "white");
@@ -43,6 +52,7 @@ const Authors = ({ title, captions, data }) => {
   const { isOpen: isEditOpen, onOpen: onEditOpen, onClose: onEditClose } = useDisclosure();
   const { isOpen: isUnitOpen, onOpen: onUnitOpen, onClose: onUnitClose } = useDisclosure();
   const { isOpen: isCategoryOpen, onOpen: onCategoryOpen, onClose: onCategoryClose } = useDisclosure();
+  const { isOpen: isEditProductionOpen, onOpen: onEditProductionOpen, onClose: onEditProductionClose } = useDisclosure();
   const [newStock, setNewStock] = React.useState({
     name: "",
     quantity: "",
@@ -61,16 +71,34 @@ const Authors = ({ title, captions, data }) => {
   });
   const [customUnits, setCustomUnits] = React.useState([]);
   const [categories, setCategories] = React.useState([]);
+  const [rawMaterials, setRawMaterials] = React.useState([]);
+  const [selectedRawMaterials, setSelectedRawMaterials] = React.useState([]);
   const [newCategory, setNewCategory] = React.useState({
     categoryName: ""
   });
   const [stockData, setStockData] = React.useState([]);
   const [isLoading, setIsLoading] = React.useState(false);
+  const [shouldProduceImmediately, setShouldProduceImmediately] = React.useState(false);
+  const [immediateProductionQuantity, setImmediateProductionQuantity] = React.useState("");
+  const [productionValidation, setProductionValidation] = React.useState({
+    isValid: true,
+    errors: [],
+    insufficientMaterials: []
+  });
+  const [editingStockProduction, setEditingStockProduction] = React.useState(null);
+  const [editProductionQuantity, setEditProductionQuantity] = React.useState("");
+  const [editSelectedRawMaterials, setEditSelectedRawMaterials] = React.useState([]);
+  const [editProductionValidation, setEditProductionValidation] = React.useState({
+    isValid: true,
+    errors: [],
+    insufficientMaterials: []
+  });
   
-  // Fetch units, categories, and stock data on component mount
+  // Fetch units, categories, raw materials, and stock data on component mount
   React.useEffect(() => {
     fetchUnits();
     fetchCategories();
+    fetchRawMaterials();
     fetchStock();
   }, []);
 
@@ -127,6 +155,34 @@ const Authors = ({ title, captions, data }) => {
     }
   };
 
+  const fetchRawMaterials = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000/api'}/core/raw-material`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json',
+        },
+      });
+
+      if (response.ok) {
+        const rawMaterialsData = await response.json();
+        const formattedRawMaterials = rawMaterialsData.map(material => ({
+          materialId: material.id,
+          materialName: material.material_name,
+          amountPerUnit: material.amount_per_unit,
+          purchaseCost: material.purchase_cost
+        }));
+        setRawMaterials(formattedRawMaterials);
+      } else {
+        console.error('Failed to fetch raw materials');
+      }
+    } catch (error) {
+      console.error('Error fetching raw materials:', error);
+    }
+  };
+
   const fetchStock = async () => {
     setIsLoading(true);
     try {
@@ -142,7 +198,7 @@ const Authors = ({ title, captions, data }) => {
       if (response.ok) {
         const stockItems = await response.json();
         const formattedStock = stockItems.map(item => ({
-          logo: logo,
+      logo: logo,
           name: item.item_name,
           quantity: `${item.quantity_per_unit} ${item.unit?.unit_name || 'Units'}`,
           category: item.category?.category_name || 'Uncategorized',
@@ -169,13 +225,400 @@ const Authors = ({ title, captions, data }) => {
       setIsLoading(false);
     }
   };
-  
+
+  const handleRawMaterialToggle = (materialId, isChecked) => {
+    if (isChecked) {
+      // Add material with default quantity of 1
+      setSelectedRawMaterials([
+        ...selectedRawMaterials,
+        { materialId: materialId, quantity: 1 }
+      ]);
+    } else {
+      // Remove material
+      setSelectedRawMaterials(selectedRawMaterials.filter(item => item.materialId !== materialId));
+    }
+  };
+
+  const handleRawMaterialQuantityChange = (materialId, quantity) => {
+    setSelectedRawMaterials(selectedRawMaterials.map(item => 
+      item.materialId === materialId 
+        ? { ...item, quantity: parseFloat(quantity) || 1 }
+        : item
+    ));
+    
+    // Re-validate if production is enabled
+    if (shouldProduceImmediately && immediateProductionQuantity) {
+      validateProductionRequirements(parseFloat(immediateProductionQuantity) || 0);
+    }
+  };
+
+  const validateProductionRequirements = (productionQty) => {
+    if (!productionQty || productionQty <= 0 || selectedRawMaterials.length === 0) {
+      setProductionValidation({ isValid: true, errors: [], insufficientMaterials: [] });
+      return true;
+    }
+
+    const insufficientMaterials = [];
+    
+    selectedRawMaterials.forEach(selectedMaterial => {
+      const rawMaterial = rawMaterials.find(rm => rm.materialId === selectedMaterial.materialId);
+      if (rawMaterial) {
+        const requiredQuantity = selectedMaterial.quantity * productionQty;
+        const availableQuantity = rawMaterial.amountPerUnit;
+        
+        if (requiredQuantity > availableQuantity) {
+          insufficientMaterials.push({
+            materialName: rawMaterial.materialName,
+            required: requiredQuantity,
+            available: availableQuantity,
+            deficit: requiredQuantity - availableQuantity
+          });
+        }
+      }
+    });
+
+    const isValid = insufficientMaterials.length === 0;
+    setProductionValidation({
+      isValid,
+      errors: isValid ? [] : ['Insufficient raw materials for production'],
+      insufficientMaterials
+    });
+
+    return isValid;
+  };
+
+  const handleProductionCheckboxChange = (isChecked) => {
+    setShouldProduceImmediately(isChecked);
+    
+    if (isChecked && immediateProductionQuantity) {
+      // Validate immediately when enabling production
+      validateProductionRequirements(parseFloat(immediateProductionQuantity) || 0);
+    } else {
+      // Reset validation when disabling production
+      setProductionValidation({ isValid: true, errors: [], insufficientMaterials: [] });
+    }
+  };
+
+  const handleProductionQuantityChange = (valueString) => {
+    setImmediateProductionQuantity(valueString);
+    
+    if (shouldProduceImmediately) {
+      validateProductionRequirements(parseFloat(valueString) || 0);
+    }
+  };
+
+  const openEditProductionModal = async (stockItem) => {
+    setEditingStockProduction(stockItem);
+    setEditProductionQuantity("");
+    
+    // Fetch current raw material mappings for this stock item
+    await fetchStockRawMaterials(stockItem.itemId);
+    
+    onEditProductionOpen();
+  };
+
+  const fetchStockRawMaterials = async (stockId) => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000/api'}/core/stock/${stockId}/raw-materials`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json',
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const mappedMaterials = data.raw_materials.map(material => ({
+          materialId: material.raw_material_id,
+          quantity: parseFloat(material.quantity)
+        }));
+        setEditSelectedRawMaterials(mappedMaterials);
+      } else {
+        // No raw materials mapped to this stock item
+        setEditSelectedRawMaterials([]);
+      }
+    } catch (error) {
+      console.error('Failed to fetch stock raw materials:', error);
+      setEditSelectedRawMaterials([]);
+    }
+  };
+
+  const handleEditRawMaterialToggle = (materialId, isChecked) => {
+    if (isChecked) {
+      // Add material with default quantity of 1
+      setEditSelectedRawMaterials([
+        ...editSelectedRawMaterials,
+        { materialId: materialId, quantity: 1 }
+      ]);
+    } else {
+      // Remove material
+      setEditSelectedRawMaterials(editSelectedRawMaterials.filter(item => item.materialId !== materialId));
+    }
+    
+    // Re-validate if production quantity is set
+    if (editProductionQuantity) {
+      validateEditProductionRequirements(parseFloat(editProductionQuantity) || 0);
+    }
+  };
+
+  const handleEditRawMaterialQuantityChange = (materialId, quantity) => {
+    setEditSelectedRawMaterials(editSelectedRawMaterials.map(item => 
+      item.materialId === materialId 
+        ? { ...item, quantity: parseFloat(quantity) || 1 }
+        : item
+    ));
+    
+    // Re-validate if production quantity is set
+    if (editProductionQuantity) {
+      validateEditProductionRequirements(parseFloat(editProductionQuantity) || 0);
+    }
+  };
+
+  const validateEditProductionRequirements = (productionQty) => {
+    if (!productionQty || productionQty <= 0 || editSelectedRawMaterials.length === 0) {
+      setEditProductionValidation({ isValid: true, errors: [], insufficientMaterials: [] });
+      return true;
+    }
+
+    const insufficientMaterials = [];
+    
+    editSelectedRawMaterials.forEach(selectedMaterial => {
+      const rawMaterial = rawMaterials.find(rm => rm.materialId === selectedMaterial.materialId);
+      if (rawMaterial) {
+        const requiredQuantity = selectedMaterial.quantity * productionQty;
+        const availableQuantity = rawMaterial.amountPerUnit;
+        
+        if (requiredQuantity > availableQuantity) {
+          insufficientMaterials.push({
+            materialName: rawMaterial.materialName,
+            required: requiredQuantity,
+            available: availableQuantity,
+            deficit: requiredQuantity - availableQuantity
+          });
+        }
+      }
+    });
+
+    const isValid = insufficientMaterials.length === 0;
+    setEditProductionValidation({
+      isValid,
+      errors: isValid ? [] : ['Insufficient raw materials for production'],
+      insufficientMaterials
+    });
+
+    return isValid;
+  };
+
+  const handleEditProductionQuantityChange = (valueString) => {
+    setEditProductionQuantity(valueString);
+    validateEditProductionRequirements(parseFloat(valueString) || 0);
+  };
+
+  const handleUpdateProduction = async () => {
+    if (!editingStockProduction || !editProductionQuantity || parseFloat(editProductionQuantity) <= 0) {
+      toast({
+        title: "Invalid Input",
+        description: "Please enter a valid production quantity.",
+        status: "error",
+        duration: 3000,
+        isClosable: true,
+      });
+      return;
+    }
+
+    if (!editProductionValidation.isValid) {
+      toast({
+        title: "Cannot Produce",
+        description: "Insufficient raw materials for production.",
+        status: "error",
+        duration: 5000,
+        isClosable: true,
+      });
+      return;
+    }
+
+    try {
+      // First, update the raw material mappings if they changed
+      if (editSelectedRawMaterials.length > 0) {
+        await updateStockRawMaterials(editingStockProduction.itemId, editSelectedRawMaterials);
+      }
+
+      // Then produce the stock
+      await produceStockFromEdit(editingStockProduction.itemId, editingStockProduction.name, parseFloat(editProductionQuantity));
+
+      // Close modal and refresh data
+      setEditingStockProduction(null);
+      setEditProductionQuantity("");
+      setEditSelectedRawMaterials([]);
+      setEditProductionValidation({ isValid: true, errors: [], insufficientMaterials: [] });
+      onEditProductionClose();
+      fetchStock();
+
+    } catch (error) {
+      console.error('Failed to update production:', error);
+      toast({
+        title: "Update Failed",
+        description: "Failed to update production settings.",
+        status: "error",
+        duration: 5000,
+        isClosable: true,
+      });
+    }
+  };
+
+  const updateStockRawMaterials = async (stockId, rawMaterialMappings) => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000/api'}/core/stock/${stockId}/raw-materials`, {
+        method: 'PUT', // Use PUT to replace all mappings
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify({
+          items: rawMaterialMappings.map(mapping => ({
+            raw_material_id: mapping.materialId,
+            quantity: mapping.quantity
+          }))
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update raw material mappings');
+      }
+    } catch (error) {
+      console.error('Error updating raw materials:', error);
+      throw error;
+    }
+  };
+
+  const produceStockFromEdit = async (stockId, stockName, quantity) => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000/api'}/core/stock/${stockId}/produce`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify({
+          quantity: quantity
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        // Show detailed success message with consumption info
+        let consumptionDetails = "";
+        if (data.consumed && data.consumed.length > 0) {
+          consumptionDetails = "\n\nRaw materials consumed:\n" + 
+            data.consumed.map(item => `• ${item.material_name}: ${item.quantity} units`).join('\n');
+        }
+
+        toast({
+          title: "Production Updated & Completed!",
+          description: `Updated mappings and produced ${data.produced} units of "${stockName}".${consumptionDetails}`,
+          status: "success",
+          duration: 8000,
+          isClosable: true,
+        });
+      } else {
+        throw new Error(data.message || 'Production failed');
+      }
+    } catch (error) {
+      console.error('Failed to produce stock from edit:', error);
+      throw error;
+    }
+  };
+
+
+  const produceStockImmediately = async (stockId, stockName, quantity) => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000/api'}/core/stock/${stockId}/produce`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify({
+          quantity: quantity
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        // Show detailed success message with consumption info
+        let consumptionDetails = "";
+        if (data.consumed && data.consumed.length > 0) {
+          consumptionDetails = "\n\nRaw materials consumed:\n" + 
+            data.consumed.map(item => `• ${item.material_name}: ${item.quantity} units`).join('\n');
+        }
+
+        toast({
+          title: "Stock Created & Production Completed!",
+          description: `Created "${stockName}" and produced ${data.produced} units.${consumptionDetails}`,
+          status: "success",
+          duration: 8000,
+          isClosable: true,
+        });
+      } else {
+        // Handle specific error cases
+        let errorTitle = "Production Failed After Stock Creation";
+        let errorDescription = data.message || 'Failed to produce stock';
+        
+        if (data.insufficient && data.insufficient.length > 0) {
+          errorTitle = "Insufficient Raw Materials for Production";
+          errorDescription = "Stock was created but production failed:\n" + 
+            data.insufficient.map(item => 
+              `• ${item.material_name}: Need ${item.required}, have ${item.available} (deficit: ${item.deficit})`
+            ).join('\n');
+        }
+        
+        toast({
+          title: errorTitle,
+          description: errorDescription,
+          status: "warning",
+          duration: 8000,
+          isClosable: true,
+        });
+      }
+    } catch (error) {
+      console.error('Failed to produce stock immediately:', error);
+      toast({
+        title: "Production Error After Stock Creation",
+        description: "Stock was created successfully, but production failed due to network error.",
+        status: "warning",
+        duration: 5000,
+        isClosable: true,
+      });
+    }
+  };
 
   // Stock management captions
   const stockCaptions = ["Products", "QUANTITY PER UNIT", "CATEGORY", "STATUS", "Stock Value", ""];
 
   const handleAddStock = async () => {
-    if (!newStock.name || !newStock.quantity || !newStock.unit || !newStock.category) return;
+    if (!newStock.name || !newStock.unit || !newStock.category) return;
+    
+    // Validate production requirements if production is enabled
+    if (shouldProduceImmediately && !productionValidation.isValid) {
+      toast({
+        title: "Cannot Create Stock",
+        description: "Insufficient raw materials for production. Please adjust quantities or disable immediate production.",
+        status: "error",
+        duration: 5000,
+        isClosable: true,
+      });
+      return;
+    }
     
     try {
       // Find the selected unit ID
@@ -209,7 +652,7 @@ const Authors = ({ title, captions, data }) => {
           item_name: newStock.name,
           unit_id: unitId,
           category_id: categoryId,
-          quantity_per_unit: parseFloat(newStock.quantity),
+          quantity_per_unit: newStock.quantity ? parseFloat(newStock.quantity) : 0,
           stock_value: newStock.stockValue ? parseFloat(newStock.stockValue) : null,
           stock_status: newStock.status
         }),
@@ -221,26 +664,42 @@ const Authors = ({ title, captions, data }) => {
         // Show success message
         toast({
           title: "Stock Item Added Successfully",
-          description: `Stock item "${data.item_name}" has been added to the system.`,
+          description: `Stock item "${data.item_name}" has been added to the system${newStock.quantity ? ` with ${newStock.quantity} units` : ' (ready for production)'}.`,
           status: "success",
           duration: 3000,
           isClosable: true,
         });
         
-        // Reset form
-        setNewStock({
-          name: "",
-          quantity: "",
-          unit: "",
-          customUnit: "",
-          category: "",
-          status: "in_stock",
-          stockValue: ""
-        });
-        
-        // Refresh stock data
-        fetchStock();
-        onClose();
+         // If raw materials are selected, map them to the stock item
+         if (selectedRawMaterials.length > 0) {
+           await mapRawMaterialsToStock(data.item_id, selectedRawMaterials);
+           
+           // If user wants to produce immediately after creating stock
+           if (shouldProduceImmediately && immediateProductionQuantity && parseFloat(immediateProductionQuantity) > 0) {
+             await produceStockImmediately(data.item_id, data.item_name, parseFloat(immediateProductionQuantity));
+           }
+         }
+         
+         // Reset form
+    setNewStock({
+      name: "",
+      quantity: "",
+      unit: "",
+      customUnit: "",
+      category: "",
+           status: "in_stock",
+      stockValue: ""
+    });
+         
+         // Reset selected raw materials and production settings
+         setSelectedRawMaterials([]);
+         setShouldProduceImmediately(false);
+         setImmediateProductionQuantity("");
+         setProductionValidation({ isValid: true, errors: [], insufficientMaterials: [] });
+         
+         // Refresh stock data
+         fetchStock();
+    onClose();
       } else {
         // Handle API errors
         const errorMessage = data.message || 'Failed to add stock item';
@@ -350,11 +809,11 @@ const Authors = ({ title, captions, data }) => {
         
         // Refresh stock data
         fetchStock();
-        
-        // Reset editing state
-        setEditingStock(null);
-        setEditIndex(-1);
-        onEditClose();
+    
+    // Reset editing state
+    setEditingStock(null);
+    setEditIndex(-1);
+    onEditClose();
       } else {
         // Handle API errors
         const errorMessage = data.message || 'Failed to update stock item';
@@ -545,6 +1004,34 @@ const Authors = ({ title, captions, data }) => {
     }
   };
 
+  const mapRawMaterialsToStock = async (stockId, rawMaterialMappings) => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000/api'}/core/stock/${stockId}/raw-materials`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify({
+          items: rawMaterialMappings.map(mapping => ({
+            raw_material_id: mapping.materialId,
+            quantity: mapping.quantity
+          }))
+        }),
+      });
+
+      if (response.ok) {
+        console.log('Raw materials mapped successfully');
+      } else {
+        console.error('Failed to map raw materials to stock');
+      }
+    } catch (error) {
+      console.error('Error mapping raw materials:', error);
+    }
+  };
+
   const handleDeleteStock = async (stockItem) => {
     if (!window.confirm(`Are you sure you want to delete "${stockItem.name}"?`)) {
       return;
@@ -699,36 +1186,37 @@ const Authors = ({ title, captions, data }) => {
             </VStack>
           </Flex>
         ) : (
-          <Table variant='simple' color={textColor}>
-            <Thead>
-              <Tr my='.8rem' pl='0px' color='gray.400'>
-                {stockCaptions.map((caption, idx) => {
-                  return (
-                    <Th color='gray.400' key={idx} ps={idx === 0 ? "0px" : null}>
-                      {caption}
-                    </Th>
-                  );
-                })}
-              </Tr>
-            </Thead>
-            <Tbody>
-              {stockData.map((row, index) => {
+        <Table variant='simple' color={textColor}>
+          <Thead>
+            <Tr my='.8rem' pl='0px' color='gray.400'>
+              {stockCaptions.map((caption, idx) => {
                 return (
-                  <StockTableRow
-                    key={`${row.name}-${index}`}
-                    logo={row.logo}
-                    name={row.name}
-                    quantity={row.quantity}
-                    category={row.category}
-                    status={row.status}
-                    stockValue={row.stockValue}
-                    onEdit={() => handleEditStock(row, index)}
-                    onDelete={() => handleDeleteStock(row)}
-                  />
+                  <Th color='gray.400' key={idx} ps={idx === 0 ? "0px" : null}>
+                    {caption}
+                  </Th>
                 );
               })}
-            </Tbody>
-          </Table>
+            </Tr>
+          </Thead>
+          <Tbody>
+                         {stockData.map((row, index) => {
+               return (
+                 <StockTableRow
+                   key={`${row.name}-${index}`}
+                   logo={row.logo}
+                   name={row.name}
+                   quantity={row.quantity}
+                   category={row.category}
+                   status={row.status}
+                   stockValue={row.stockValue}
+                   onEdit={() => handleEditStock(row, index)}
+                     onDelete={() => handleDeleteStock(row)}
+                     onEditProduction={() => openEditProductionModal(row)}
+                 />
+               );
+             })}
+          </Tbody>
+        </Table>
         )}
       </CardBody>
 
@@ -749,11 +1237,11 @@ const Authors = ({ title, captions, data }) => {
                 />
               </FormControl>
               
-              <FormControl isRequired>
-                <FormLabel color={textColor}>Quantity</FormLabel>
+              <FormControl>
+                <FormLabel color={textColor}>Quantity (Optional)</FormLabel>
                 <Input
                   type='number'
-                  placeholder='Enter quantity'
+                  placeholder='Enter initial quantity (or leave empty to produce later)'
                   value={newStock.quantity}
                   onChange={(e) => setNewStock({...newStock, quantity: e.target.value})}
                 />
@@ -810,24 +1298,159 @@ const Authors = ({ title, captions, data }) => {
                 </Select>
               </FormControl>
               
-              <FormControl>
+               <FormControl>
                 <FormLabel color={textColor}>Stock Value (PKR)</FormLabel>
                 <Input
                   type='number'
-                  placeholder='Enter stock value (optional)'
+                   placeholder='Enter stock value (optional)'
                   value={newStock.stockValue}
                   onChange={(e) => setNewStock({...newStock, stockValue: e.target.value})}
                 />
               </FormControl>
+
+               {/* Raw Materials Selection */}
+               <Divider />
+               <FormControl>
+                 <FormLabel color={textColor} fontSize="md" fontWeight="bold" mb="16px">
+                   Raw Materials Required (Optional)
+                 </FormLabel>
+                 <Text color="gray.500" fontSize="sm" mb="16px">
+                   Select the raw materials needed to produce this stock item and specify quantities:
+                 </Text>
+                 
+                 {rawMaterials.length > 0 ? (
+                   <SimpleGrid columns={{ base: 1, md: 2 }} spacing="16px" maxH="300px" overflowY="auto">
+                     {rawMaterials.map((material) => {
+                       const isSelected = selectedRawMaterials.some(item => item.materialId === material.materialId);
+                       const selectedMaterial = selectedRawMaterials.find(item => item.materialId === material.materialId);
+                       
+                       return (
+                         <VStack 
+                           key={material.materialId} 
+                           align="stretch" 
+                           spacing="8px"
+                           p="12px"
+                           border="1px solid"
+                           borderColor={isSelected ? "#FF8D28" : "gray.200"}
+                           borderRadius="8px"
+                           bg={isSelected ? "orange.50" : "transparent"}
+                           transition="all 0.2s"
+                         >
+                           <Checkbox
+                             colorScheme="orange"
+                             isChecked={isSelected}
+                             onChange={(e) => handleRawMaterialToggle(material.materialId, e.target.checked)}
+                           >
+                             <Text fontSize="sm" fontWeight="bold" color={textColor}>
+                               {material.materialName}
+                             </Text>
+                           </Checkbox>
+                           
+                           <Text fontSize="xs" color="gray.500">
+                             Available: {material.amountPerUnit} units @ PKR {material.purchaseCost}
+                           </Text>
+                           
+                           {isSelected && (
+                             <FormControl size="sm">
+                               <FormLabel fontSize="xs" color={textColor}>Quantity Needed</FormLabel>
+                               <NumberInput
+                                 size="sm"
+                                 min={0.01}
+                                 step={0.01}
+                                 value={selectedMaterial?.quantity || 1}
+                                 onChange={(valueString) => handleRawMaterialQuantityChange(material.materialId, valueString)}
+                               >
+                                 <NumberInputField />
+                                 <NumberInputStepper>
+                                   <NumberIncrementStepper />
+                                   <NumberDecrementStepper />
+                                 </NumberInputStepper>
+                               </NumberInput>
+                             </FormControl>
+                           )}
+                         </VStack>
+                       );
+                     })}
+                   </SimpleGrid>
+                 ) : (
+                   <Text color="gray.400" fontSize="sm" textAlign="center" py="20px">
+                     No raw materials available. Add raw materials from the Factory Dashboard first.
+                   </Text>
+                 )}
+               </FormControl>
+
+               {/* Immediate Production Section */}
+               {selectedRawMaterials.length > 0 && (
+                 <>
+                   <Divider />
+                   <FormControl>
+                     <Checkbox
+                       colorScheme="orange"
+                       isChecked={shouldProduceImmediately}
+                       onChange={(e) => handleProductionCheckboxChange(e.target.checked)}
+                       size="md"
+                     >
+                       <Text fontSize="md" fontWeight="bold" color={textColor}>
+                         🏭 Produce immediately after creating stock item
+                       </Text>
+                     </Checkbox>
+                     
+                     <Text color="gray.500" fontSize="sm" mt="8px" ml="24px">
+                       This will consume the selected raw materials and add the produced quantity to your initial stock.
+                     </Text>
+                   </FormControl>
+
+                   {shouldProduceImmediately && (
+                     <FormControl>
+                       <FormLabel color={textColor} fontSize="sm">Production Quantity</FormLabel>
+                       <NumberInput
+                         size="md"
+                         min={0.01}
+                         step={0.01}
+                         value={immediateProductionQuantity}
+                         onChange={handleProductionQuantityChange}
+                       >
+                         <NumberInputField placeholder="Enter quantity to produce" />
+                         <NumberInputStepper>
+                           <NumberIncrementStepper />
+                           <NumberDecrementStepper />
+                         </NumberInputStepper>
+                       </NumberInput>
+                       
+                       {/* Validation Errors */}
+                       {!productionValidation.isValid && (
+                         <VStack spacing="8px" mt="12px" align="stretch">
+                           <Text fontSize="sm" color="red.500" fontWeight="bold">
+                             ❌ Insufficient Raw Materials:
+                           </Text>
+                           {productionValidation.insufficientMaterials.map((material, index) => (
+                             <Text key={index} fontSize="xs" color="red.600" ml="16px">
+                               • {material.materialName}: Need {material.required}, have {material.available} 
+                               (deficit: {material.deficit})
+                             </Text>
+                           ))}
+                         </VStack>
+                       )}
+                       
+                       {productionValidation.isValid && immediateProductionQuantity && (
+                         <Text fontSize="xs" color="green.600" mt="8px" fontStyle="italic">
+                           ✅ Sufficient raw materials available for production
+                         </Text>
+                       )}
+                     </FormControl>
+                   )}
+                 </>
+               )}
               
               <Button
                 colorScheme='teal'
-                bg='#FF8D28'
+                 bg={productionValidation.isValid ? '#FF8D28' : 'gray.400'}
                 color='white'
-                _hover={{ bg: '#E67E22' }}
+                 _hover={{ bg: productionValidation.isValid ? '#E67E22' : 'gray.400' }}
                 w='100%'
+                 isDisabled={shouldProduceImmediately && !productionValidation.isValid}
                 onClick={handleAddStock}>
-                ADD STOCK ITEM
+                 {shouldProduceImmediately && selectedRawMaterials.length > 0 ? 'CREATE STOCK & PRODUCE' : 'ADD STOCK ITEM'}
               </Button>
             </VStack>
           </ModalBody>
@@ -1039,8 +1662,167 @@ const Authors = ({ title, captions, data }) => {
                </Button>
              </VStack>
            </ModalBody>
-         </ModalContent>
-       </Modal>
+          </ModalContent>
+        </Modal>
+
+        {/* Edit Production Modal */}
+        <Modal isOpen={isEditProductionOpen} onClose={onEditProductionClose} size='xl' motionPreset='slideInBottom'>
+          <ModalOverlay bg='rgba(0,0,0,0.4)' backdropFilter='blur(6px)' />
+          <ModalContent>
+            <ModalHeader color={textColor}>Edit Production Settings</ModalHeader>
+            <ModalCloseButton />
+            <ModalBody pb='24px'>
+              {editingStockProduction && (
+                <VStack spacing='20px'>
+                  <Text fontSize="lg" fontWeight="bold" color={textColor} textAlign="center">
+                    {editingStockProduction.name}
+                  </Text>
+                  
+                  <Text fontSize="sm" color="gray.500" textAlign="center">
+                    Current Stock: {editingStockProduction.quantity}
+                  </Text>
+                  
+                  {/* Raw Materials Selection */}
+                  <FormControl>
+                    <FormLabel color={textColor} fontSize="md" fontWeight="bold" mb="16px">
+                      Raw Materials Required
+                    </FormLabel>
+                    <Text color="gray.500" fontSize="sm" mb="16px">
+                      Select and adjust the raw materials needed to produce this stock item:
+                    </Text>
+                    
+                    {rawMaterials.length > 0 ? (
+                      <SimpleGrid columns={{ base: 1, md: 2 }} spacing="16px" maxH="300px" overflowY="auto">
+                        {rawMaterials.map((material) => {
+                          const isSelected = editSelectedRawMaterials.some(item => item.materialId === material.materialId);
+                          const selectedMaterial = editSelectedRawMaterials.find(item => item.materialId === material.materialId);
+                          
+                          return (
+                            <VStack 
+                              key={material.materialId} 
+                              align="stretch" 
+                              spacing="8px"
+                              p="12px"
+                              border="1px solid"
+                              borderColor={isSelected ? "#FF8D28" : "gray.200"}
+                              borderRadius="8px"
+                              bg={isSelected ? "orange.50" : "transparent"}
+                              transition="all 0.2s"
+                            >
+                              <Checkbox
+                                colorScheme="orange"
+                                isChecked={isSelected}
+                                onChange={(e) => handleEditRawMaterialToggle(material.materialId, e.target.checked)}
+                              >
+                                <Text fontSize="sm" fontWeight="bold" color={textColor}>
+                                  {material.materialName}
+                                </Text>
+                              </Checkbox>
+                              
+                              <Text fontSize="xs" color="gray.500">
+                                Available: {material.amountPerUnit} units @ PKR {material.purchaseCost}
+                              </Text>
+                              
+                              {isSelected && (
+                                <FormControl size="sm">
+                                  <FormLabel fontSize="xs" color={textColor}>Quantity Needed</FormLabel>
+                                  <NumberInput
+                                    size="sm"
+                                    min={0.01}
+                                    step={0.01}
+                                    value={selectedMaterial?.quantity || 1}
+                                    onChange={(valueString) => handleEditRawMaterialQuantityChange(material.materialId, valueString)}
+                                  >
+                                    <NumberInputField />
+                                    <NumberInputStepper>
+                                      <NumberIncrementStepper />
+                                      <NumberDecrementStepper />
+                                    </NumberInputStepper>
+                                  </NumberInput>
+                                </FormControl>
+                              )}
+                            </VStack>
+                          );
+                        })}
+                      </SimpleGrid>
+                    ) : (
+                      <Text color="gray.400" fontSize="sm" textAlign="center" py="20px">
+                        No raw materials available.
+                      </Text>
+                    )}
+                  </FormControl>
+
+                  {/* Production Quantity */}
+                  {editSelectedRawMaterials.length > 0 && (
+                    <>
+                      <Divider />
+                      <FormControl>
+                        <FormLabel color={textColor}>Production Quantity</FormLabel>
+                        <NumberInput
+                          min={0.01}
+                          step={0.01}
+                          value={editProductionQuantity}
+                          onChange={handleEditProductionQuantityChange}
+                        >
+                          <NumberInputField placeholder="Enter quantity to produce" />
+                          <NumberInputStepper>
+                            <NumberIncrementStepper />
+                            <NumberDecrementStepper />
+                          </NumberInputStepper>
+                        </NumberInput>
+                        
+                        {/* Validation Errors */}
+                        {!editProductionValidation.isValid && (
+                          <VStack spacing="8px" mt="12px" align="stretch">
+                            <Text fontSize="sm" color="red.500" fontWeight="bold">
+                              ❌ Insufficient Raw Materials:
+                            </Text>
+                            {editProductionValidation.insufficientMaterials.map((material, index) => (
+                              <Text key={index} fontSize="xs" color="red.600" ml="16px">
+                                • {material.materialName}: Need {material.required}, have {material.available} 
+                                (deficit: {material.deficit})
+                              </Text>
+                            ))}
+                          </VStack>
+                        )}
+                        
+                        {editProductionValidation.isValid && editProductionQuantity && (
+                          <Text fontSize="xs" color="green.600" mt="8px" fontStyle="italic">
+                            ✅ Sufficient raw materials available for production
+                          </Text>
+                        )}
+                      </FormControl>
+                    </>
+                  )}
+                  
+                  <HStack spacing="12px" w="100%">
+                    <Button
+                      variant="outline"
+                      colorScheme="gray"
+                      flex="1"
+                      onClick={onEditProductionClose}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      colorScheme="green"
+                      bg={editProductionValidation.isValid ? "#4CAF50" : "gray.400"}
+                      color="white"
+                      _hover={{ bg: editProductionValidation.isValid ? "#45A049" : "gray.400" }}
+                      flex="1"
+                      leftIcon={<FaCog />}
+                      isDisabled={!editProductionValidation.isValid || !editProductionQuantity}
+                      onClick={handleUpdateProduction}
+                    >
+                      Update & Produce
+                    </Button>
+                  </HStack>
+                </VStack>
+              )}
+            </ModalBody>
+          </ModalContent>
+        </Modal>
+
      </Card>
    );
  };

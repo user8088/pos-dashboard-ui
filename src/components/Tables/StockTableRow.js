@@ -10,10 +10,10 @@ import {
   HStack,
 } from "@chakra-ui/react";
 import React from "react";
-import { FaTrash } from "react-icons/fa";
+import { FaTrash, FaCog } from "react-icons/fa";
 
 function StockTableRow(props) {
-  const { logo, name, quantity, category, status, stockValue, onEdit, onDelete } = props;
+  const { logo, name, quantity, category, status, stockValue, onEdit, onDelete, onEditProduction } = props;
   const textColor = useColorModeValue("gray.700", "white");
 
   // Status color mapping
@@ -90,6 +90,22 @@ function StockTableRow(props) {
               Edit
             </Text>
           </Button>
+          {onEditProduction && (
+            <Button 
+              p="0px" 
+              bg="transparent" 
+              variant="no-hover" 
+              onClick={onEditProduction}
+              _hover={{ bg: "transparent" }}
+              title="Edit Production"
+            >
+              <FaCog 
+                color="#4CAF50" 
+                size="16px" 
+                style={{ cursor: "pointer" }}
+              />
+            </Button>
+          )}
           <Button 
             p="0px" 
             bg="transparent" 

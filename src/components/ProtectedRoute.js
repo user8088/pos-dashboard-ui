@@ -22,23 +22,10 @@ const ProtectedRoute = ({ component: Component, ...rest }) => {
           return <Redirect to="/auth/signin" />;
         }
 
-        // Check if user has access to admin routes
-        if (rest.path?.startsWith('/admin')) {
-          console.log('Checking admin access, user role:', user.user_role);
-          if (user.user_role !== 'admin') {
-            console.log('User is not admin, redirecting to signin');
-            return <Redirect to="/auth/signin" />;
-          }
-        }
-
-        // Check if user has access to factory routes
-        if (rest.path?.startsWith('/factory')) {
-          console.log('Checking factory access, user role:', user.user_role);
-          if (user.user_role !== 'factory') {
-            console.log('User is not factory, redirecting to signin');
-            return <Redirect to="/auth/signin" />;
-          }
-        }
+        // Allow authenticated users to access both admin and factory routes
+        // Users can switch between dashboards regardless of their role
+        console.log('User is authenticated, allowing access to:', rest.path);
+        console.log('User role:', user.user_role);
 
         console.log('Access granted, rendering component');
         return <Component {...props} />;

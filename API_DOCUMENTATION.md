@@ -433,6 +433,193 @@ Authorization: Bearer {token}
 
 ---
 
+### 11. Raw Materials
+
+#### 11.1 Add Raw Material
+**POST** `/core/raw-material`
+
+Add a new raw material.
+
+**Headers:**
+```
+Authorization: Bearer {token}
+Content-Type: application/json
+```
+
+**Request Body:**
+```json
+{
+  "material_name": "Sugar",
+  "amount_per_unit": 5.00,
+  "purchase_cost": 12.50,
+  "status": "pending",
+  "amount_pending": 2.50
+}
+```
+
+**Response (200):** Raw material JSON.
+
+#### 11.2 Get Raw Materials
+**GET** `/core/raw-material`
+
+Retrieve all raw materials.
+
+**Headers:**
+```
+Authorization: Bearer {token}
+```
+
+#### 11.3 Update Raw Material
+**PUT** `/core/raw-material/{id}`
+
+Update an existing raw material (fields optional).
+
+**Headers:**
+```
+Authorization: Bearer {token}
+Content-Type: application/json
+```
+
+#### 11.4 Delete Raw Material
+**DELETE** `/core/raw-material/{id}`
+
+Delete a raw material.
+
+**Headers:**
+```
+Authorization: Bearer {token}
+```
+
+---
+
+### 12. Stock ⇄ Raw Materials Mapping
+
+Manage which raw materials (and quantities) are required to produce a given stock item. Uses pivot table `stock_raw_material` with `quantity`.
+
+All endpoints require:
+```
+Authorization: Bearer {token}
+Content-Type: application/json (for write operations)
+```
+
+#### 12.1 List Raw Materials for a Stock Item
+**GET** `/core/stock/{id}/raw-materials`
+
+**Response (200):**
+```json
+{
+  "stock_id": 1,
+  "item_name": "Rice",
+  "raw_materials": [
+    { "raw_material_id": 3, "material_name": "Sugar", "quantity": 2.5 },
+    { "raw_material_id": 5, "material_name": "Salt",  "quantity": 0.5 }
+  ]
+}
+```
+
+#### 12.2 Attach or Update Raw Materials (non‑destructive)
+**POST** `/core/stock/{id}/raw-materials`
+
+Attaches new or updates existing mappings without removing others.
+
+**Request Body:**
+```json
+{
+  "items": [
+    { "raw_material_id": 3, "quantity": 2.5 },
+    { "raw_material_id": 5, "quantity": 0.5 }
+  ]
+}
+```
+
+**Response (200):**
+```json
+{
+  "message": "Raw materials attached/updated",
+  "data": [
+    { "id": 3, "pivot": { "quantity": "2.50" } },
+    { "id": 5, "pivot": { "quantity": "0.50" } }
+  ]
+}
+```
+
+#### 12.3 Replace Full Set of Raw Materials (destructive)
+**PUT** `/core/stock/{id}/raw-materials`
+
+Replaces all mappings for the stock item with the provided list.
+
+**Request Body:** same as 12.2
+
+**Response (200):** `{ "message": "Raw materials set", "data": [...] }`
+
+#### 12.4 Update Quantity for a Specific Raw Material
+**PATCH** `/core/stock/{id}/raw-materials/{rawMaterialId}`
+
+**Request Body:**
+```json
+{ "quantity": 3.25 }
+```
+
+**Response (200):** `{ "message": "Quantity updated" }`
+
+#### 12.5 Detach a Raw Material from a Stock Item
+**DELETE** `/core/stock/{id}/raw-materials/{rawMaterialId}`
+
+**Response (200):** `{ "message": "Raw material detached" }`
+
+---
+
+### 13. Produce Stock (Consume Raw Materials)
+
+Produce a specified quantity of a stock item by consuming its mapped raw materials. The operation is atomic and will fail if any raw material is insufficient.
+
+**POST** `/core/stock/{id}/produce`
+
+**Headers:**
+```
+Authorization: Bearer {token}
+Content-Type: application/json
+```
+
+**Request Body:**
+```json
+{ "quantity": 50 }
+```
+
+Behavior:
+- **Consumes** each mapped raw material by `pivot.quantity × requested quantity`.
+- **Increments** the stock's `quantity_per_unit` by the requested `quantity`.
+- Entire action is within a transaction; partial updates do not occur.
+
+**Success (200):**
+```json
+{
+  "message": "Production completed",
+  "produced": 50,
+  "stock_id": 1,
+  "item_name": "Blade",
+  "consumed": [
+    { "raw_material_id": 3, "material_name": "Plastic", "quantity": 150 },
+    { "raw_material_id": 5, "material_name": "Steel",   "quantity": 200 }
+  ]
+}
+```
+
+**Validation/Error (422) - No mapping:**
+```json
+{ "message": "No raw materials mapped to this stock item" }
+```
+
+**Validation/Error (422) - Insufficient materials:**
+```json
+{
+  "message": "Not enough raw materials available",
+  "insufficient": [
+    { "raw_material_id": 3, "material_name": "Plastic", "required": 150, "available": 120, "deficit": 30 }
+  ]
+}
+```
+
 ### 10. Update Stock Item
 **PUT** `/core/stock/{id}`
 
@@ -489,7 +676,7 @@ Content-Type: application/json
 
 ---
 
-### 11. Delete Stock Item
+### 13. Delete Stock Item
 **DELETE** `/core/stock/{id}`
 
 Delete a stock item from the inventory.

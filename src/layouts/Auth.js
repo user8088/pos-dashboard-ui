@@ -14,6 +14,20 @@ import theme from 'theme/theme.js';
 export default function Pages(props) {
 	const { ...rest } = props;
 	const wrapper = React.createRef();
+	
+	// Check if user is already authenticated and redirect them
+	const token = localStorage.getItem('token');
+	const userString = localStorage.getItem('user');
+	const user = userString ? JSON.parse(userString) : null;
+	
+	// If user is authenticated, redirect to their dashboard
+	if (token && user) {
+		if (user.user_role === 'factory') {
+			return <Redirect to="/factory/dashboard" />;
+		} else {
+			return <Redirect to="/admin/dashboard" />;
+		}
+	}
 
 	useEffect(() => {
 		document.body.style.overflow = 'unset';

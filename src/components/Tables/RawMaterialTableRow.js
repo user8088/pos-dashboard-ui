@@ -7,11 +7,13 @@ import {
   Text,
   Tr,
   useColorModeValue,
+  HStack,
 } from "@chakra-ui/react";
 import React from "react";
+import { FaTrash } from "react-icons/fa";
 
 function RawMaterialTableRow(props) {
-  const { logo, name, amountPerUnit, totalPurchaseCost, invoiceLink, status, amountPending, onEdit } = props;
+  const { logo, name, amountPerUnit, totalPurchaseCost, invoiceLink, status, amountPending, onEdit, onDelete } = props;
   const textColor = useColorModeValue("gray.700", "white");
 
   // Status color mapping
@@ -94,18 +96,32 @@ function RawMaterialTableRow(props) {
       </Td>
 
       <Td>
-        <Button p="0px" bg="transparent" variant="no-hover" onClick={onEdit}>
-          <Text
-            fontSize="md"
-            color={textColor}
-            fontWeight="bold"
-            cursor="pointer"
-            transition="all .5s ease"
-            _hover={{ me: "4px" }}
+        <HStack spacing="12px">
+          <Button p="0px" bg="transparent" variant="no-hover" onClick={onEdit}>
+            <Text
+              fontSize="md"
+              color="gray.400"
+              fontWeight="bold"
+              cursor="pointer"
+              _hover={{ color: "brand.500" }}
+            >
+              Edit
+            </Text>
+          </Button>
+          <Button 
+            p="0px" 
+            bg="transparent" 
+            variant="no-hover" 
+            onClick={onDelete}
+            _hover={{ bg: "transparent" }}
           >
-            Edit
-          </Text>
-        </Button>
+            <FaTrash 
+              color="#FF8D28" 
+              size="16px" 
+              style={{ cursor: "pointer" }}
+            />
+          </Button>
+        </HStack>
       </Td>
     </Tr>
   );

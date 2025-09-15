@@ -25,6 +25,25 @@ import RTLLayout from "layouts/RTL.js";
 import FactoryLayout from "layouts/Factory.js";
 import ProtectedRoute from "components/ProtectedRoute";
 
+// Smart redirect component that checks authentication
+const SmartRedirect = () => {
+  const token = localStorage.getItem('token');
+  const userString = localStorage.getItem('user');
+  const user = userString ? JSON.parse(userString) : null;
+  
+  if (token && user) {
+    // User is authenticated, redirect to their appropriate dashboard
+    if (user.user_role === 'factory') {
+      return <Redirect to="/factory/dashboard" />;
+    } else {
+      return <Redirect to="/admin/dashboard" />;
+    }
+  } else {
+    // User is not authenticated, redirect to signin
+    return <Redirect to="/auth/signin" />;
+  }
+};
+
 ReactDOM.render(
   <HashRouter>
     <Switch>
@@ -32,7 +51,7 @@ ReactDOM.render(
       <ProtectedRoute path={`/admin`} component={AdminLayout} />
       <ProtectedRoute path={`/factory`} component={FactoryLayout} />
       <ProtectedRoute path={`/rtl`} component={RTLLayout} />
-      <Redirect from={`/`} to="/auth/signin" />
+      <Route exact path="/" component={SmartRedirect} />
     </Switch>
   </HashRouter>,
   document.getElementById("root")

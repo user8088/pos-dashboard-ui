@@ -22,6 +22,8 @@ import {
   FormControl,
   FormLabel,
   Select,
+  useToast,
+  Spinner,
 } from "@chakra-ui/react";
 // Custom components
 import Card from "components/Card/Card.js";
@@ -34,207 +36,264 @@ import { FaPlus, FaFileCsv } from "react-icons/fa";
 
 const RawMaterialTable = ({ title, captions }) => {
   const textColor = useColorModeValue("gray.700", "white");
+  const toast = useToast();
   const { isOpen, onOpen, onClose } = useDisclosure();
   const { isOpen: isEditOpen, onOpen: onEditOpen, onClose: onEditClose } = useDisclosure();
   const [newMaterial, setNewMaterial] = React.useState({
     name: "",
     amountPerUnit: "",
-    unit: "",
-    customUnit: "",
     totalPurchaseCost: "",
-    status: "Delivered",
+    status: "pending",
     amountPending: ""
   });
   const [editingMaterial, setEditingMaterial] = React.useState(null);
-  const [editIndex, setEditIndex] = React.useState(-1);
+  const [rawMaterialData, setRawMaterialData] = React.useState([]);
+  const [isLoading, setIsLoading] = React.useState(false);
   
-  // Raw material management data based on the image
-  const rawMaterialData = [
-    {
-      logo: logo,
-      name: "Iron Rods",
-      amountPerUnit: "10 Ton",
-      totalPurchaseCost: "PKR.30,000",
-      invoiceLink: "Download Invoice",
-      status: "Delivered",
-      amountPending: "PKR.15,000"
-    },
-    {
-      logo: logo,
-      name: "Steel Slabs",
-      amountPerUnit: "10 Ton",
-      totalPurchaseCost: "PKR.30,000",
-      invoiceLink: "Download Invoice",
-      status: "Pending",
-      amountPending: "None"
-    },
-    {
-      logo: logo,
-      name: "Sand Mix",
-      amountPerUnit: "10 Ton",
-      totalPurchaseCost: "PKR.30,000",
-      invoiceLink: "Download Invoice",
-      status: "Pending",
-      amountPending: "None"
-    },
-    {
-      logo: logo,
-      name: "Stone Slabs",
-      amountPerUnit: "10 Ton",
-      totalPurchaseCost: "PKR.30,000",
-      invoiceLink: "Download Invoice",
-      status: "Pending",
-      amountPending: "None"
-    },
-    {
-      logo: logo,
-      name: "Rose Wood",
-      amountPerUnit: "10 Ton",
-      totalPurchaseCost: "PKR.30,000",
-      invoiceLink: "Download Invoice",
-      status: "Pending",
-      amountPending: "None"
-    },
-    {
-      logo: logo,
-      name: "Sandal Wood",
-      amountPerUnit: "10 Ton",
-      totalPurchaseCost: "PKR.30,000",
-      invoiceLink: "Download Invoice",
-      status: "Delivered",
-      amountPending: "PKR.15,000"
-    },
-    {
-      logo: logo,
-      name: "Glass",
-      amountPerUnit: "10 Ton",
-      totalPurchaseCost: "PKR.30,000",
-      invoiceLink: "Download Invoice",
-      status: "Delivered",
-      amountPending: "PKR.15,000"
-    },
-    {
-      logo: logo,
-      name: "Metal Sheets",
-      amountPerUnit: "10 Ton",
-      totalPurchaseCost: "PKR.30,000",
-      invoiceLink: "Download Invoice",
-      status: "Delivered",
-      amountPending: "PKR.15,000"
-    },
-    {
-      logo: logo,
-      name: "Aluminum Rings",
-      amountPerUnit: "10 Ton",
-      totalPurchaseCost: "PKR.30,000",
-      invoiceLink: "Download Invoice",
-      status: "Delivered",
-      amountPending: "PKR.15,000"
-    },
-    {
-      logo: logo,
-      name: "Sand Stone",
-      amountPerUnit: "10 Ton",
-      totalPurchaseCost: "PKR.30,000",
-      invoiceLink: "Download Invoice",
-      status: "Delivered",
-      amountPending: "None"
-    },
-    {
-      logo: logo,
-      name: "Marble",
-      amountPerUnit: "10 Ton",
-      totalPurchaseCost: "PKR.30,000",
-      invoiceLink: "Download Invoice",
-      status: "Delivered",
-      amountPending: "None"
-    },
-    {
-      logo: logo,
-      name: "Copper",
-      amountPerUnit: "10 Ton",
-      totalPurchaseCost: "PKR.30,000",
-      invoiceLink: "Download Invoice",
-      status: "Delivered",
-      amountPending: "None"
-    }
-  ];
+  // Fetch raw materials on component mount
+  React.useEffect(() => {
+    fetchRawMaterials();
+  }, []);
+  
+  const fetchRawMaterials = async () => {
+    setIsLoading(true);
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000/api'}/core/raw-material`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json',
+        },
+      });
 
-  const handleAddMaterial = () => {
-    if (!newMaterial.name || !newMaterial.amountPerUnit || !newMaterial.totalPurchaseCost) return;
-    
-    const finalUnit = newMaterial.unit === "Custom" ? newMaterial.customUnit : newMaterial.unit;
-    const newMaterialData = {
-      logo: logo,
-      name: newMaterial.name,
-      amountPerUnit: `${newMaterial.amountPerUnit} ${finalUnit}`,
-      totalPurchaseCost: `PKR.${newMaterial.totalPurchaseCost}`,
-      invoiceLink: "Download Invoice",
-      status: newMaterial.status,
-      amountPending: newMaterial.amountPending ? `PKR.${newMaterial.amountPending}` : "None"
-    };
-    
-    rawMaterialData.push(newMaterialData);
-    setNewMaterial({
-      name: "",
-      amountPerUnit: "",
-      unit: "",
-      customUnit: "",
-      totalPurchaseCost: "",
-      status: "Delivered",
-      amountPending: ""
-    });
-    onClose();
+      if (response.ok) {
+        const rawMaterials = await response.json();
+        const formattedMaterials = rawMaterials.map(material => ({
+          logo: logo,
+          name: material.material_name,
+          amountPerUnit: `${material.amount_per_unit}`,
+          totalPurchaseCost: `PKR.${material.purchase_cost}`,
+          invoiceLink: "Download Invoice",
+          status: material.status === 'pending' ? 'Pending' : 'Delivered',
+          amountPending: material.amount_pending ? `PKR.${material.amount_pending}` : 'None',
+          materialId: material.id,
+          amountPerUnitRaw: material.amount_per_unit,
+          purchaseCostRaw: material.purchase_cost,
+          statusRaw: material.status,
+          amountPendingRaw: material.amount_pending || 0
+        }));
+        setRawMaterialData(formattedMaterials);
+      } else {
+        console.error('Failed to fetch raw materials');
+        setRawMaterialData([]);
+      }
+    } catch (error) {
+      console.error('Error fetching raw materials:', error);
+      setRawMaterialData([]);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const handleEditMaterial = (material, index) => {
-    // Parse the amount per unit to separate number and unit
-    const amountMatch = material.amountPerUnit.match(/^(\d+)\s+(.+)$/);
-    const amount = amountMatch ? amountMatch[1] : "";
-    const unit = amountMatch ? amountMatch[2] : "";
+  const handleAddMaterial = async () => {
+    if (!newMaterial.name || !newMaterial.amountPerUnit || !newMaterial.totalPurchaseCost) return;
     
-    // Parse costs to remove PKR. prefix
-    const totalCost = material.totalPurchaseCost.replace("PKR.", "");
-    const pendingAmount = material.amountPending === "None" ? "" : material.amountPending.replace("PKR.", "");
-    
-    // Determine if unit is custom or predefined
-    const predefinedUnits = ["Ton", "Kilograms", "Grams", "Liters", "Milliliters", "Meters", "Centimeters", "Pieces"];
-    const isCustomUnit = !predefinedUnits.includes(unit);
-    
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000/api'}/core/raw-material`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify({
+          material_name: newMaterial.name,
+          amount_per_unit: parseFloat(newMaterial.amountPerUnit),
+          purchase_cost: parseFloat(newMaterial.totalPurchaseCost),
+          status: newMaterial.status,
+          amount_pending: newMaterial.amountPending ? parseFloat(newMaterial.amountPending) : null
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        // Show success message
+        toast({
+          title: "Raw Material Added Successfully",
+          description: `Raw material "${data.material_name}" has been added to the system.`,
+          status: "success",
+          duration: 3000,
+          isClosable: true,
+        });
+        
+        // Reset form
+        setNewMaterial({
+          name: "",
+          amountPerUnit: "",
+          totalPurchaseCost: "",
+          status: "pending",
+          amountPending: ""
+        });
+        
+        // Refresh raw materials data
+        fetchRawMaterials();
+        onClose();
+      } else {
+        // Handle API errors
+        const errorMessage = data.message || 'Failed to add raw material';
+        toast({
+          title: "Failed to Add Raw Material",
+          description: errorMessage,
+          status: "error",
+          duration: 5000,
+          isClosable: true,
+        });
+        
+        if (data.errors) {
+          console.error('Validation errors:', data.errors);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to add raw material:', error);
+      toast({
+        title: "Network Error",
+        description: "Unable to connect to the server. Please try again.",
+        status: "error",
+        duration: 5000,
+        isClosable: true,
+      });
+    }
+  };
+
+  const handleEditMaterial = (material) => {
     setEditingMaterial({
+      materialId: material.materialId,
       name: material.name,
-      amountPerUnit: amount,
-      unit: isCustomUnit ? "Custom" : unit,
-      customUnit: isCustomUnit ? unit : "",
-      totalPurchaseCost: totalCost,
-      status: material.status,
-      amountPending: pendingAmount
+      amountPerUnit: material.amountPerUnitRaw.toString(),
+      totalPurchaseCost: material.purchaseCostRaw.toString(),
+      status: material.statusRaw,
+      amountPending: material.amountPendingRaw ? material.amountPendingRaw.toString() : ""
     });
-    setEditIndex(index);
     onEditOpen();
   };
 
-  const handleUpdateMaterial = () => {
+  const handleUpdateMaterial = async () => {
     if (!editingMaterial.name || !editingMaterial.amountPerUnit || !editingMaterial.totalPurchaseCost) return;
     
-    const finalUnit = editingMaterial.unit === "Custom" ? editingMaterial.customUnit : editingMaterial.unit;
-    const updatedMaterialData = {
-      logo: logo,
-      name: editingMaterial.name,
-      amountPerUnit: `${editingMaterial.amountPerUnit} ${finalUnit}`,
-      totalPurchaseCost: `PKR.${editingMaterial.totalPurchaseCost}`,
-      invoiceLink: "Download Invoice",
-      status: editingMaterial.status,
-      amountPending: editingMaterial.amountPending ? `PKR.${editingMaterial.amountPending}` : "None"
-    };
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000/api'}/core/raw-material/${editingMaterial.materialId}`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify({
+          material_name: editingMaterial.name,
+          amount_per_unit: parseFloat(editingMaterial.amountPerUnit),
+          purchase_cost: parseFloat(editingMaterial.totalPurchaseCost),
+          status: editingMaterial.status,
+          amount_pending: editingMaterial.amountPending ? parseFloat(editingMaterial.amountPending) : null
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        // Show success message
+        toast({
+          title: "Raw Material Updated Successfully",
+          description: `Raw material "${data.material_name}" has been updated.`,
+          status: "success",
+          duration: 3000,
+          isClosable: true,
+        });
+        
+        // Refresh raw materials data
+        fetchRawMaterials();
+        
+        // Reset editing state
+        setEditingMaterial(null);
+        onEditClose();
+      } else {
+        // Handle API errors
+        const errorMessage = data.message || 'Failed to update raw material';
+        toast({
+          title: "Failed to Update Raw Material",
+          description: errorMessage,
+          status: "error",
+          duration: 5000,
+          isClosable: true,
+        });
+        
+        if (data.errors) {
+          console.error('Validation errors:', data.errors);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to update raw material:', error);
+      toast({
+        title: "Network Error",
+        description: "Unable to connect to the server. Please try again.",
+        status: "error",
+        duration: 5000,
+        isClosable: true,
+      });
+    }
+  };
+
+  const handleDeleteMaterial = async (material) => {
+    if (!window.confirm(`Are you sure you want to delete "${material.name}"?`)) {
+      return;
+    }
     
-    // Update the material data at the specific index
-    rawMaterialData[editIndex] = updatedMaterialData;
-    
-    // Reset editing state
-    setEditingMaterial(null);
-    setEditIndex(-1);
-    onEditClose();
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000/api'}/core/raw-material/${material.materialId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json',
+        },
+      });
+
+      if (response.ok) {
+        // Show success message
+        toast({
+          title: "Raw Material Deleted Successfully",
+          description: `Raw material "${material.name}" has been deleted.`,
+          status: "success",
+          duration: 3000,
+          isClosable: true,
+        });
+        
+        // Refresh raw materials data
+        fetchRawMaterials();
+      } else {
+        const data = await response.json();
+        const errorMessage = data.message || 'Failed to delete raw material';
+        toast({
+          title: "Failed to Delete Raw Material",
+          description: errorMessage,
+          status: "error",
+          duration: 5000,
+          isClosable: true,
+        });
+      }
+    } catch (error) {
+      console.error('Failed to delete raw material:', error);
+      toast({
+        title: "Network Error",
+        description: "Unable to connect to the server. Please try again.",
+        status: "error",
+        duration: 5000,
+        isClosable: true,
+      });
+    }
   };
 
   const handleImportCSV = () => {
@@ -304,36 +363,87 @@ const RawMaterialTable = ({ title, captions }) => {
         </Flex>
       </CardHeader>
       <CardBody>
-        <Table variant='simple' color={textColor}>
-          <Thead>
-            <Tr my='.8rem' pl='0px' color='gray.400'>
-              {captions.map((caption, idx) => {
+        {isLoading ? (
+          <Flex 
+            justify="center" 
+            align="center" 
+            h="400px" 
+            w="100%"
+          >
+            <VStack spacing="16px" textAlign="center">
+              <Spinner
+                thickness="4px"
+                speed="0.65s"
+                emptyColor="gray.200"
+                color="#FF8D28"
+                size="xl"
+              />
+              <Text color={textColor}>Loading raw materials...</Text>
+            </VStack>
+          </Flex>
+        ) : rawMaterialData.length === 0 ? (
+          <Flex 
+            direction="column" 
+            justify="center" 
+            align="center" 
+            h="400px" 
+            p="40px"
+            w="100%"
+          >
+            <VStack spacing="24px" maxW="400px" textAlign="center">
+              <Text fontSize="2xl" color={textColor} fontWeight="bold">
+                No Raw Materials Added
+              </Text>
+              <Text color="gray.500" fontSize="md" lineHeight="1.6">
+                Start by adding your first raw material to manage your inventory.
+              </Text>
+              <Button
+                leftIcon={<FaPlus />}
+                colorScheme='teal'
+                bg='#FF8D28'
+                color='white'
+                _hover={{ bg: '#E67E22' }}
+                size="lg"
+                px="32px"
+                py="12px"
+                onClick={onOpen}>
+                ADD FIRST RAW MATERIAL
+              </Button>
+            </VStack>
+          </Flex>
+        ) : (
+          <Table variant='simple' color={textColor}>
+            <Thead>
+              <Tr my='.8rem' pl='0px' color='gray.400'>
+                {captions.map((caption, idx) => {
+                  return (
+                    <Th color='gray.400' key={idx} ps={idx === 0 ? "0px" : null}>
+                      {caption}
+                    </Th>
+                  );
+                })}
+              </Tr>
+            </Thead>
+            <Tbody>
+              {rawMaterialData.map((row, index) => {
                 return (
-                  <Th color='gray.400' key={idx} ps={idx === 0 ? "0px" : null}>
-                    {caption}
-                  </Th>
+                  <RawMaterialTableRow
+                    key={`${row.name}-${index}`}
+                    logo={row.logo}
+                    name={row.name}
+                    amountPerUnit={row.amountPerUnit}
+                    totalPurchaseCost={row.totalPurchaseCost}
+                    invoiceLink={row.invoiceLink}
+                    status={row.status}
+                    amountPending={row.amountPending}
+                    onEdit={() => handleEditMaterial(row)}
+                    onDelete={() => handleDeleteMaterial(row)}
+                  />
                 );
               })}
-            </Tr>
-          </Thead>
-          <Tbody>
-            {rawMaterialData.map((row, index) => {
-              return (
-                <RawMaterialTableRow
-                  key={`${row.name}-${index}`}
-                  logo={row.logo}
-                  name={row.name}
-                  amountPerUnit={row.amountPerUnit}
-                  totalPurchaseCost={row.totalPurchaseCost}
-                  invoiceLink={row.invoiceLink}
-                  status={row.status}
-                  amountPending={row.amountPending}
-                  onEdit={() => handleEditMaterial(row, index)}
-                />
-              );
-            })}
-          </Tbody>
-        </Table>
+            </Tbody>
+          </Table>
+        )}
       </CardBody>
 
       {/* Add New Raw Material Modal */}
@@ -357,40 +467,12 @@ const RawMaterialTable = ({ title, captions }) => {
                 <FormLabel color={textColor}>Amount Per Unit</FormLabel>
                 <Input
                   type='number'
-                  placeholder='Enter amount'
+                  step='0.01'
+                  placeholder='Enter amount per unit'
                   value={newMaterial.amountPerUnit}
                   onChange={(e) => setNewMaterial({...newMaterial, amountPerUnit: e.target.value})}
                 />
               </FormControl>
-              
-              <FormControl isRequired>
-                <FormLabel color={textColor}>Unit</FormLabel>
-                <Select
-                  value={newMaterial.unit}
-                  onChange={(e) => setNewMaterial({...newMaterial, unit: e.target.value})}
-                  placeholder='Select unit'>
-                  <option value='Ton'>Ton</option>
-                  <option value='Kilograms'>Kilograms</option>
-                  <option value='Grams'>Grams</option>
-                  <option value='Liters'>Liters</option>
-                  <option value='Milliliters'>Milliliters</option>
-                  <option value='Meters'>Meters</option>
-                  <option value='Centimeters'>Centimeters</option>
-                  <option value='Pieces'>Pieces</option>
-                  <option value='Custom'>Custom</option>
-                </Select>
-              </FormControl>
-              
-              {newMaterial.unit === "Custom" && (
-                <FormControl isRequired>
-                  <FormLabel color={textColor}>Custom Unit</FormLabel>
-                  <Input
-                    placeholder='Enter custom unit (e.g., kgs, pcs, etc.)'
-                    value={newMaterial.customUnit}
-                    onChange={(e) => setNewMaterial({...newMaterial, customUnit: e.target.value})}
-                  />
-                </FormControl>
-              )}
               
               <FormControl isRequired>
                 <FormLabel color={textColor}>Total Purchase Cost (PKR)</FormLabel>
@@ -407,8 +489,8 @@ const RawMaterialTable = ({ title, captions }) => {
                 <Select
                   value={newMaterial.status}
                   onChange={(e) => setNewMaterial({...newMaterial, status: e.target.value})}>
-                  <option value='Delivered'>Delivered</option>
-                  <option value='Pending'>Pending</option>
+                  <option value='pending'>Pending</option>
+                  <option value='delivered'>Delivered</option>
                 </Select>
               </FormControl>
               
@@ -458,40 +540,12 @@ const RawMaterialTable = ({ title, captions }) => {
                   <FormLabel color={textColor}>Amount Per Unit</FormLabel>
                   <Input
                     type='number'
-                    placeholder='Enter amount'
+                    step='0.01'
+                    placeholder='Enter amount per unit'
                     value={editingMaterial.amountPerUnit}
                     onChange={(e) => setEditingMaterial({...editingMaterial, amountPerUnit: e.target.value})}
                   />
                 </FormControl>
-                
-                <FormControl isRequired>
-                  <FormLabel color={textColor}>Unit</FormLabel>
-                  <Select
-                    value={editingMaterial.unit}
-                    onChange={(e) => setEditingMaterial({...editingMaterial, unit: e.target.value})}
-                    placeholder='Select unit'>
-                    <option value='Ton'>Ton</option>
-                    <option value='Kilograms'>Kilograms</option>
-                    <option value='Grams'>Grams</option>
-                    <option value='Liters'>Liters</option>
-                    <option value='Milliliters'>Milliliters</option>
-                    <option value='Meters'>Meters</option>
-                    <option value='Centimeters'>Centimeters</option>
-                    <option value='Pieces'>Pieces</option>
-                    <option value='Custom'>Custom</option>
-                  </Select>
-                </FormControl>
-                
-                {editingMaterial.unit === "Custom" && (
-                  <FormControl isRequired>
-                    <FormLabel color={textColor}>Custom Unit</FormLabel>
-                    <Input
-                      placeholder='Enter custom unit (e.g., kgs, pcs, etc.)'
-                      value={editingMaterial.customUnit}
-                      onChange={(e) => setEditingMaterial({...editingMaterial, customUnit: e.target.value})}
-                    />
-                  </FormControl>
-                )}
                 
                 <FormControl isRequired>
                   <FormLabel color={textColor}>Total Purchase Cost (PKR)</FormLabel>
@@ -508,8 +562,8 @@ const RawMaterialTable = ({ title, captions }) => {
                   <Select
                     value={editingMaterial.status}
                     onChange={(e) => setEditingMaterial({...editingMaterial, status: e.target.value})}>
-                    <option value='Delivered'>Delivered</option>
-                    <option value='Pending'>Pending</option>
+                    <option value='pending'>Pending</option>
+                    <option value='delivered'>Delivered</option>
                   </Select>
                 </FormControl>
                 
