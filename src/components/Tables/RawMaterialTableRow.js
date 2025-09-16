@@ -13,7 +13,7 @@ import React from "react";
 import { FaTrash } from "react-icons/fa";
 
 function RawMaterialTableRow(props) {
-  const { logo, name, amountPerUnit, totalPurchaseCost, invoiceLink, status, amountPending, onEdit, onDelete } = props;
+  const { logo, name, amountPerUnit, unitCost, totalPurchaseCost, wasteQuantity, lossCost, invoiceLink, status, amountPending, onEdit, onDelete, onWaste } = props;
   const textColor = useColorModeValue("gray.700", "white");
 
   // Status color mapping
@@ -59,6 +59,12 @@ function RawMaterialTableRow(props) {
       </Td>
 
       <Td>
+        <Text fontSize="md" color={textColor} fontWeight="bold">
+          {unitCost}
+        </Text>
+      </Td>
+
+      <Td>
         <Flex direction="column" align="start">
           <Text fontSize="md" color={textColor} fontWeight="bold">
             {totalPurchaseCost}
@@ -91,6 +97,18 @@ function RawMaterialTableRow(props) {
 
       <Td>
         <Text fontSize="md" color={textColor} fontWeight="bold">
+          {wasteQuantity}
+        </Text>
+      </Td>
+
+      <Td>
+        <Text fontSize="md" color={textColor} fontWeight="bold">
+          {lossCost}
+        </Text>
+      </Td>
+
+      <Td>
+        <Text fontSize="md" color={textColor} fontWeight="bold">
           {amountPending}
         </Text>
       </Td>
@@ -106,6 +124,17 @@ function RawMaterialTableRow(props) {
               _hover={{ color: "brand.500" }}
             >
               Edit
+            </Text>
+          </Button>
+          <Button p="0px" bg="transparent" variant="no-hover" onClick={onWaste}>
+            <Text
+              fontSize="md"
+              color="#FF8D28"
+              fontWeight="bold"
+              cursor="pointer"
+              _hover={{ color: "#E67E22" }}
+            >
+              Set Waste
             </Text>
           </Button>
           <Button 

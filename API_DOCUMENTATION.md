@@ -446,18 +446,38 @@ Authorization: Bearer {token}
 Content-Type: application/json
 ```
 
-**Request Body:**
+**Editable Fields & Rules:**
+- material_name (required, string, max:255)
+- amount_per_unit (required, number, min:0)
+- unit_purchase_cost (optional, number, min:0)
+- purchase_cost (required without unit_purchase_cost, number, min:0)
+- status (optional, enum: delivered|pending, default: pending)
+- amount_pending (optional, number, min:0)
+- waste_quantity (optional, number, min:0, default: 0)
+- total_waste_cost (optional, number, min:0, default: 0)
+
+Computation behavior:
+- If unit_purchase_cost is provided and purchase_cost is omitted, the API computes purchase_cost = unit_purchase_cost × amount_per_unit.
+- If both unit_purchase_cost and purchase_cost are provided, purchase_cost is respected as-is.
+
+**Request Body (example):**
 ```json
 {
   "material_name": "Sugar",
   "amount_per_unit": 5.00,
   "purchase_cost": 12.50,
+  "unit_purchase_cost": 2.50,
   "status": "pending",
-  "amount_pending": 2.50
+  "amount_pending": 2.50,
+  "waste_quantity": 0,
+  "total_waste_cost": 0
 }
 ```
+Notes:
+- **unit_purchase_cost (optional)**: If provided, the API will compute `purchase_cost = unit_purchase_cost × amount_per_unit` and persist both values.
+- If `unit_purchase_cost` is omitted, the provided `purchase_cost` is used as‑is.
 
-**Response (200):** Raw material JSON.
+**Response (201):** Raw material JSON.
 
 #### 11.2 Get Raw Materials
 **GET** `/core/raw-material`
@@ -472,13 +492,39 @@ Authorization: Bearer {token}
 #### 11.3 Update Raw Material
 **PUT** `/core/raw-material/{id}`
 
-Update an existing raw material (fields optional).
+Update an existing raw material. All fields are optional; only provided fields are updated.
+
+Editable Fields & Rules:
+- material_name (string, max:255)
+- amount_per_unit (number, min:0)
+- unit_purchase_cost (number|null, min:0)
+- purchase_cost (number, min:0)
+- status (enum: delivered|pending)
+- amount_pending (number, min:0)
+- waste_quantity (number, min:0)
+- total_waste_cost (number, min:0)
+
+Computation behavior:
+- If unit_purchase_cost and/or amount_per_unit change, and purchase_cost is NOT provided, the API computes purchase_cost = unit_purchase_cost × amount_per_unit (using the new or existing unit cost if available).
+- If purchase_cost is provided, it is respected as-is (no auto-compute).
 
 **Headers:**
 ```
 Authorization: Bearer {token}
 Content-Type: application/json
 ```
+
+**Request Body (example):**
+```json
+{
+  "amount_per_unit": 12.00,
+  "unit_purchase_cost": 1.25,
+  "status": "delivered"
+}
+```
+Notes:
+- You can also directly set `waste_quantity` and `total_waste_cost` if needed.
+- Prefer the waste endpoint (11.5) for operational waste events as it adjusts quantities and calculates loss while keeping `purchase_cost` unchanged.
 
 #### 11.4 Delete Raw Material
 **DELETE** `/core/raw-material/{id}`
@@ -488,6 +534,55 @@ Delete a raw material.
 **Headers:**
 ```
 Authorization: Bearer {token}
+```
+
+#### 11.5 Record Raw Material Waste
+**POST** `/core/raw-material/{id}/waste`
+
+Record a quantity of the raw material that goes to waste. This reduces `amount_per_unit`, increases `waste_quantity`, recalculates `purchase_cost` for the remaining amount, and updates `total_waste_cost`.
+Record a quantity of the raw material that goes to waste. This reduces `amount_per_unit`, increases `waste_quantity`, and updates `total_waste_cost`. The original `purchase_cost` (total purchase price) remains unchanged.
+
+**Headers:**
+```
+Authorization: Bearer {token}
+Content-Type: application/json
+```
+
+**Request Body:**
+```json
+{ "quantity": 5 }
+```
+
+Behavior:
+- **Validates** that `quantity` is positive and does not exceed available `amount_per_unit`.
+- **Decrements** `amount_per_unit` by the waste `quantity`.
+- **Accumulates** `waste_quantity` by the waste `quantity`.
+- **Determines unit cost** using `unit_purchase_cost` if present; otherwise derives it as `purchase_cost / amount_per_unit` before waste.
+- **Leaves** `purchase_cost` unchanged and updates `total_waste_cost = unit_cost × waste_quantity`.
+
+**Success (200):**
+```json
+{
+  "message": "Waste recorded successfully",
+  "data": {
+    "id": 3,
+    "material_name": "Sugar",
+    "amount_per_unit": "5.00",
+    "unit_purchase_cost": "2.50",
+    "purchase_cost": "12.50",
+    "waste_quantity": "5.00",
+    "total_waste_cost": "12.50",
+    "status": "delivered",
+    "amount_pending": null,
+    "created_at": "2025-09-16T10:00:00.000000Z",
+    "updated_at": "2025-09-16T10:05:00.000000Z"
+  }
+}
+```
+
+**Validation/Error (422):**
+```json
+{ "message": "Waste quantity exceeds available amount." }
 ```
 
 ---

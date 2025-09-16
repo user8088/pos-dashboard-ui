@@ -8,7 +8,7 @@ function RawMaterialManagement() {
     <Flex direction='column' pt={{ base: "120px", md: "75px" }}>
       <RawMaterialTable
         title={"Raw Material Management"}
-        captions={["Raw Materials", "AMOUNT PER UNIT", "TOTAL PURCHASE COST", "STATUS", "AMOUNT PENDING", ""]}
+        captions={["Raw Materials", "AMOUNT PER UNIT", "COST PER UNIT", "TOTAL PURCHASE COST", "STATUS", "WASTE QTY", "LOSS COST", "AMOUNT PENDING", ""]}
       />
     </Flex>
   );
