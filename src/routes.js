@@ -51,7 +51,7 @@ var dashRoutes = [
     path: "/rental-management",
     name: "Rental Management",
     rtlName: "لوحة القيادة",
-    icon: <SettingsIcon color="inherit" />,
+    icon: <SupportIcon color="inherit" />,
     component: RentalManagement,
     layout: "/admin",
   },

@@ -24,6 +24,9 @@ import {
   FormLabel,
   Select,
   Input,
+  Box,
+  Image,
+  Badge,
 } from "@chakra-ui/react";
 // Custom components
 import Card from "components/Card/Card.js";
@@ -40,6 +43,7 @@ function RentalManagement() {
   const { isOpen, onOpen, onClose } = useDisclosure();
   const { isOpen: isEditOpen, onOpen: onEditOpen, onClose: onEditClose } = useDisclosure();
   const { isOpen: isRentOpen, onOpen: onRentOpen, onClose: onRentClose } = useDisclosure();
+  const { isOpen: isEndRentalOpen, onOpen: onEndRentalOpen, onClose: onEndRentalClose } = useDisclosure();
 
   const [rentalData, setRentalData] = React.useState([]);
   const [isLoading, setIsLoading] = React.useState(false);
@@ -53,15 +57,19 @@ function RentalManagement() {
     customUnit: "",
     category: "",
     status: "available",
-    rentWeek: "",
-    rentMonth: "",
-    rentYear: "",
     stockValue: "",
   });
 
   const [editingItem, setEditingItem] = React.useState(null);
   const [rentingItem, setRentingItem] = React.useState(null);
-  const [rentForm, setRentForm] = React.useState({ quantity: "", period: "month", rate: "", rentedOn: "", rentedTill: "" });
+  const [endingRentalItem, setEndingRentalItem] = React.useState(null);
+  const [rentForm, setRentForm] = React.useState({ 
+    quantity: "", 
+    rentedOn: "", 
+    rentedTill: "", 
+    totalRentAmount: "" 
+  });
+  const [endRentalForm, setEndRentalForm] = React.useState({ quantity: "" });
 
   React.useEffect(() => {
     fetchUnits();
@@ -101,7 +109,7 @@ function RentalManagement() {
     setIsLoading(true);
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000/api'}/core/rental-stock`, {
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000/api'}/core/rental-stock/details`, {
         method: 'GET',
         headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' },
       });
@@ -111,19 +119,21 @@ function RentalManagement() {
           logo: logo,
           name: item.item_name,
           quantity: `${item.quantity_per_unit} ${item.unit?.unit_name || 'Units'}`,
-          rentWeek: item.rent_per_week ? `PKR.${item.rent_per_week}` : '—',
-          rentMonth: item.rent_per_month ? `PKR.${item.rent_per_month}` : '—',
-          rentYear: item.rent_per_year ? `PKR.${item.rent_per_year}` : '—',
           category: item.category?.category_name || 'Uncategorized',
-          stockValue: item.stock_value ? `PKR.${item.stock_value}` : 'PKR.0',
-          totalRented: item.total_rented ? `${item.total_rented}` : '0',
-          totalProfit: item.total_profit ? `PKR.${item.total_profit}` : 'PKR.0',
-          status: (item.stock_status || 'available').replace(/_/g, ' '),
+          stockValue: item.stock_value || 0,
+          totalRented: item.total_rented || 0,
+          currentRent: item.total_rent_amount || 0,
+          totalProfit: item.total_profit || 0,
+          status: item.stock_status || 'available',
+          rentedOn: item.rented_on,
+          rentedTill: item.rented_till,
+          rentalDurationDays: item.rental_duration_days,
+          dailyRate: item.daily_rate,
+          isOverdue: item.is_overdue,
           itemId: item.item_id,
           unitId: item.unit_id,
           categoryId: item.category_id,
           quantityPerUnit: item.quantity_per_unit,
-          rentsRaw: { week: item.rent_per_week || '', month: item.rent_per_month || '', year: item.rent_per_year || '' },
           stockValueRaw: item.stock_value || 0,
         }));
         setRentalData(formatted);
@@ -150,9 +160,6 @@ function RentalManagement() {
         unit_id: unitId,
         category_id: categoryId,
         quantity_per_unit: newItem.quantity ? parseFloat(newItem.quantity) : 0,
-        rent_per_week: newItem.rentWeek ? parseFloat(newItem.rentWeek) : undefined,
-        rent_per_month: newItem.rentMonth ? parseFloat(newItem.rentMonth) : undefined,
-        rent_per_year: newItem.rentYear ? parseFloat(newItem.rentYear) : undefined,
         stock_value: newItem.stockValue ? parseFloat(newItem.stockValue) : undefined,
         stock_status: newItem.status,
       };
@@ -164,7 +171,7 @@ function RentalManagement() {
       const data = await response.json();
       if (response.ok) {
         toast({ title: "Rental item added", description: data.message || 'Item created successfully', status: "success", duration: 3000, isClosable: true });
-        setNewItem({ name: "", quantity: "", unit: "", customUnit: "", category: "", status: "available", rentWeek: "", rentMonth: "", rentYear: "", stockValue: "" });
+        setNewItem({ name: "", quantity: "", unit: "", customUnit: "", category: "", status: "available", stockValue: "" });
         fetchRentalStock();
         onClose();
       } else {
@@ -183,9 +190,6 @@ function RentalManagement() {
       unit: row.unitId,
       category: row.categoryId,
       status: row.status,
-      rentWeek: row.rentsRaw?.week?.toString() || "",
-      rentMonth: row.rentsRaw?.month?.toString() || "",
-      rentYear: row.rentsRaw?.year?.toString() || "",
       stockValue: row.stockValueRaw ? row.stockValueRaw.toString() : "",
     });
     onEditOpen();
@@ -203,9 +207,6 @@ function RentalManagement() {
           unit_id: editingItem.unit || undefined,
           category_id: editingItem.category || undefined,
           quantity_per_unit: editingItem.quantity ? parseFloat(editingItem.quantity) : undefined,
-          rent_per_week: editingItem.rentWeek !== "" ? parseFloat(editingItem.rentWeek) : undefined,
-          rent_per_month: editingItem.rentMonth !== "" ? parseFloat(editingItem.rentMonth) : undefined,
-          rent_per_year: editingItem.rentYear !== "" ? parseFloat(editingItem.rentYear) : undefined,
           stock_value: editingItem.stockValue !== "" ? parseFloat(editingItem.stockValue) : undefined,
           stock_status: editingItem.status,
         })
@@ -246,20 +247,25 @@ function RentalManagement() {
 
   const openRent = (row) => {
     setRentingItem(row);
-    setRentForm({ quantity: "", period: "month", rate: "", rentedOn: "", rentedTill: "" });
+    setRentForm({ quantity: "", rentedOn: "", rentedTill: "", totalRentAmount: "" });
     onRentOpen();
   };
 
+  const openEndRental = (row) => {
+    setEndingRentalItem(row);
+    setEndRentalForm({ quantity: "" });
+    onEndRentalOpen();
+  };
+
   const handleRecordRent = async () => {
-    if (!rentingItem || !rentForm.quantity) return;
+    if (!rentingItem || !rentForm.quantity || !rentForm.rentedOn || !rentForm.rentedTill || !rentForm.totalRentAmount) return;
     try {
       const token = localStorage.getItem('token');
       const payload = {
         quantity: parseFloat(rentForm.quantity),
-        period: rentForm.period,
-        rate: rentForm.rate ? parseFloat(rentForm.rate) : undefined,
-        rented_on: rentForm.rentedOn || undefined,
-        rented_till: rentForm.rentedTill || undefined,
+        rented_on: rentForm.rentedOn,
+        rented_till: rentForm.rentedTill,
+        total_rent_amount: parseFloat(rentForm.totalRentAmount),
       };
       const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000/api'}/core/rental-stock/${rentingItem.itemId}/rent`, {
         method: 'POST',
@@ -279,37 +285,64 @@ function RentalManagement() {
     }
   };
 
+  const handleEndRental = async () => {
+    if (!endingRentalItem || !endRentalForm.quantity) return;
+    try {
+      const token = localStorage.getItem('token');
+      const payload = {
+        quantity: parseFloat(endRentalForm.quantity),
+      };
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000/api'}/core/rental-stock/${endingRentalItem.itemId}/end-rental`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await response.json();
+      if (response.ok) {
+        toast({ title: "Rental ended", description: data.message || 'Rental ended successfully', status: "success", duration: 4000, isClosable: true });
+        fetchRentalStock();
+        onEndRentalClose();
+      } else {
+        toast({ title: "Failed to end rental", description: data.message || 'Unable to end rental', status: "error", duration: 5000, isClosable: true });
+      }
+    } catch (e) {
+      toast({ title: "Network error", description: 'Unable to end rental', status: "error", duration: 5000, isClosable: true });
+    }
+  };
+
   const captions = [
     "Products",
     "QUANTITY",
-    "RENT (W/M/Y)",
+    "RENTAL INFO",
     "CATEGORY",
     "STOCK VALUE",
     "TOTAL RENTED",
+    "CURRENT RENT",
     "TOTAL PROFIT",
+    "RENTAL PERIOD",
     "STATUS",
-    "",
+    "ACTIONS",
   ];
 
   return (
     <Flex direction='column' pt={{ base: "120px", md: "75px" }}>
-    <Card overflowX={{ sm: "scroll", xl: "hidden" }}>
+    <Card overflowX={{ sm: "scroll", xl: "hidden" }} maxW="100%">
       <CardHeader p='6px 0px 22px 0px'>
-        <Flex justify='space-between' align='center' w='100%'>
+        <Flex justify='space-between' align='center' w='100%' direction={{ base: 'column', md: 'row' }} gap={{ base: '16px', md: '0' }}>
           <Text fontSize='xl' color={textColor} fontWeight='bold'>
             Rental Management
           </Text>
-          <HStack spacing='12px'>
-            <Button leftIcon={<FaFileCsv />} colorScheme='teal' borderColor='#FF8D28' color='#FF8D28' variant='outline' fontSize='xs' p='8px 24px'>
+          <HStack spacing='8px' wrap='wrap' justify={{ base: 'center', md: 'flex-end' }}>
+            <Button leftIcon={<FaFileCsv />} colorScheme='teal' borderColor='#FF8D28' color='#FF8D28' variant='outline' fontSize='xs' p='6px 16px' size='sm'>
               IMPORT CSV
             </Button>
-            <Button leftIcon={<FaTags />} colorScheme='teal' borderColor='#FF8D28' color='#FF8D28' variant='outline' fontSize='xs' p='8px 24px'>
+            <Button leftIcon={<FaTags />} colorScheme='teal' borderColor='#FF8D28' color='#FF8D28' variant='outline' fontSize='xs' p='6px 16px' size='sm'>
               ADD CATEGORY
             </Button>
-            <Button leftIcon={<FaRuler />} colorScheme='teal' borderColor='#FF8D28' color='#FF8D28' variant='outline' fontSize='xs' p='8px 24px'>
+            <Button leftIcon={<FaRuler />} colorScheme='teal' borderColor='#FF8D28' color='#FF8D28' variant='outline' fontSize='xs' p='6px 16px' size='sm'>
               ADD UNIT
             </Button>
-            <Button leftIcon={<FaPlus />} colorScheme='teal' borderColor='#FF8D28' color='#FF8D28' variant='outline' fontSize='xs' p='8px 24px' onClick={onOpen}>
+            <Button leftIcon={<FaPlus />} colorScheme='teal' borderColor='#FF8D28' color='#FF8D28' variant='outline' fontSize='xs' p='6px 16px' size='sm' onClick={onOpen}>
               ADD NEW RENTAL
             </Button>
           </HStack>
@@ -332,36 +365,151 @@ function RentalManagement() {
             </VStack>
           </Flex>
         ) : (
-          <Table variant='simple' color={textColor}>
-            <Thead>
-              <Tr my='.8rem' pl='0px' color='gray.400'>
-                {captions.map((caption, idx) => (
-                  <Th color='gray.400' key={idx} ps={idx === 0 ? "0px" : null}>{caption}</Th>
+          <>
+            {/* Desktop Table View */}
+            <Box display={{ base: "none", lg: "block" }} overflowX="auto" maxW="100%">
+              <Table variant='simple' color={textColor} minW="1350px">
+                <Thead>
+                  <Tr my='.8rem' pl='0px' color='gray.400'>
+                    {captions.map((caption, idx) => (
+                             <Th 
+                               color='gray.400' 
+                               key={idx} 
+                               ps={idx === 0 ? "0px" : null}
+                               minW={idx === 0 ? "200px" : idx === 1 ? "100px" : idx === 2 ? "150px" : idx === 3 ? "120px" : idx === 4 ? "120px" : idx === 5 ? "120px" : idx === 6 ? "120px" : idx === 7 ? "120px" : idx === 8 ? "180px" : idx === 9 ? "100px" : "120px"}
+                               maxW={idx === 0 ? "250px" : idx === 1 ? "120px" : idx === 2 ? "180px" : idx === 3 ? "150px" : idx === 4 ? "150px" : idx === 5 ? "150px" : idx === 6 ? "150px" : idx === 7 ? "150px" : idx === 8 ? "220px" : idx === 9 ? "120px" : "150px"}
+                             >
+                        {caption}
+                      </Th>
+                    ))}
+                  </Tr>
+                </Thead>
+                <Tbody>
+                  {rentalData.map((row, index) => (
+                        <RentalTableRow
+                          key={`${row.name}-${index}`}
+                          logo={logo}
+                          name={row.name}
+                          quantity={row.quantity}
+                          category={row.category}
+                          status={row.status}
+                          stockValue={row.stockValue}
+                          totalRented={row.totalRented}
+                          currentRent={row.currentRent}
+                          totalProfit={row.totalProfit}
+                          rentedOn={row.rentedOn}
+                          rentedTill={row.rentedTill}
+                          rentalDurationDays={row.rentalDurationDays}
+                          dailyRate={row.dailyRate}
+                          isOverdue={row.isOverdue}
+                          onEdit={() => openEdit(row)}
+                          onDelete={() => handleDelete(row)}
+                          onRent={() => openRent(row)}
+                          onEndRental={() => openEndRental(row)}
+                        />
+                  ))}
+                </Tbody>
+              </Table>
+            </Box>
+
+            {/* Mobile Card View */}
+            <Box display={{ base: "block", lg: "none" }}>
+              <VStack spacing="16px" align="stretch">
+                {rentalData.map((row, index) => (
+                  <Card key={`${row.name}-${index}`} p="16px">
+                    <VStack spacing="12px" align="stretch">
+                      <Flex justify="space-between" align="center">
+                        <Flex align="center">
+                          <Image src={logo} w="40px" h="40px" me="12px" objectFit="cover" />
+                          <VStack align="start" spacing="2px">
+                            <Text fontSize="md" color={textColor} fontWeight="bold">
+                              {row.name}
+                            </Text>
+                            <Text fontSize="sm" color="gray.500">
+                              {row.category}
+                            </Text>
+                          </VStack>
+                        </Flex>
+                        <Badge colorScheme={row.status === "rented" && row.isOverdue ? "red" : row.status === "rented" ? "yellow" : row.status === "available" ? "green" : "gray"} fontSize="12px" p="4px 8px">
+                          {row.status}
+                        </Badge>
+                      </Flex>
+                      
+                             <Flex justify="space-between" wrap="wrap" gap="8px">
+                               <VStack align="start" spacing="2px">
+                                 <Text fontSize="xs" color="gray.500">Quantity</Text>
+                                 <Text fontSize="sm" color={textColor} fontWeight="bold">{row.quantity}</Text>
+                               </VStack>
+                               <VStack align="start" spacing="2px">
+                                 <Text fontSize="xs" color="gray.500">Stock Value</Text>
+                                 <Text fontSize="sm" color={textColor} fontWeight="bold">{row.stockValue ? `PKR.${row.stockValue}` : 'PKR.0'}</Text>
+                               </VStack>
+                               <VStack align="start" spacing="2px">
+                                 <Text fontSize="xs" color="gray.500">Total Rented</Text>
+                                 <Text fontSize="sm" color={textColor} fontWeight="bold">{row.totalRented || "0"}</Text>
+                               </VStack>
+                               <VStack align="start" spacing="2px">
+                                 <Text fontSize="xs" color="gray.500">Current Rent</Text>
+                                 <Text fontSize="sm" color={textColor} fontWeight="bold">{row.currentRent ? `PKR.${row.currentRent}` : 'PKR.0'}</Text>
+                               </VStack>
+                             </Flex>
+
+                             <Flex justify="space-between" wrap="wrap" gap="8px">
+                               <VStack align="start" spacing="2px">
+                                 <Text fontSize="xs" color="gray.500">Total Profit</Text>
+                                 <Text fontSize="sm" color={textColor} fontWeight="bold">{row.totalProfit ? `PKR.${row.totalProfit}` : 'PKR.0'}</Text>
+                               </VStack>
+                             </Flex>
+
+                      {row.rentalDurationDays && (
+                        <Flex justify="space-between" wrap="wrap" gap="8px">
+                          <VStack align="start" spacing="2px">
+                            <Text fontSize="xs" color="gray.500">Duration</Text>
+                            <Text fontSize="sm" color={textColor} fontWeight="bold">{row.rentalDurationDays} days</Text>
+                          </VStack>
+                          <VStack align="start" spacing="2px">
+                            <Text fontSize="xs" color="gray.500">Daily Rate</Text>
+                            <Text fontSize="sm" color={textColor} fontWeight="bold">{row.dailyRate ? `PKR.${row.dailyRate}/day` : "—"}</Text>
+                          </VStack>
+                        </Flex>
+                      )}
+
+                      {(row.rentedOn || row.rentedTill) && (
+                        <Flex justify="space-between" wrap="wrap" gap="8px">
+                          <VStack align="start" spacing="2px">
+                            <Text fontSize="xs" color="gray.500">Rented On</Text>
+                            <Text fontSize="sm" color={textColor} fontWeight="bold">{row.rentedOn ? new Date(row.rentedOn).toLocaleDateString() : "—"}</Text>
+                          </VStack>
+                          <VStack align="start" spacing="2px">
+                            <Text fontSize="xs" color="gray.500">Rented Till</Text>
+                            <Text fontSize="sm" color={textColor} fontWeight="bold">{row.rentedTill ? new Date(row.rentedTill).toLocaleDateString() : "—"}</Text>
+                          </VStack>
+                        </Flex>
+                      )}
+
+                      <HStack spacing="12px" justify="center" pt="8px">
+                        <Button size="sm" variant="outline" onClick={() => openEdit(row)}>
+                          Edit
+                        </Button>
+                        {row.status === "rented" ? (
+                          <Button size="sm" colorScheme="red" variant="outline" onClick={() => openEndRental(row)}>
+                            End Rental
+                          </Button>
+                        ) : (
+                          <Button size="sm" colorScheme="green" variant="outline" onClick={() => openRent(row)}>
+                            Record Rental
+                          </Button>
+                        )}
+                        <Button size="sm" colorScheme="red" variant="outline" onClick={() => handleDelete(row)}>
+                          Delete
+                        </Button>
+                      </HStack>
+                    </VStack>
+                  </Card>
                 ))}
-              </Tr>
-            </Thead>
-            <Tbody>
-              {rentalData.map((row, index) => (
-                <RentalTableRow
-                  key={`${row.name}-${index}`}
-                  logo={logo}
-                  name={row.name}
-                  quantity={row.quantity}
-                  rentWeek={row.rentWeek}
-                  rentMonth={row.rentMonth}
-                  rentYear={row.rentYear}
-                  category={row.category}
-                  status={row.status}
-                  stockValue={row.stockValue}
-                  totalRented={row.totalRented}
-                  totalProfit={row.totalProfit}
-                  onEdit={() => openEdit(row)}
-                  onDelete={() => handleDelete(row)}
-                  onRent={() => openRent(row)}
-                />
-              ))}
-            </Tbody>
-          </Table>
+              </VStack>
+            </Box>
+          </>
         )}
       </CardBody>
     </Card>
@@ -405,18 +553,6 @@ function RentalManagement() {
               </Select>
             </FormControl>
             <FormControl>
-              <FormLabel color={textColor}>Rent Per Week (PKR)</FormLabel>
-              <Input type='number' value={newItem.rentWeek} onChange={(e) => setNewItem({ ...newItem, rentWeek: e.target.value })} />
-            </FormControl>
-            <FormControl>
-              <FormLabel color={textColor}>Rent Per Month (PKR)</FormLabel>
-              <Input type='number' value={newItem.rentMonth} onChange={(e) => setNewItem({ ...newItem, rentMonth: e.target.value })} />
-            </FormControl>
-            <FormControl>
-              <FormLabel color={textColor}>Rent Per Year (PKR)</FormLabel>
-              <Input type='number' value={newItem.rentYear} onChange={(e) => setNewItem({ ...newItem, rentYear: e.target.value })} />
-            </FormControl>
-            <FormControl>
               <FormLabel color={textColor}>Status</FormLabel>
               <Select value={newItem.status} onChange={(e) => setNewItem({ ...newItem, status: e.target.value })}>
                 <option value='available'>Available</option>
@@ -455,18 +591,6 @@ function RentalManagement() {
                 <Input type='number' value={editingItem.quantity} onChange={(e) => setEditingItem({ ...editingItem, quantity: e.target.value })} />
               </FormControl>
               <FormControl>
-                <FormLabel color={textColor}>Rent Per Week (PKR)</FormLabel>
-                <Input type='number' value={editingItem.rentWeek} onChange={(e) => setEditingItem({ ...editingItem, rentWeek: e.target.value })} />
-              </FormControl>
-              <FormControl>
-                <FormLabel color={textColor}>Rent Per Month (PKR)</FormLabel>
-                <Input type='number' value={editingItem.rentMonth} onChange={(e) => setEditingItem({ ...editingItem, rentMonth: e.target.value })} />
-              </FormControl>
-              <FormControl>
-                <FormLabel color={textColor}>Rent Per Year (PKR)</FormLabel>
-                <Input type='number' value={editingItem.rentYear} onChange={(e) => setEditingItem({ ...editingItem, rentYear: e.target.value })} />
-              </FormControl>
-              <FormControl>
                 <FormLabel color={textColor}>Status</FormLabel>
                 <Select value={editingItem.status} onChange={(e) => setEditingItem({ ...editingItem, status: e.target.value })}>
                   <option value='available'>Available</option>
@@ -501,29 +625,41 @@ function RentalManagement() {
               <Input type='number' step='0.01' placeholder='Enter rental quantity' value={rentForm.quantity} onChange={(e) => setRentForm({ ...rentForm, quantity: e.target.value })} />
             </FormControl>
             <FormControl isRequired>
-              <FormLabel color={textColor}>Period</FormLabel>
-              <Select value={rentForm.period} onChange={(e) => setRentForm({ ...rentForm, period: e.target.value })}>
-                <option value='week'>Week</option>
-                <option value='month'>Month</option>
-                <option value='year'>Year</option>
-              </Select>
-            </FormControl>
-            <FormControl>
-              <FormLabel color={textColor}>Rate (PKR, optional)</FormLabel>
-              <Input type='number' step='0.01' placeholder='Override configured rent' value={rentForm.rate} onChange={(e) => setRentForm({ ...rentForm, rate: e.target.value })} />
+              <FormLabel color={textColor}>Total Rent Amount (PKR)</FormLabel>
+              <Input type='number' step='0.01' placeholder='Enter total rent amount' value={rentForm.totalRentAmount} onChange={(e) => setRentForm({ ...rentForm, totalRentAmount: e.target.value })} />
             </FormControl>
             <HStack spacing='8px' w='100%'>
-              <FormControl>
+              <FormControl isRequired>
                 <FormLabel color={textColor}>Rented On</FormLabel>
                 <Input type='date' value={rentForm.rentedOn} onChange={(e) => setRentForm({ ...rentForm, rentedOn: e.target.value })} />
               </FormControl>
-              <FormControl>
+              <FormControl isRequired>
                 <FormLabel color={textColor}>Rented Till</FormLabel>
                 <Input type='date' value={rentForm.rentedTill} onChange={(e) => setRentForm({ ...rentForm, rentedTill: e.target.value })} />
               </FormControl>
             </HStack>
             <Button colorScheme='teal' bg='#FF8D28' color='white' _hover={{ bg: '#E67E22' }} w='100%' onClick={handleRecordRent}>
               RECORD RENTAL
+            </Button>
+          </VStack>
+        </ModalBody>
+      </ModalContent>
+    </Modal>
+
+    {/* End Rental Modal */}
+    <Modal isOpen={isEndRentalOpen} onClose={onEndRentalClose} size='md' motionPreset='slideInBottom'>
+      <ModalOverlay bg='rgba(0,0,0,0.4)' backdropFilter='blur(6px)' />
+      <ModalContent>
+        <ModalHeader color={textColor}>End Rental{endingRentalItem ? ` - ${endingRentalItem.name}` : ''}</ModalHeader>
+        <ModalCloseButton />
+        <ModalBody pb='24px'>
+          <VStack spacing='16px'>
+            <FormControl isRequired>
+              <FormLabel color={textColor}>Return Quantity</FormLabel>
+              <Input type='number' step='0.01' placeholder='Enter quantity to return' value={endRentalForm.quantity} onChange={(e) => setEndRentalForm({ ...endRentalForm, quantity: e.target.value })} />
+            </FormControl>
+            <Button colorScheme='red' bg='#FF6B6B' color='white' _hover={{ bg: '#E55A5A' }} w='100%' onClick={handleEndRental}>
+              END RENTAL
             </Button>
           </VStack>
         </ModalBody>

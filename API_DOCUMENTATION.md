@@ -848,7 +848,7 @@ Authorization: Bearer {token}
 
 ## Rental Stock Management Endpoints
 
-Rental stock behaves like normal stock management with rental-specific fields. Profit represents rental revenue. The cost per unit is the chosen rent for the period.
+The rental system uses duration-based pricing where you set rental start/end dates and a total rent amount for the entire period. The system automatically calculates duration and daily rates.
 
 ### 19. Add Rental Stock Item
 **POST** `/core/rental-stock`
@@ -860,17 +860,45 @@ Content-Type: application/json
 ```
 
 **Editable Fields & Rules:**
-- item_name (required, string)
+- item_name (required, string, max:255)
 - unit_id (required, exists: units.unit_id)
 - category_id (optional, exists: categories.category_id)
 - quantity_per_unit (required, number, min:0)
-- rent_per_week (optional, number, min:0)
-- rent_per_month (optional, number, min:0)
-- rent_per_year (optional, number, min:0)
 - stock_value (optional, number, min:0)
 - stock_status (optional, enum: available|rented|maintenance|pending)
 
-**Response (200):** Rental stock JSON.
+**Request Body:**
+```json
+{
+    "item_name": "Projector",
+    "unit_id": 1,
+    "category_id": 1,
+    "quantity_per_unit": 5,
+    "stock_value": 2000
+}
+```
+
+**Response (200):**
+```json
+{
+    "item_id": 1,
+    "item_name": "Projector",
+    "unit_id": 1,
+    "category_id": 1,
+    "quantity_per_unit": "5.00",
+    "stock_value": "2000.00",
+    "stock_status": "available",
+    "total_rented": "0.00",
+    "total_profit": "0.00",
+    "rented_on": null,
+    "rented_till": null,
+    "total_rent_amount": null,
+    "created_at": "2025-09-16T10:00:00.000000Z",
+    "updated_at": "2025-09-16T10:00:00.000000Z",
+    "category": { /* category object */ },
+    "unit": { /* unit object */ }
+}
+```
 
 ---
 
@@ -882,22 +910,39 @@ Content-Type: application/json
 Authorization: Bearer {token}
 ```
 
-**Response (200):** Array of rental stock items.
+**Response (200):** Array of rental stock items with category and unit relationships.
 
 ---
 
-### 21. Update Rental Stock Item
+### 21. Get Rental Stock with Details
+**GET** `/core/rental-stock/details`
+
+**Headers:**
+```
+Authorization: Bearer {token}
+```
+
+**Response (200):** Array of rental stock items with calculated fields:
+- `rental_duration_days`: Duration of current rental
+- `daily_rate`: Calculated daily rate
+- `is_overdue`: Boolean indicating if rental is past due date
+
+---
+
+### 22. Update Rental Stock Item
 **PUT** `/core/rental-stock/{id}`
 
 All fields optional; only provided fields are updated.
 
-Editable Fields include: item_name, unit_id, category_id, quantity_per_unit, rent_per_week, rent_per_month, rent_per_year, stock_value, stock_status, total_rented, total_profit, rented_on, rented_till.
+**Editable Fields:**
+- item_name, unit_id, category_id, quantity_per_unit, stock_value, stock_status
+- total_rented, total_profit, rented_on, rented_till
 
-Validation: `rented_till` must be after or equal to `rented_on` when both present.
+**Validation:** `rented_till` must be after or equal to `rented_on` when both present.
 
 ---
 
-### 22. Delete Rental Stock Item
+### 23. Delete Rental Stock Item
 **DELETE** `/core/rental-stock/{id}`
 
 **Headers:**
@@ -905,12 +950,17 @@ Validation: `rented_till` must be after or equal to `rented_on` when both presen
 Authorization: Bearer {token}
 ```
 
-**Response (200):** `{ "message": "Rental stock item deleted successfully" }`
+**Response (200):**
+```json
+{
+    "message": "Rental stock item deleted successfully"
+}
+```
 
 ---
 
-### 23. Record Rental
-Record a rental event, similar to a sale. Decrements available quantity, increments `total_rented`, and adds to `total_profit` based on the chosen rent period.
+### 24. Record Rental (Duration-Based)
+Record a rental with start date, end date, and total rent amount. System automatically calculates duration and daily rate.
 
 **POST** `/core/rental-stock/{id}/rent`
 
@@ -922,28 +972,398 @@ Content-Type: application/json
 
 **Request Body:**
 ```json
-{ "quantity": 3, "period": "month", "rate": 50, "rented_on": "2025-09-16", "rented_till": "2025-10-16" }
+{
+    "quantity": 2,
+    "rented_on": "2024-01-15",
+    "rented_till": "2024-01-25",
+    "total_rent_amount": 500.00
+}
 ```
 
-Rules:
+**Rules:**
 - quantity: required, > 0, must not exceed available quantity
-- period: required, one of week|month|year
-- rate: optional; overrides configured rent for the given period (otherwise uses `rent_per_*` on the item)
-- rented_on: optional ISO date
-- rented_till: optional ISO date; must be ≥ rented_on
+- rented_on: required, ISO date
+- rented_till: required, ISO date, must be after rented_on
+- total_rent_amount: required, number ≥ 0
 
-Behavior:
-- `line_total = unit rate × quantity`
+**Behavior:**
+- Calculates duration in days and daily rate
 - Updates item:
   - `quantity_per_unit -= quantity`
   - `total_rented += quantity`
-  - `total_profit += line_total`
-  - If `rent_per_month` exists, recomputes `stock_value = rent_per_month × remaining quantity` (heuristic)
-  - Sets `stock_status = rented`; sets dates if provided
+  - `total_profit += total_rent_amount`
+  - `stock_value = estimated_monthly_rate × remaining_quantity`
+  - Sets `stock_status = rented` and rental dates
 
-**Success (200):** `{ "message": "Rental recorded successfully", "data": { /* item */ } }`
+**Success (200):**
+```json
+{
+    "message": "Rental recorded successfully",
+    "data": { /* updated rental stock item */ },
+    "rental_details": {
+        "duration_days": 10,
+        "daily_rate": 50.00,
+        "total_amount": 500.00,
+        "quantity_rented": 2,
+        "rental_period": "2024-01-15 to 2024-01-25"
+    }
+}
+```
 
-**Validation/Error (422):** `{ "message": "Rental quantity exceeds available stock." }`
+**Validation/Error (422):**
+```json
+{
+    "message": "Rental quantity exceeds available stock."
+}
+```
+
+---
+
+### 25. End Rental
+Return items to available stock and update rental status.
+
+**POST** `/core/rental-stock/{id}/end-rental`
+
+**Headers:**
+```
+Authorization: Bearer {token}
+Content-Type: application/json
+```
+
+**Request Body:**
+```json
+{
+    "quantity": 2
+}
+```
+
+**Rules:**
+- quantity: required, > 0, must not exceed rented quantity
+
+**Behavior:**
+- Returns items to available stock: `quantity_per_unit += quantity`
+- Decrements rented quantity: `total_rented -= quantity`
+- If all items returned, sets `stock_status = available` and clears rental dates
+
+**Success (200):**
+```json
+{
+    "message": "Rental ended successfully",
+    "data": { /* updated rental stock item */ }
+}
+```
+
+**Validation/Error (422):**
+```json
+{
+    "message": "Return quantity exceeds rented stock."
+}
+```
+
+---
+
+## Expense Management Endpoints
+
+The expense management system allows you to create and manage different accounts, track total revenue from stock sales and rentals, and allocate revenue to specific accounts.
+
+### 26. Create Account
+**POST** `/core/account`
+
+Create a new account for expense management.
+
+**Headers:**
+```
+Authorization: Bearer {token}
+Content-Type: application/json
+```
+
+**Request Body:**
+```json
+{
+    "account_name": "Savings",
+    "account_details": "This is my savings account",
+    "account_balance": 50000,
+    "account_type": "savings"
+}
+```
+
+**Account Types:**
+- `revenue` - Revenue accounts
+- `expense` - Expense accounts  
+- `savings` - Savings accounts
+- `investment` - Investment accounts
+- `other` - Other account types
+
+**Response (201):**
+```json
+{
+    "message": "Account created successfully",
+    "data": {
+        "account_id": 2,
+        "account_name": "Savings",
+        "account_details": "This is my savings account",
+        "account_balance": "50000.00",
+        "account_type": "savings",
+        "is_main_account": false,
+        "created_at": "2025-09-16T10:00:00.000000Z",
+        "updated_at": "2025-09-16T10:00:00.000000Z"
+    }
+}
+```
+
+---
+
+### 27. Get All Accounts
+**GET** `/core/accounts`
+
+Retrieve all accounts with main revenue account first.
+
+**Headers:**
+```
+Authorization: Bearer {token}
+```
+
+**Response (200):**
+```json
+[
+    {
+        "account_id": 1,
+        "account_name": "Total Revenue",
+        "account_details": "Main account tracking all business revenue from stock sales and rentals",
+        "account_balance": "1000000.00",
+        "account_type": "revenue",
+        "is_main_account": true,
+        "created_at": "2025-09-16T10:00:00.000000Z",
+        "updated_at": "2025-09-16T10:00:00.000000Z"
+    },
+    {
+        "account_id": 2,
+        "account_name": "Savings",
+        "account_details": "This is my savings account",
+        "account_balance": "50000.00",
+        "account_type": "savings",
+        "is_main_account": false,
+        "created_at": "2025-09-16T10:00:00.000000Z",
+        "updated_at": "2025-09-16T10:00:00.000000Z"
+    }
+]
+```
+
+---
+
+### 28. Get Specific Account
+**GET** `/core/account/{id}`
+
+Retrieve a specific account by ID.
+
+**Headers:**
+```
+Authorization: Bearer {token}
+```
+
+**Response (200):** Account object
+
+---
+
+### 29. Update Account
+**PUT** `/core/account/{id}`
+
+Update an existing account. Cannot change the type of the main revenue account.
+
+**Headers:**
+```
+Authorization: Bearer {token}
+Content-Type: application/json
+```
+
+**Request Body:**
+```json
+{
+    "account_name": "Emergency Savings",
+    "account_details": "Updated savings account for emergencies",
+    "account_balance": 75000
+}
+```
+
+**Response (200):**
+```json
+{
+    "message": "Account updated successfully",
+    "data": { /* updated account object */ }
+}
+```
+
+---
+
+### 30. Delete Account
+**DELETE** `/core/account/{id}`
+
+Delete an account. Cannot delete the main revenue account.
+
+**Headers:**
+```
+Authorization: Bearer {token}
+```
+
+**Response (200):**
+```json
+{
+    "message": "Account deleted successfully"
+}
+```
+
+**Error (422):**
+```json
+{
+    "message": "Cannot delete the main revenue account"
+}
+```
+
+---
+
+### 31. Get Total Revenue
+**GET** `/core/revenue/total`
+
+Get total revenue from all sources (stock sales profit + cumulative rental profit) and update the main revenue account.
+
+**Note:** Uses `total_profit` from rentals (cumulative profit from all rental sessions), not `total_rent_amount` (current session rent).
+
+**Headers:**
+```
+Authorization: Bearer {token}
+```
+
+**Response (200):**
+```json
+{
+    "total_revenue": 1000000,
+    "breakdown": {
+        "stock_sales_profit": 750000,
+        "rental_profit": 250000
+    },
+    "main_account": {
+        "account_id": 1,
+        "account_name": "Total Revenue",
+        "account_balance": "1000000.00",
+        "account_type": "revenue",
+        "is_main_account": true
+    }
+}
+```
+
+---
+
+### 32. Allocate Revenue to Account
+**POST** `/core/account/{id}/allocate`
+
+Allocate a portion of total revenue to a specific account.
+
+**Headers:**
+```
+Authorization: Bearer {token}
+Content-Type: application/json
+```
+
+**Request Body:**
+```json
+{
+    "amount": 100000,
+    "description": "Monthly savings allocation"
+}
+```
+
+**Response (200):**
+```json
+{
+    "message": "Revenue allocated successfully",
+    "data": {
+        "account": { /* updated account object */ },
+        "allocated_amount": 100000,
+        "description": "Monthly savings allocation",
+        "remaining_revenue": 900000
+    }
+}
+```
+
+**Error (422):**
+```json
+{
+    "message": "Allocation amount exceeds available revenue",
+    "available_revenue": 500000
+}
+```
+
+---
+
+### 33. Transfer Money Between Accounts
+**POST** `/core/account/transfer`
+
+Transfer money from one account to another.
+
+**Headers:**
+```
+Authorization: Bearer {token}
+Content-Type: application/json
+```
+
+**Request Body:**
+```json
+{
+    "from_account_id": 2,
+    "to_account_id": 3,
+    "amount": 25000,
+    "description": "Transfer to investment account"
+}
+```
+
+**Response (200):**
+```json
+{
+    "message": "Transfer completed successfully",
+    "data": {
+        "from_account": { /* updated source account */ },
+        "to_account": { /* updated destination account */ },
+        "amount": 25000,
+        "description": "Transfer to investment account"
+    }
+}
+```
+
+**Error (422):**
+```json
+{
+    "message": "Insufficient balance in source account",
+    "available_balance": 10000
+}
+```
+
+---
+
+### 34. Get Account Summary
+**GET** `/core/accounts/summary`
+
+Get a comprehensive summary of all accounts and revenue allocation.
+
+**Headers:**
+```
+Authorization: Bearer {token}
+```
+
+**Response (200):**
+```json
+{
+    "summary": {
+        "total_revenue": 1000000,
+        "total_allocated": 150000,
+        "available_revenue": 850000
+    },
+    "accounts": [
+        { /* main revenue account */ },
+        { /* savings account */ },
+        { /* other accounts */ }
+    ]
+}
+```
 
 ---
 
@@ -1206,6 +1626,40 @@ Authorization: Bearer {token}
 {
     "category_id": "integer",
     "category_name": "string",
+    "created_at": "timestamp",
+    "updated_at": "timestamp"
+}
+```
+
+### Rental Stock Model
+```json
+{
+    "item_id": "integer",
+    "item_name": "string",
+    "unit_id": "integer (foreign key)",
+    "quantity_per_unit": "decimal(10,2)",
+    "category_id": "integer|null (foreign key, optional)",
+    "total_rent_amount": "decimal(10,2)|null (total rent for current rental period)",
+    "stock_value": "decimal(10,2)|null (estimated value based on rental rates)",
+    "total_rented": "decimal(10,2) (total quantity currently rented)",
+    "total_profit": "decimal(10,2) (total rental revenue)",
+    "rented_on": "date|null (rental start date)",
+    "rented_till": "date|null (rental end date)",
+    "stock_status": "enum (available|rented|maintenance|pending, default: available)",
+    "created_at": "timestamp",
+    "updated_at": "timestamp"
+}
+```
+
+### Account Model
+```json
+{
+    "account_id": "integer",
+    "account_name": "string",
+    "account_details": "string|null (account description)",
+    "account_balance": "decimal(15,2) (current account balance)",
+    "account_type": "enum (revenue|expense|savings|investment|other, default: other)",
+    "is_main_account": "boolean (true for main revenue account, default: false)",
     "created_at": "timestamp",
     "updated_at": "timestamp"
 }
