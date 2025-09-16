@@ -28,17 +28,19 @@ import {
   FormLabel,
   Input,
   Select,
+  useToast,
+  Spinner,
 } from "@chakra-ui/react";
 // Custom components
 import Card from "components/Card/Card.js";
 import CardBody from "components/Card/CardBody.js";
 import CardHeader from "components/Card/CardHeader.js";
-import React, { useState } from "react";
-import { FaPlus, FaFileCsv, FaDownload } from "react-icons/fa";
+import React, { useState, useEffect } from "react";
+import { FaPlus, FaFileCsv, FaDownload, FaTrash } from "react-icons/fa";
 import logo from "assets/img/avatars/placeholder.png";
 
 // Customer Table Row Component
-const CustomerTableRow = ({ customer, onEdit }) => {
+const CustomerTableRow = ({ customer, onEdit, onDownload, onDelete }) => {
   const textColor = useColorModeValue("gray.700", "white");
 
   const getStatusColor = (status) => {
@@ -67,16 +69,22 @@ const CustomerTableRow = ({ customer, onEdit }) => {
               {customer.name}
             </Text>
             <Text fontSize="sm" color="gray.400" fontWeight="medium">
-              {customer.email}
+              {customer.phone}
             </Text>
           </Flex>
         </Flex>
       </Td>
 
       <Td>
+        <Text fontSize="md" color={textColor} fontWeight="bold">
+          {customer.totalBill}
+        </Text>
+      </Td>
+
+      <Td>
         <VStack align="start" spacing="4px">
           <Text fontSize="md" color={textColor} fontWeight="bold">
-            {customer.totalDue}
+            {customer.billPaid}
           </Text>
           <Text
             fontSize="sm"
@@ -84,10 +92,23 @@ const CustomerTableRow = ({ customer, onEdit }) => {
             fontWeight="medium"
             cursor="pointer"
             _hover={{ color: "brand.500" }}
+            onClick={() => onDownload && onDownload(customer)}
           >
             Download Invoice
           </Text>
         </VStack>
+      </Td>
+
+      <Td>
+        <Text fontSize="md" color={textColor} fontWeight="bold">
+          {customer.billDue}
+        </Text>
+      </Td>
+
+      <Td>
+        <Text fontSize="sm" color={textColor} fontWeight="medium">
+          {customer.itemsSummary}
+        </Text>
       </Td>
 
       <Td>
@@ -102,23 +123,22 @@ const CustomerTableRow = ({ customer, onEdit }) => {
       </Td>
 
       <Td>
-        <Text fontSize="md" color={textColor} fontWeight="bold">
-          {customer.amountPending}
-        </Text>
-      </Td>
-
-      <Td>
-        <Button p="0px" bg="transparent" variant="no-hover" onClick={() => onEdit(customer)}>
-          <Text
-            fontSize="md"
-            color="gray.400"
-            fontWeight="bold"
-            cursor="pointer"
-            _hover={{ color: "brand.500" }}
-          >
-            Edit
-          </Text>
-        </Button>
+        <HStack spacing="12px">
+          <Button p="0px" bg="transparent" variant="no-hover" onClick={() => onEdit(customer)}>
+            <Text
+              fontSize="md"
+              color="gray.400"
+              fontWeight="bold"
+              cursor="pointer"
+              _hover={{ color: "brand.500" }}
+            >
+              Edit
+            </Text>
+          </Button>
+          <Button p="0px" bg="transparent" variant="no-hover" onClick={() => onDelete(customer)}>
+            <FaTrash color="#FF8D28" size="16px" style={{ cursor: "pointer" }} />
+          </Button>
+        </HStack>
       </Td>
     </Tr>
   );
@@ -131,72 +151,120 @@ function CustomerManagement() {
   
   const { isOpen: isAddOpen, onOpen: onAddOpen, onClose: onAddClose } = useDisclosure();
   const { isOpen: isEditOpen, onOpen: onEditOpen, onClose: onEditClose } = useDisclosure();
-  
-  const [customers, setCustomers] = useState([
-    {
-      id: 1,
-      name: "Esthera Jackson",
-      email: "esthera@simmmple.com",
-      avatar: logo,
-      totalDue: "PKR.30,000",
-      status: "Pending",
-      amountPending: "PKR.15,000"
-    },
-    {
-      id: 2,
-      name: "Alexa Liras",
-      email: "alexa@simmmple.com",
-      avatar: logo,
-      totalDue: "PKR.30,000",
-      status: "Paid",
-      amountPending: "None"
-    },
-    {
-      id: 3,
-      name: "Laurent Michael",
-      email: "laurent@simmmple.com",
-      avatar: logo,
-      totalDue: "PKR.30,000",
-      status: "Paid",
-      amountPending: "None"
-    },
-    {
-      id: 4,
-      name: "Freduardo Hill",
-      email: "freduardo@simmmple.com",
-      avatar: logo,
-      totalDue: "PKR.30,000",
-      status: "Paid",
-      amountPending: "None"
-    },
-    {
-      id: 5,
-      name: "Daniel Thomas",
-      email: "daniel@simmmple.com",
-      avatar: logo,
-      totalDue: "PKR.30,000",
-      status: "Paid",
-      amountPending: "None"
-    },
-    {
-      id: 6,
-      name: "Mark Wilson",
-      email: "mark@simmmple.com",
-      avatar: logo,
-      totalDue: "PKR.30,000",
-      status: "Pending",
-      amountPending: "PKR.15,000"
+  const toast = useToast();
+ 
+  const [customers, setCustomers] = useState([]);
+  const [stockOptions, setStockOptions] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    fetchCustomers();
+    fetchSaleableStock();
+  }, []);
+
+  const fetchCustomers = async () => {
+    try {
+      setIsLoading(true);
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000/api'}/core/customer`, {
+        headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const mapped = data.map(c => ({
+          id: c.id,
+          name: c.customer_name,
+          phone: c.customer_phone_no || '—',
+          avatar: logo,
+          billPaid: c.bill_paid !== undefined ? `PKR.${c.bill_paid}` : 'PKR.0',
+          billDue: c.bill_due !== undefined ? `PKR.${c.bill_due}` : 'PKR.0',
+          totalBill: c.total_bill !== undefined ? `PKR.${c.total_bill}` : (() => { const total = (parseFloat(c.bill_total ?? 0) || 0) || ((parseFloat(c.bill_paid || 0) || 0) + (parseFloat(c.bill_due || 0) || 0)); return `PKR.${total}`; })(),
+          itemsCount: Array.isArray(c.purchased_items) ? String(c.purchased_items.length) : (Array.isArray(c.items) ? String(c.items.length) : '0'),
+          itemsSummary: Array.isArray(c.purchased_items)
+            ? c.purchased_items.map(it => `${it.item_name || 'Item'} × ${it.quantity}`).join(', ')
+            : (Array.isArray(c.items) ? c.items.map(it => `${it.item_name || it.stock_name || 'Item'} × ${it.quantity}`).join(', ') : '—'),
+          status: (parseFloat(c.bill_due || 0) > 0) ? 'Pending' : 'Paid',
+          amountPending: c.bill_due !== undefined ? `PKR.${c.bill_due}` : 'None'
+        }));
+        setCustomers(mapped);
+      } else {
+        setCustomers([]);
+      }
+    } catch (e) {
+      setCustomers([]);
+    } finally {
+      setIsLoading(false);
     }
-  ]);
+  };
+
+  // enrichment no longer needed; list includes purchased_items per docs
+
+  const fetchSaleableStock = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000/api'}/core/stock`, {
+        headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' }
+      });
+      if (res.ok) {
+        const items = await res.json();
+        setStockOptions(items.map(s => ({
+          itemId: s.item_id,
+          name: s.item_name,
+          available: parseFloat(s.quantity_per_unit || 0),
+          itemPrice: s.item_price ? parseFloat(s.item_price) : null,
+          unitLabel: s.unit?.unit_name || 'Units'
+        })));
+      } else {
+        setStockOptions([]);
+      }
+    } catch(e) {
+      setStockOptions([]);
+    }
+  };
 
   const [editingCustomer, setEditingCustomer] = useState(null);
   const [newCustomer, setNewCustomer] = useState({
     name: "",
-    email: "",
-    totalDue: "",
-    status: "Pending",
-    amountPending: ""
+    phone: "",
+    billPaid: "",
+    items: []
   });
+
+  const addPurchaseItem = () => {
+    if (stockOptions.length === 0) return;
+    const first = stockOptions[0];
+    setNewCustomer(prev => ({
+      ...prev,
+      items: [...prev.items, { stockId: first.itemId, quantity: "1" }]
+    }));
+  };
+
+  const updatePurchaseItem = (index, changes) => {
+    setNewCustomer(prev => ({
+      ...prev,
+      items: prev.items.map((it, i) => i === index ? { ...it, ...changes } : it)
+    }));
+  };
+
+  const removePurchaseItem = (index) => {
+    setNewCustomer(prev => ({
+      ...prev,
+      items: prev.items.filter((_, i) => i !== index)
+    }));
+  };
+
+  const computeTotals = () => {
+    let total = 0;
+    newCustomer.items.forEach(it => {
+      const stock = stockOptions.find(s => s.itemId === parseInt(it.stockId));
+      const price = stock && stock.itemPrice ? stock.itemPrice : 0;
+      const qty = parseFloat(it.quantity || 0);
+      if (isFinite(price) && isFinite(qty)) total += price * qty;
+    });
+    const paid = parseFloat(newCustomer.billPaid || 0) || 0;
+    const due = Math.max(0, total - paid);
+    return { total, due };
+  };
 
   const handleEditCustomer = (customer) => {
     setEditingCustomer(customer);
@@ -210,28 +278,52 @@ function CustomerManagement() {
           customer.id === editingCustomer.id ? editingCustomer : customer
         )
       );
+      toast({ title: "Customer Updated", description: `Updated ${editingCustomer.name}`, status: "success", duration: 3000, isClosable: true });
       onEditClose();
       setEditingCustomer(null);
     }
   };
 
-  const handleAddCustomer = () => {
-    if (newCustomer.name && newCustomer.email && newCustomer.totalDue) {
-      const customer = {
-        id: customers.length + 1,
-        ...newCustomer,
-        avatar: logo,
-        amountPending: newCustomer.status === "Paid" ? "None" : newCustomer.amountPending
+  const handleAddCustomer = async () => {
+    if (!newCustomer.name || newCustomer.items.length === 0) return;
+    // Optional front-end validation vs available
+    for (const it of newCustomer.items) {
+      const stock = stockOptions.find(s => s.itemId === parseInt(it.stockId));
+      if (stock && parseFloat(it.quantity || 0) > stock.available) {
+        toast({ title: "Quantity exceeds available stock", description: `Item: ${stock.name}`, status: "error", duration: 5000, isClosable: true });
+        return;
+      }
+    }
+    try {
+      const token = localStorage.getItem('token');
+      const payload = {
+        customer_name: newCustomer.name,
+        customer_phone_no: newCustomer.phone || undefined,
+        bill_paid: newCustomer.billPaid ? parseFloat(newCustomer.billPaid) : undefined,
+        items: newCustomer.items.map(it => ({
+          stock_id: parseInt(it.stockId),
+          quantity: parseFloat(it.quantity)
+        }))
       };
-      setCustomers(prev => [...prev, customer]);
-      setNewCustomer({
-        name: "",
-        email: "",
-        totalDue: "",
-        status: "Pending",
-        amountPending: ""
+      const res = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000/api'}/core/customer`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify(payload)
       });
-      onAddClose();
+      const data = await res.json();
+      if (res.ok) {
+        // Refresh customers and stock
+        fetchCustomers();
+        fetchSaleableStock();
+        // Reset form
+        setNewCustomer({ name: "", phone: "", billPaid: "", items: [] });
+        onAddClose();
+        toast({ title: "Customer Created", description: data.message || 'Purchase recorded', status: "success", duration: 4000, isClosable: true });
+      } else {
+        toast({ title: "Create Failed", description: data.message || 'Failed to create customer', status: "error", duration: 5000, isClosable: true });
+      }
+    } catch (e) {
+      toast({ title: "Network Error", description: 'Unable to create customer', status: "error", duration: 5000, isClosable: true });
     }
   };
 
@@ -243,6 +335,48 @@ function CustomerManagement() {
   const handleExportCSV = () => {
     // CSV export functionality would go here
     alert("CSV export functionality would be implemented here");
+  };
+
+  const handleDownloadInvoice = async (customer) => {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000/api'}/core/customer/${customer.id}/invoice`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!res.ok) { toast({ title: "Download Failed", description: 'Unable to download invoice', status: "error", duration: 4000, isClosable: true }); return; }
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `invoice-${customer.id}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+      toast({ title: "Invoice Downloaded", status: "success", duration: 2000, isClosable: true });
+    } catch (e) { 
+      toast({ title: "Network Error", description: 'Unable to download invoice', status: "error", duration: 5000, isClosable: true });
+    }
+  };
+
+  const handleDeleteCustomer = async (customer) => {
+    if (!window.confirm(`Delete customer "${customer.name}" and their purchases?`)) return;
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000/api'}/core/customer/${customer.id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' }
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        toast({ title: "Customer Deleted", description: data.message || 'Customer deleted successfully', status: "success", duration: 3000, isClosable: true });
+        fetchCustomers();
+      } else {
+        toast({ title: "Delete Failed", description: data.message || 'Unable to delete customer', status: "error", duration: 5000, isClosable: true });
+      }
+    } catch (e) {
+      toast({ title: "Network Error", description: 'Unable to delete customer', status: "error", duration: 5000, isClosable: true });
+    }
   };
 
   return (
@@ -304,13 +438,33 @@ function CustomerManagement() {
       <Card bg={cardBg} boxShadow={cardShadow}>
 
         <CardBody>
+          {isLoading ? (
+            <Flex 
+              justify="center" 
+              align="center" 
+              h="200px" 
+              w="100%"
+            >
+              <VStack spacing="16px" textAlign="center">
+                <Spinner
+                  thickness="4px"
+                  speed="0.65s"
+                  emptyColor="gray.200"
+                  color="#FF8D28"
+                  size="xl"
+                />
+              </VStack>
+            </Flex>
+          ) : (
           <Table variant='simple' color={textColor}>
             <Thead>
               <Tr>
-                <Th color='gray.400' fontSize='sm' fontWeight='semibold'>Customers</Th>
-                <Th color='gray.400' fontSize='sm' fontWeight='semibold'>TOTAL DUE AMOUNT</Th>
+                <Th color='gray.400' fontSize='sm' fontWeight='semibold'>Customer / Phone</Th>
+                <Th color='gray.400' fontSize='sm' fontWeight='semibold'>TOTAL BILL</Th>
+                <Th color='gray.400' fontSize='sm' fontWeight='semibold'>BILL PAID</Th>
+                <Th color='gray.400' fontSize='sm' fontWeight='semibold'>BILL DUE</Th>
+                <Th color='gray.400' fontSize='sm' fontWeight='semibold'>PURCHASED ITEMS</Th>
                 <Th color='gray.400' fontSize='sm' fontWeight='semibold'>STATUS</Th>
-                <Th color='gray.400' fontSize='sm' fontWeight='semibold'>AMOUNT PENDING</Th>
                 <Th color='gray.400' fontSize='sm' fontWeight='semibold'>Edit</Th>
               </Tr>
             </Thead>
@@ -320,10 +474,13 @@ function CustomerManagement() {
                   key={customer.id} 
                   customer={customer} 
                   onEdit={handleEditCustomer}
+                  onDownload={handleDownloadInvoice}
+                  onDelete={handleDeleteCustomer}
                 />
               ))}
             </Tbody>
           </Table>
+          )}
         </CardBody>
       </Card>
 
@@ -341,75 +498,77 @@ function CustomerManagement() {
                 </FormLabel>
                 <Input
                   value={newCustomer.name}
-                  onChange={(e) => setNewCustomer(prev => ({
-                    ...prev,
-                    name: e.target.value
-                  }))}
+                  onChange={(e) => { const v = e.target.value; setNewCustomer(prev => ({ ...prev, name: v })); }}
                   placeholder="Enter customer name"
                   size="md"
                 />
               </FormControl>
               <FormControl>
                 <FormLabel fontSize="sm" color="gray.500">
-                  Email
+                  Phone Number
                 </FormLabel>
                 <Input
-                  type="email"
-                  value={newCustomer.email}
-                  onChange={(e) => setNewCustomer(prev => ({
-                    ...prev,
-                    email: e.target.value
-                  }))}
-                  placeholder="Enter email address"
+                  value={newCustomer.phone}
+                  onChange={(e) => { const v = e.target.value; setNewCustomer(prev => ({ ...prev, phone: v })); }}
+                  placeholder="Enter phone number"
                   size="md"
                 />
               </FormControl>
+
+              {/* Purchase Items */}
               <FormControl>
-                <FormLabel fontSize="sm" color="gray.500">
-                  Total Due Amount
-                </FormLabel>
+                <FormLabel fontSize="sm" color="gray.500">Purchased Items</FormLabel>
+                <VStack spacing="12px" align="stretch">
+                  {newCustomer.items.map((it, idx) => (
+                    <HStack key={idx} spacing="8px" align="start">
+                      <FormControl flex="2">
+                        <FormLabel fontSize="xs" color="gray.500">Item</FormLabel>
+                        <Select
+                          value={it.stockId}
+                          onChange={(e) => { const v = e.target.value; updatePurchaseItem(idx, { stockId: v }); }}
+                          size="sm"
+                        >
+                          {stockOptions.map(s => (
+                            <option key={s.itemId} value={s.itemId}>{`${s.name} (Avail: ${s.available} ${s.unitLabel})`}</option>
+                          ))}
+                        </Select>
+                      </FormControl>
+                      <FormControl flex="1">
+                        <FormLabel fontSize="xs" color="gray.500">Quantity</FormLabel>
+                        <Input
+                          type="number"
+                          placeholder="Qty"
+                          size="sm"
+                          value={it.quantity}
+                          onChange={(e) => { const v = e.target.value; updatePurchaseItem(idx, { quantity: v }); }}
+                        />
+                      </FormControl>
+                      <Button mt="22px" size="sm" variant="outline" onClick={() => removePurchaseItem(idx)}>Remove</Button>
+                    </HStack>
+                  ))}
+                  <Button size="sm" onClick={addPurchaseItem} variant="outline">Add Item</Button>
+                </VStack>
+              </FormControl>
+
+              <FormControl>
+                <FormLabel fontSize="sm" color="gray.500">Bill Paid (PKR)</FormLabel>
                 <Input
-                  value={newCustomer.totalDue}
-                  onChange={(e) => setNewCustomer(prev => ({
-                    ...prev,
-                    totalDue: e.target.value
-                  }))}
-                  placeholder="Enter total due amount"
+                  type="number"
+                  value={newCustomer.billPaid}
+                  onChange={(e) => { const v = e.target.value; setNewCustomer(prev => ({ ...prev, billPaid: v })); }}
                   size="md"
                 />
               </FormControl>
-              <FormControl>
-                <FormLabel fontSize="sm" color="gray.500">
-                  Status
-                </FormLabel>
-                <Select
-                  value={newCustomer.status}
-                  onChange={(e) => setNewCustomer(prev => ({
-                    ...prev,
-                    status: e.target.value
-                  }))}
-                  size="md"
-                >
-                  <option value="Pending">Pending</option>
-                  <option value="Paid">Paid</option>
-                </Select>
-              </FormControl>
-              {newCustomer.status === "Pending" && (
-                <FormControl>
-                  <FormLabel fontSize="sm" color="gray.500">
-                    Amount Pending
-                  </FormLabel>
-                  <Input
-                    value={newCustomer.amountPending}
-                    onChange={(e) => setNewCustomer(prev => ({
-                      ...prev,
-                      amountPending: e.target.value
-                    }))}
-                    placeholder="Enter pending amount"
-                    size="md"
-                  />
-                </FormControl>
-              )}
+
+              {/* Totals Preview */}
+              <Box>
+                {(() => { const { total, due } = computeTotals(); return (
+                  <VStack align="start" spacing="4px">
+                    <Text color="gray.600" fontSize="sm">Total Bill: PKR.{total.toFixed(2)}</Text>
+                    <Text color="gray.600" fontSize="sm">Bill Due: PKR.{due.toFixed(2)}</Text>
+                  </VStack>
+                ); })()}
+              </Box>
             </VStack>
           </ModalBody>
           <ModalFooter>
@@ -423,7 +582,7 @@ function CustomerManagement() {
                 color="white"
                 _hover={{ bg: "#E67E22" }}
                 onClick={handleAddCustomer}
-                isDisabled={!newCustomer.name || !newCustomer.email || !newCustomer.totalDue}
+                isDisabled={!newCustomer.name || newCustomer.items.length === 0}
               >
                 Add Customer
               </Button>
@@ -447,10 +606,7 @@ function CustomerManagement() {
                   </FormLabel>
                   <Input
                     value={editingCustomer.name}
-                    onChange={(e) => setEditingCustomer(prev => ({
-                      ...prev,
-                      name: e.target.value
-                    }))}
+                    onChange={(e) => { const v = e.target.value; setEditingCustomer(prev => ({ ...prev, name: v })); }}
                     size="md"
                   />
                 </FormControl>
@@ -461,10 +617,7 @@ function CustomerManagement() {
                   <Input
                     type="email"
                     value={editingCustomer.email}
-                    onChange={(e) => setEditingCustomer(prev => ({
-                      ...prev,
-                      email: e.target.value
-                    }))}
+                    onChange={(e) => { const v = e.target.value; setEditingCustomer(prev => ({ ...prev, email: v })); }}
                     size="md"
                   />
                 </FormControl>
@@ -474,10 +627,7 @@ function CustomerManagement() {
                   </FormLabel>
                   <Input
                     value={editingCustomer.totalDue}
-                    onChange={(e) => setEditingCustomer(prev => ({
-                      ...prev,
-                      totalDue: e.target.value
-                    }))}
+                    onChange={(e) => { const v = e.target.value; setEditingCustomer(prev => ({ ...prev, totalDue: v })); }}
                     size="md"
                   />
                 </FormControl>
@@ -508,10 +658,7 @@ function CustomerManagement() {
                     </FormLabel>
                     <Input
                       value={editingCustomer.amountPending}
-                      onChange={(e) => setEditingCustomer(prev => ({
-                        ...prev,
-                        amountPending: e.target.value
-                      }))}
+                      onChange={(e) => { const v = e.target.value; setEditingCustomer(prev => ({ ...prev, amountPending: v })); }}
                       size="md"
                     />
                   </FormControl>

@@ -846,6 +846,150 @@ Authorization: Bearer {token}
 
 ---
 
+## Customer Management Endpoints
+
+### 15. Create Customer and Record Purchase
+**POST** `/core/customer`
+
+Creates a customer and records purchased items. Automatically deducts purchased quantities from stock, updates `total_sold`, adds to `total_profit`, and recomputes `stock_value` for remaining stock (when `item_price` exists). All operations are done in a transaction.
+
+**Headers:**
+```
+Authorization: Bearer {token}
+Content-Type: application/json
+```
+
+**Request Body:**
+```json
+{
+  "customer_name": "Jane Doe",
+  "customer_phone_no": "+1-555-0100",
+  "bill_paid": 20,
+  "items": [
+    { "stock_id": 1, "quantity": 2, "unit_price": 12.5 },
+    { "stock_id": 3, "quantity": 1 }
+  ]
+}
+```
+
+Rules:
+- **customer_name**: required, string
+- **customer_phone_no**: optional, string
+- **items**: required array, at least one item
+- **items[].stock_id**: required, must exist in `stock_management.item_id`
+- **items[].quantity**: required, number > 0, must not exceed available `quantity_per_unit`
+- **items[].unit_price**: optional number; if omitted, falls back to the stock's `item_price`
+- **bill_paid**: optional number ≥ 0; `bill_due` is computed as `total_bill - bill_paid`
+
+Behavior:
+- For each item: `line_total = unit_price × quantity`
+- Stock updates per item:
+  - `quantity_per_unit -= quantity`
+  - `total_sold += quantity`
+  - `total_profit += line_total`
+  - If `item_price` exists, `stock_value = item_price × remaining quantity`
+- Customer totals:
+  - `total_bill = Σ line_total`
+  - `bill_due = max(0, total_bill - bill_paid)`
+
+**Success (201):**
+```json
+{
+  "message": "Customer created and purchase recorded",
+  "data": {
+    "customer": {
+      "id": 10,
+      "customer_name": "Jane Doe",
+      "customer_phone_no": "+1-555-0100",
+      "total_bill": 37.5,
+      "bill_paid": 20,
+      "bill_due": 17.5,
+      "created_at": "2025-09-16T10:00:00.000000Z",
+      "updated_at": "2025-09-16T10:00:00.000000Z"
+    },
+    "purchased_items": [
+      { "item_id": 1, "item_name": "Rice",  "quantity": 2, "unit_price": 12.5, "line_total": 25 },
+      { "item_id": 3, "item_name": "Sugar", "quantity": 1, "unit_price": 12.5, "line_total": 12.5 }
+    ]
+  }
+}
+```
+
+**Validation/Error (422):**
+```json
+{ "message": "Purchase quantity exceeds available stock for item_id 3" }
+```
+
+---
+
+### 16. Get Customers
+**GET** `/core/customer`
+
+Returns all customers with summary of purchased items. Each customer includes a `purchased_items` array with `{ item_id, item_name, quantity, unit_price, line_total }`.
+
+**Response (200) example:**
+```json
+[
+  {
+    "id": 10,
+    "customer_name": "Jane Doe",
+    "customer_phone_no": "+1-555-0100",
+    "total_bill": 37.5,
+    "bill_paid": 20,
+    "bill_due": 17.5,
+    "created_at": "2025-09-16T10:00:00.000000Z",
+    "updated_at": "2025-09-16T10:00:00.000000Z",
+    "purchased_items": [
+      { "item_id": 1, "item_name": "Rice",  "quantity": 2, "unit_price": 12.5, "line_total": 25 },
+      { "item_id": 3, "item_name": "Sugar", "quantity": 1, "unit_price": 12.5, "line_total": 12.5 }
+    ]
+  }
+]
+```
+
+**Headers:**
+```
+Authorization: Bearer {token}
+```
+
+**Response (200):** Array of customers with purchased items.
+
+---
+
+### 17. Download Customer Invoice (PDF)
+**GET** `/core/customer/{id}/invoice`
+
+Generates and downloads a PDF invoice for the given customer using `resources/views/invoice.blade.php`.
+
+Notes:
+- Requires the PDF package: `barryvdh/laravel-dompdf`.
+- If the invoice view is missing, returns a 500 with `Invoice template missing`.
+
+**Headers:**
+```
+Authorization: Bearer {token}
+```
+
+**Response:** PDF file download.
+
+---
+
+### 18. Delete Customer
+**DELETE** `/core/customer/{id}`
+
+Deletes a customer and all their purchased item records.
+
+**Headers:**
+```
+Authorization: Bearer {token}
+```
+
+**Response (200):**
+```json
+{ "message": "Customer deleted successfully" }
+```
+
+
 ## User Management Endpoints
 
 ### 12. Get Current User (Sanctum Default)
