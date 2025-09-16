@@ -60,7 +60,8 @@ const Authors = ({ title, captions, data }) => {
     customUnit: "",
     category: "",
     status: "in_stock",
-    stockValue: ""
+    stockValue: "",
+    itemPrice: ""
   });
   const [editingStock, setEditingStock] = React.useState(null);
   const [editIndex, setEditIndex] = React.useState(-1);
@@ -93,6 +94,25 @@ const Authors = ({ title, captions, data }) => {
     errors: [],
     insufficientMaterials: []
   });
+  
+  // Auto-calc helpers for stock value
+  const recalcAddStockValue = (nextItemPrice, nextQuantity, nextProducedQty) => {
+    const price = parseFloat(nextItemPrice);
+    const baseQty = parseFloat(nextQuantity);
+    const produced = parseFloat((nextProducedQty ?? immediateProductionQuantity) || 0);
+    const qty = (isFinite(baseQty) ? baseQty : 0) + (shouldProduceImmediately && isFinite(produced) ? produced : 0);
+    if (isFinite(price) && isFinite(qty)) {
+      setNewStock((prev) => ({ ...prev, stockValue: (price * qty).toString() }));
+    }
+  };
+
+  const recalcEditStockValue = (nextItemPrice, nextQuantity) => {
+    const price = parseFloat(nextItemPrice);
+    const qty = parseFloat(nextQuantity);
+    if (isFinite(price) && isFinite(qty)) {
+      setEditingStock((prev) => ({ ...prev, stockValue: (price * qty).toString() }));
+    }
+  };
   
   // Fetch units, categories, raw materials, and stock data on component mount
   React.useEffect(() => {
@@ -201,17 +221,23 @@ const Authors = ({ title, captions, data }) => {
       logo: logo,
           name: item.item_name,
           quantity: `${item.quantity_per_unit} ${item.unit?.unit_name || 'Units'}`,
+          itemPrice: item.item_price ? `PKR.${item.item_price}` : 'PKR.0',
           category: item.category?.category_name || 'Uncategorized',
           status: item.stock_status === 'in_stock' ? 'In Stock' : 
                   item.stock_status === 'out_of_stock' ? 'Out of Stock' : 
                   item.stock_status === 'pending' ? 'Pending' : 'In Stock',
           stockValue: item.stock_value ? `PKR.${item.stock_value}` : 'PKR.0',
+          totalSold: item.total_sold ? `${item.total_sold}` : '0',
+          totalProfit: item.total_profit ? `PKR.${item.total_profit}` : 'PKR.0',
           itemId: item.item_id,
           unitId: item.unit_id,
           categoryId: item.category_id,
           quantityPerUnit: item.quantity_per_unit,
           stockValueRaw: item.stock_value || 0,
-          stockStatusRaw: item.stock_status || 'in_stock'
+          stockStatusRaw: item.stock_status || 'in_stock',
+          itemPriceRaw: item.item_price || 0,
+          totalSoldRaw: item.total_sold || 0,
+          totalProfitRaw: item.total_profit || 0
         }));
         setStockData(formattedStock);
       } else {
@@ -304,6 +330,9 @@ const Authors = ({ title, captions, data }) => {
     
     if (shouldProduceImmediately) {
       validateProductionRequirements(parseFloat(valueString) || 0);
+      if (newStock.itemPrice) {
+        recalcAddStockValue(newStock.itemPrice, newStock.quantity || 0, valueString);
+      }
     }
   };
 
@@ -603,7 +632,7 @@ const Authors = ({ title, captions, data }) => {
   };
 
   // Stock management captions
-  const stockCaptions = ["Products", "QUANTITY PER UNIT", "CATEGORY", "STATUS", "Stock Value", ""];
+  const stockCaptions = ["Products", "QUANTITY PER UNIT", "ITEM PRICE", "CATEGORY", "STATUS", "Stock Value", "TOTAL SOLD", "TOTAL PROFIT", ""];
 
   const handleAddStock = async () => {
     if (!newStock.name || !newStock.unit || !newStock.category) return;
@@ -653,6 +682,7 @@ const Authors = ({ title, captions, data }) => {
           unit_id: unitId,
           category_id: categoryId,
           quantity_per_unit: newStock.quantity ? parseFloat(newStock.quantity) : 0,
+          item_price: newStock.itemPrice ? parseFloat(newStock.itemPrice) : null,
           stock_value: newStock.stockValue ? parseFloat(newStock.stockValue) : null,
           stock_status: newStock.status
         }),
@@ -687,8 +717,9 @@ const Authors = ({ title, captions, data }) => {
       unit: "",
       customUnit: "",
       category: "",
-           status: "in_stock",
-      stockValue: ""
+      status: "in_stock",
+      stockValue: "",
+      itemPrice: ""
     });
          
          // Reset selected raw materials and production settings
@@ -748,7 +779,8 @@ const Authors = ({ title, captions, data }) => {
       category: stock.category,
       status: stock.stockStatusRaw,
       stockValue: stockValue,
-      itemId: stock.itemId
+      itemId: stock.itemId,
+      itemPrice: stock.itemPriceRaw // Add itemPriceRaw to editingStock
     });
     setEditIndex(index);
     onEditOpen();
@@ -790,6 +822,7 @@ const Authors = ({ title, captions, data }) => {
           unit_id: unitId,
           category_id: categoryId,
           quantity_per_unit: parseFloat(editingStock.quantity),
+          item_price: editingStock.itemPrice ? parseFloat(editingStock.itemPrice) : undefined,
           stock_value: editingStock.stockValue ? parseFloat(editingStock.stockValue) : null,
           stock_status: editingStock.status
         }),
@@ -1206,9 +1239,12 @@ const Authors = ({ title, captions, data }) => {
                    logo={row.logo}
                    name={row.name}
                    quantity={row.quantity}
+                   itemPrice={row.itemPrice}
                    category={row.category}
                    status={row.status}
                    stockValue={row.stockValue}
+                   totalSold={row.totalSold}
+                   totalProfit={row.totalProfit}
                    onEdit={() => handleEditStock(row, index)}
                      onDelete={() => handleDeleteStock(row)}
                      onEditProduction={() => openEditProductionModal(row)}
@@ -1243,7 +1279,7 @@ const Authors = ({ title, captions, data }) => {
                   type='number'
                   placeholder='Enter initial quantity (or leave empty to produce later)'
                   value={newStock.quantity}
-                  onChange={(e) => setNewStock({...newStock, quantity: e.target.value})}
+                  onChange={(e) => { setNewStock({...newStock, quantity: e.target.value}); if (newStock.itemPrice) recalcAddStockValue(newStock.itemPrice, e.target.value, immediateProductionQuantity); }}
                 />
               </FormControl>
               
@@ -1298,14 +1334,36 @@ const Authors = ({ title, captions, data }) => {
                 </Select>
               </FormControl>
               
+              <FormControl>
+                <FormLabel color={textColor}>Item Price (PKR)</FormLabel>
+                <Input
+                  type='number'
+                  placeholder='Enter price per unit (optional)'
+                  value={newStock.itemPrice}
+                  onChange={(e) => { setNewStock({...newStock, itemPrice: e.target.value}); if (newStock.quantity) recalcAddStockValue(e.target.value, newStock.quantity, immediateProductionQuantity); }}
+                />
+              </FormControl>
+              
                <FormControl>
                 <FormLabel color={textColor}>Stock Value (PKR)</FormLabel>
                 <Input
                   type='number'
                    placeholder='Enter stock value (optional)'
                   value={newStock.stockValue}
-                  onChange={(e) => setNewStock({...newStock, stockValue: e.target.value})}
+                  onChange={(e) => {
+                    setNewStock({...newStock, stockValue: e.target.value});
+                    recalcAddStockValue(newStock.itemPrice, e.target.value, immediateProductionQuantity);
+                  }}
                 />
+                {(newStock.itemPrice && (newStock.quantity || (shouldProduceImmediately && immediateProductionQuantity))) ? (
+                  <Text fontSize='sm' color='gray.500' mt='4px'>
+                    Auto: PKR.{(
+                      parseFloat(newStock.itemPrice || 0) * (
+                        (parseFloat(newStock.quantity || 0) || 0) + (shouldProduceImmediately ? parseFloat(immediateProductionQuantity || 0) : 0)
+                      )
+                    ).toFixed(2)}
+                  </Text>
+                ) : null}
               </FormControl>
 
                {/* Raw Materials Selection */}
@@ -1481,7 +1539,7 @@ const Authors = ({ title, captions, data }) => {
                      type='number'
                      placeholder='Enter quantity'
                      value={editingStock.quantity}
-                     onChange={(e) => setEditingStock({...editingStock, quantity: e.target.value})}
+                     onChange={(e) => { setEditingStock({...editingStock, quantity: e.target.value}); if (editingStock.itemPrice) recalcEditStockValue(editingStock.itemPrice, e.target.value); }}
                    />
                  </FormControl>
                  
@@ -1545,13 +1603,31 @@ const Authors = ({ title, captions, data }) => {
                  </FormControl>
                  
                  <FormControl>
+                   <FormLabel color={textColor}>Item Price (PKR)</FormLabel>
+                   <Input
+                     type='number'
+                     placeholder='Enter price per unit (optional)'
+                     value={editingStock.itemPrice || ""}
+                     onChange={(e) => { setEditingStock({...editingStock, itemPrice: e.target.value}); if (editingStock.quantity) recalcEditStockValue(e.target.value, editingStock.quantity); }}
+                   />
+                 </FormControl>
+                 
+                 <FormControl>
                    <FormLabel color={textColor}>Stock Value (PKR)</FormLabel>
                    <Input
                      type='number'
                      placeholder='Enter stock value (optional)'
                      value={editingStock.stockValue}
-                     onChange={(e) => setEditingStock({...editingStock, stockValue: e.target.value})}
+                     onChange={(e) => {
+                       setEditingStock({...editingStock, stockValue: e.target.value});
+                       recalcEditStockValue(editingStock.itemPrice, e.target.value);
+                     }}
                    />
+                   {(editingStock.itemPrice && editingStock.quantity) ? (
+                     <Text fontSize='sm' color='gray.500' mt='4px'>
+                       Auto: PKR.{(parseFloat(editingStock.itemPrice || 0) * parseFloat(editingStock.quantity || 0)).toFixed(2)}
+                     </Text>
+                   ) : null}
                  </FormControl>
                  
                  <Button

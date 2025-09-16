@@ -311,6 +311,15 @@ Authorization: Bearer {token}
 Content-Type: application/json
 ```
 
+**Editable Fields & Rules:**
+- item_name (required, string, max:255)
+- unit_id (required, exists: units.unit_id)
+- category_id (optional, exists: categories.category_id)
+- quantity_per_unit (required, number, min:0)
+- item_price (optional, number, min:0)
+- stock_value (optional, number, min:0). If omitted but item_price provided, computed as item_price × quantity_per_unit.
+- stock_status (optional, enum: in_stock|out_of_stock|pending)
+
 **Request Body:**
 ```json
 {
@@ -318,6 +327,7 @@ Content-Type: application/json
     "unit_id": 1,
     "category_id": 1,
     "quantity_per_unit": 50.00,
+    "item_price": 3.00,
     "stock_value": 150.00,
     "stock_status": "in_stock"
 }
@@ -718,13 +728,16 @@ Behavior:
 ### 10. Update Stock Item
 **PUT** `/core/stock/{id}`
 
-Update an existing stock item.
+Update an existing stock item. All fields optional; only provided fields are updated.
 
 **Headers:**
 ```
 Authorization: Bearer {token}
 Content-Type: application/json
 ```
+
+Auto-calculation:
+- If stock_value is not provided but item_price (new or existing) is available, it is computed as item_price × quantity_per_unit.
 
 **Request Body:**
 ```json
@@ -733,6 +746,7 @@ Content-Type: application/json
     "unit_id": 1,
     "category_id": 1,
     "quantity_per_unit": 75.00,
+    "item_price": 3.50,
     "stock_value": 200.00,
     "stock_status": "in_stock"
 }
@@ -770,6 +784,41 @@ Content-Type: application/json
 **Note:** All fields are optional for updates. Only provided fields will be updated.
 
 ---
+
+### 14. Record Stock Sale
+Record a sale of items from a stock entry. Decrements available quantity, increments total_sold, and adds to total_profit. Recomputes stock_value from remaining quantity and item_price when available.
+
+**POST** `/core/stock/{id}/sell`
+
+**Headers:**
+```
+Authorization: Bearer {token}
+Content-Type: application/json
+```
+
+**Request Body:**
+```json
+{ "quantity": 5, "sold_price": 4.00 }
+```
+
+Behavior:
+- Validates that quantity > 0 and does not exceed available quantity.
+- Uses sold_price if provided; otherwise falls back to item_price for profit calculation.
+- Updates: quantity_per_unit -= quantity; total_sold += quantity; total_profit += (used unit price × quantity).
+- If item_price exists, sets stock_value = item_price × remaining quantity.
+
+**Success (200):**
+```json
+{
+  "message": "Sale recorded successfully",
+  "data": { /* updated stock object */ }
+}
+```
+
+**Validation/Error (422):**
+```json
+{ "message": "Sale quantity exceeds available stock." }
+```
 
 ### 13. Delete Stock Item
 **DELETE** `/core/stock/{id}`

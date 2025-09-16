@@ -13,7 +13,7 @@ import React from "react";
 import { FaTrash, FaCog } from "react-icons/fa";
 
 function StockTableRow(props) {
-  const { logo, name, quantity, category, status, stockValue, onEdit, onDelete, onEditProduction } = props;
+  const { logo, name, quantity, itemPrice, category, status, stockValue, totalSold, totalProfit, onEdit, onDelete, onEditProduction } = props;
   const textColor = useColorModeValue("gray.700", "white");
 
   // Status color mapping
@@ -56,6 +56,12 @@ function StockTableRow(props) {
 
       <Td>
         <Text fontSize="md" color={textColor} fontWeight="bold">
+          {itemPrice}
+        </Text>
+      </Td>
+
+      <Td>
+        <Text fontSize="md" color={textColor} fontWeight="bold">
           {category}
         </Text>
       </Td>
@@ -74,6 +80,18 @@ function StockTableRow(props) {
       <Td>
         <Text fontSize="md" color={textColor} fontWeight="bold">
           {stockValue}
+        </Text>
+      </Td>
+
+      <Td>
+        <Text fontSize="md" color={textColor} fontWeight="bold">
+          {totalSold}
+        </Text>
+      </Td>
+
+      <Td>
+        <Text fontSize="md" color={textColor} fontWeight="bold">
+          {totalProfit}
         </Text>
       </Td>
 
