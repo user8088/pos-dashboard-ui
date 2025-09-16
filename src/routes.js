@@ -9,6 +9,7 @@ import SalesAnalytics from "views/Dashboard/SalesAnalytics";
 import CustomerManagement from "views/Dashboard/CustomerManagement";
 import SignIn from "views/Auth/SignIn.js";
 import SignUp from "views/Auth/SignUp.js";
+import RentalManagement from "views/Dashboard/RentalManagement";
 
 import {
   HomeIcon,
@@ -44,6 +45,14 @@ var dashRoutes = [
     rtlName: "لوحة القيادة",
     icon: <SettingsIcon color="inherit" />,
     component: Tables,
+    layout: "/admin",
+  },
+  {
+    path: "/rental-management",
+    name: "Rental Management",
+    rtlName: "لوحة القيادة",
+    icon: <SettingsIcon color="inherit" />,
+    component: RentalManagement,
     layout: "/admin",
   },
   {

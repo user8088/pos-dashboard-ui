@@ -846,6 +846,107 @@ Authorization: Bearer {token}
 
 ---
 
+## Rental Stock Management Endpoints
+
+Rental stock behaves like normal stock management with rental-specific fields. Profit represents rental revenue. The cost per unit is the chosen rent for the period.
+
+### 19. Add Rental Stock Item
+**POST** `/core/rental-stock`
+
+**Headers:**
+```
+Authorization: Bearer {token}
+Content-Type: application/json
+```
+
+**Editable Fields & Rules:**
+- item_name (required, string)
+- unit_id (required, exists: units.unit_id)
+- category_id (optional, exists: categories.category_id)
+- quantity_per_unit (required, number, min:0)
+- rent_per_week (optional, number, min:0)
+- rent_per_month (optional, number, min:0)
+- rent_per_year (optional, number, min:0)
+- stock_value (optional, number, min:0)
+- stock_status (optional, enum: available|rented|maintenance|pending)
+
+**Response (200):** Rental stock JSON.
+
+---
+
+### 20. Get All Rental Stock Items
+**GET** `/core/rental-stock`
+
+**Headers:**
+```
+Authorization: Bearer {token}
+```
+
+**Response (200):** Array of rental stock items.
+
+---
+
+### 21. Update Rental Stock Item
+**PUT** `/core/rental-stock/{id}`
+
+All fields optional; only provided fields are updated.
+
+Editable Fields include: item_name, unit_id, category_id, quantity_per_unit, rent_per_week, rent_per_month, rent_per_year, stock_value, stock_status, total_rented, total_profit, rented_on, rented_till.
+
+Validation: `rented_till` must be after or equal to `rented_on` when both present.
+
+---
+
+### 22. Delete Rental Stock Item
+**DELETE** `/core/rental-stock/{id}`
+
+**Headers:**
+```
+Authorization: Bearer {token}
+```
+
+**Response (200):** `{ "message": "Rental stock item deleted successfully" }`
+
+---
+
+### 23. Record Rental
+Record a rental event, similar to a sale. Decrements available quantity, increments `total_rented`, and adds to `total_profit` based on the chosen rent period.
+
+**POST** `/core/rental-stock/{id}/rent`
+
+**Headers:**
+```
+Authorization: Bearer {token}
+Content-Type: application/json
+```
+
+**Request Body:**
+```json
+{ "quantity": 3, "period": "month", "rate": 50, "rented_on": "2025-09-16", "rented_till": "2025-10-16" }
+```
+
+Rules:
+- quantity: required, > 0, must not exceed available quantity
+- period: required, one of week|month|year
+- rate: optional; overrides configured rent for the given period (otherwise uses `rent_per_*` on the item)
+- rented_on: optional ISO date
+- rented_till: optional ISO date; must be ≥ rented_on
+
+Behavior:
+- `line_total = unit rate × quantity`
+- Updates item:
+  - `quantity_per_unit -= quantity`
+  - `total_rented += quantity`
+  - `total_profit += line_total`
+  - If `rent_per_month` exists, recomputes `stock_value = rent_per_month × remaining quantity` (heuristic)
+  - Sets `stock_status = rented`; sets dates if provided
+
+**Success (200):** `{ "message": "Rental recorded successfully", "data": { /* item */ } }`
+
+**Validation/Error (422):** `{ "message": "Rental quantity exceeds available stock." }`
+
+---
+
 ## Customer Management Endpoints
 
 ### 15. Create Customer and Record Purchase
