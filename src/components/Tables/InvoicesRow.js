@@ -11,7 +11,7 @@ import React from "react";
 
 function InvoicesRow(props) {
   const textColor = useColorModeValue("gray.700", "white");
-  const { date, code, price, format, logo } = props;
+  const { date, code, price, format, logo, onDownload } = props;
 
   return (
     <Flex my={{ sm: "1rem", xl: "10px" }} alignItems="center">
@@ -29,7 +29,7 @@ function InvoicesRow(props) {
           {price}
         </Text>
       </Box>
-      <Button p="0px" bg="transparent" variant="no-hover">
+      <Button p="0px" bg="transparent" variant="no-hover" onClick={onDownload} title="Download invoice">
         <Flex alignItems="center" p="12px">
           <Icon as={logo} w="20px" h="auto" me="5px" />
           <Text fontSize="md" color={textColor} fontWeight="bold">

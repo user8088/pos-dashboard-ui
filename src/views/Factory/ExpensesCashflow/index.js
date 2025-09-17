@@ -1,5 +1,5 @@
 // Chakra imports
-import { Box, Flex, Grid, Icon, Text, VStack, Input, Button, useColorModeValue } from "@chakra-ui/react";
+import { Box, Flex, Grid, Icon, Text, VStack, Input, Button, useColorModeValue, Spinner } from "@chakra-ui/react";
 // Assets
 import BackgroundCard1 from "assets/img/BackgroundCard1.png";
 import { MastercardIcon, VisaIcon } from "components/Icons/Icons";
@@ -124,6 +124,14 @@ function FactoryExpensesCashflow() {
   const [accountName, setAccountName] = React.useState("");
   const [accountDetails, setAccountDetails] = React.useState("");
   const [accountBalance, setAccountBalance] = React.useState("");
+  const [isLoading, setIsLoading] = React.useState(false);
+  const allocatedTotal = React.useMemo(() => {
+    try {
+      return accounts.reduce((sum, acc) => sum + (parseFloat(acc.balance) || 0), 0);
+    } catch {
+      return 0;
+    }
+  }, [accounts]);
 
   const handleAddAccount = () => {
     if (!accountName || !accountBalance) return;
@@ -140,6 +148,14 @@ function FactoryExpensesCashflow() {
 
   return (
     <Flex direction='column' pt={{ base: "120px", md: "75px" }}>
+      {isLoading ? (
+        <Flex justify="center" align="center" h="300px" w="100%">
+          <VStack spacing="16px" textAlign="center">
+            <Spinner thickness="4px" speed="0.65s" emptyColor="gray.200" color="#FF8D28" size="xl" />
+            <Text color={headingColor}>Loading expenses & cashflow...</Text>
+          </VStack>
+        </Flex>
+      ) : (
       <Grid templateColumns={{ sm: "1fr", lg: "2fr 1.2fr" }} templateRows='1fr'>
         <Box>
           <Grid
@@ -156,12 +172,13 @@ function FactoryExpensesCashflow() {
               number={"PKR. 120,000,000"}
               validity={{
                 name: "Your Factory Investment",
-                data: "05/24",
+                date: "05/24",
               }}
               cvv={{
                 name: "Updated:",
                 code: "Today",
               }}
+              allocatedTotal={allocatedTotal}
               icon={
                 <Icon
                   as={RiMastercardFill}
@@ -224,6 +241,15 @@ function FactoryExpensesCashflow() {
         </Box>
         <FactoryInvoices title={"Salaries & Invoices"} data={factoryInvoicesData} />
       </Grid>
+      )}
+      {isLoading ? (
+        <Flex justify="center" align="center" h="300px" w="100%" mt="24px">
+          <VStack spacing="16px" textAlign="center">
+            <Spinner thickness="4px" speed="0.65s" emptyColor="gray.200" color="#FF8D28" size="xl" />
+            <Text color={headingColor}>Loading billing & transactions...</Text>
+          </VStack>
+        </Flex>
+      ) : (
       <Grid templateColumns={{ sm: "1fr", lg: "1.6fr 1.2fr" }}>
         <FactoryBillingInformation title={"Bills & Rents"} data={factoryBillingData} />
         <FactoryTransactions
@@ -233,6 +259,7 @@ function FactoryExpensesCashflow() {
           olderTransactions={factoryOlderTransactions}
         />
       </Grid>
+      )}
     </Flex>
   );
 }

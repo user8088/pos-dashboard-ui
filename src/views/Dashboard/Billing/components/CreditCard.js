@@ -12,6 +12,10 @@ const CreditCard = ({
   number,
   validity,
   cvv,
+  allocatedTotal, // legacy: sum of allocated balances (optional)
+  totalRevenue,   // preferred: total revenue number (optional)
+  accountsTotal,  // preferred: sum of all account balances (optional)
+  showUnallocated, // when true, shows the Unallocated line
 }) => {
   return (
     <Card
@@ -42,6 +46,28 @@ const CreditCard = ({
                 {number}
               </Text>
             </Box>
+            {showUnallocated && ((totalRevenue !== undefined && accountsTotal !== undefined) || (allocatedTotal !== undefined)) ? (
+              <Box mt='6px'>
+                <Text fontSize='xs' opacity={0.9}>Unallocated</Text>
+                <Text fontSize='sm' fontWeight='bold'>
+                  {(() => {
+                    // Preferred: unallocated = totalRevenue - accountsTotal
+                    if (totalRevenue !== undefined && accountsTotal !== undefined) {
+                      const tr = parseFloat(totalRevenue || 0);
+                      const at = parseFloat(accountsTotal || 0);
+                      const unalloc = Math.max(0, tr - at);
+                      return `PKR. ${unalloc.toLocaleString()}`;
+                    }
+                    // Back-compat: derive from displayed number and allocatedTotal
+                    const totalStr = String(number).replace(/[^0-9.]/g, '');
+                    const total = parseFloat(totalStr || 0);
+                    const allocated = parseFloat(allocatedTotal || 0);
+                    const unalloc = Math.max(0, total - allocated);
+                    return `PKR. ${unalloc.toLocaleString()}`;
+                  })()}
+                </Text>
+              </Box>
+            ) : null}
             <Flex mt='14px'>
               <Flex direction='column' me='34px'>
                 <Text fontSize='xs'>{validity.name}</Text>

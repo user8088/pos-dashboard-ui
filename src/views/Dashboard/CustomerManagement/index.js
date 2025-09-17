@@ -151,6 +151,7 @@ function CustomerManagement() {
   
   const { isOpen: isAddOpen, onOpen: onAddOpen, onClose: onAddClose } = useDisclosure();
   const { isOpen: isEditOpen, onOpen: onEditOpen, onClose: onEditClose } = useDisclosure();
+  const { isOpen: isInvoicesOpen, onOpen: onInvoicesOpen, onClose: onInvoicesClose } = useDisclosure();
   const toast = useToast();
  
   const [customers, setCustomers] = useState([]);
@@ -223,6 +224,9 @@ function CustomerManagement() {
   };
 
   const [editingCustomer, setEditingCustomer] = useState(null);
+  const [selectedCustomer, setSelectedCustomer] = useState(null);
+  const [customerInvoices, setCustomerInvoices] = useState([]);
+  const [isInvoicesLoading, setIsInvoicesLoading] = useState(false);
   const [newCustomer, setNewCustomer] = useState({
     name: "",
     phone: "",
@@ -359,6 +363,29 @@ function CustomerManagement() {
     }
   };
 
+  const openCustomerInvoices = async (customer) => {
+    setSelectedCustomer(customer);
+    setCustomerInvoices([]);
+    setIsInvoicesLoading(true);
+    onInvoicesOpen();
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000/api'}/core/customer/${customer.id}/invoices`, {
+        headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' }
+      });
+      if (res.ok) {
+        const invoices = await res.json();
+        setCustomerInvoices(Array.isArray(invoices) ? invoices : []);
+      } else {
+        setCustomerInvoices([]);
+      }
+    } catch (e) {
+      setCustomerInvoices([]);
+    } finally {
+      setIsInvoicesLoading(false);
+    }
+  };
+
   const handleDeleteCustomer = async (customer) => {
     if (!window.confirm(`Delete customer "${customer.name}" and their purchases?`)) return;
     try {
@@ -371,6 +398,10 @@ function CustomerManagement() {
       if (res.ok) {
         toast({ title: "Customer Deleted", description: data.message || 'Customer deleted successfully', status: "success", duration: 3000, isClosable: true });
         fetchCustomers();
+        // Also refresh invoices panel if open
+        try {
+          const invPanel = document.createEvent('Event'); invPanel.initEvent('refresh-invoices', true, true); window.dispatchEvent(invPanel);
+        } catch(_){}
       } else {
         toast({ title: "Delete Failed", description: data.message || 'Unable to delete customer', status: "error", duration: 5000, isClosable: true });
       }
@@ -455,6 +486,36 @@ function CustomerManagement() {
                 />
               </VStack>
             </Flex>
+          ) : customers.length === 0 ? (
+            <Flex 
+              direction="column" 
+              justify="center" 
+              align="center" 
+              h="400px" 
+              p="40px"
+              w="100%"
+            >
+              <VStack spacing="24px" maxW="400px" textAlign="center">
+                <Text fontSize="2xl" color={textColor} fontWeight="bold">
+                  No Customers Yet
+                </Text>
+                <Text color="gray.500" fontSize="md" lineHeight="1.6">
+                  Add your first customer to record purchases and generate invoices.
+                </Text>
+                <Button
+                  leftIcon={<FaPlus />}
+                  colorScheme='teal'
+                  bg='#FF8D28'
+                  color='white'
+                  _hover={{ bg: '#E67E22' }}
+                  size="lg"
+                  px="32px"
+                  py="12px"
+                  onClick={onAddOpen}>
+                  ADD FIRST CUSTOMER
+                </Button>
+              </VStack>
+            </Flex>
           ) : (
           <Table variant='simple' color={textColor}>
             <Thead>
@@ -476,6 +537,7 @@ function CustomerManagement() {
                   onEdit={handleEditCustomer}
                   onDownload={handleDownloadInvoice}
                   onDelete={handleDeleteCustomer}
+                  onViewInvoices={() => openCustomerInvoices(customer)}
                 />
               ))}
             </Tbody>
@@ -682,6 +744,37 @@ function CustomerManagement() {
               </Button>
             </HStack>
           </ModalFooter>
+        </ModalContent>
+      </Modal>
+
+      {/* Customer Invoices Modal */}
+      <Modal isOpen={isInvoicesOpen} onClose={onInvoicesClose} size='lg' motionPreset='slideInBottom'>
+        <ModalOverlay bg='rgba(0,0,0,0.4)' backdropFilter='blur(6px)' />
+        <ModalContent>
+          <ModalHeader color={textColor}>{selectedCustomer ? `${selectedCustomer.name} — Invoices` : 'Invoices'}</ModalHeader>
+          <ModalCloseButton />
+          <ModalBody pb='24px'>
+            {isInvoicesLoading ? (
+              <Flex justify="center" align="center" h="150px"><Spinner color="#FF8D28" /></Flex>
+            ) : customerInvoices.length === 0 ? (
+              <Text color='gray.500' fontSize='sm'>No invoices attached to this customer.</Text>
+            ) : (
+              <VStack spacing='12px' align='stretch'>
+                {customerInvoices.map((inv, idx) => (
+                  <Flex key={idx} justify='space-between' align='center' border='1px solid' borderColor='gray.200' borderRadius='8px' p='12px'>
+                    <VStack spacing='2px' align='start'>
+                      <Text fontWeight='bold' color={textColor}>{inv.invoice_number || `Invoice #${inv.id}`}</Text>
+                      <Text color='gray.500' fontSize='sm'>{new Date(inv.issued_at || Date.now()).toLocaleString()}</Text>
+                    </VStack>
+                    <HStack spacing='12px'>
+                      <Text fontWeight='bold' color={textColor}>PKR. {inv.total_amount ?? inv.due_amount ?? 0}</Text>
+                      <Button size='sm' variant='outline' onClick={() => handleDownloadInvoice(selectedCustomer)}>PDF</Button>
+                    </HStack>
+                  </Flex>
+                ))}
+              </VStack>
+            )}
+          </ModalBody>
         </ModalContent>
       </Modal>
     </Flex>

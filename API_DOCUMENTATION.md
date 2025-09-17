@@ -1221,12 +1221,12 @@ Authorization: Bearer {token}
 
 ---
 
-### 31. Get Total Revenue
+### 31. Get Total Revenue (Live)
 **GET** `/core/revenue/total`
 
-Get total revenue from all sources (stock sales profit + cumulative rental profit) and update the main revenue account.
+Returns total revenue based on the LIVE sum of all account balances. This means manual transactions (inflow/outflow) persist after refresh. For backward compatibility, a profit-based total is also returned.
 
-**Note:** Uses `total_profit` from rentals (cumulative profit from all rental sessions), not `total_rent_amount` (current session rent).
+Frontend should use `total_revenue` (alias of `total_revenue_live`).
 
 **Headers:**
 ```
@@ -1236,27 +1236,33 @@ Authorization: Bearer {token}
 **Response (200):**
 ```json
 {
-    "total_revenue": 1000000,
+    "total_revenue": 1250000.00,
+    "total_revenue_live": 1250000.00,
+    "profit_based_total": 1000000.00,
     "breakdown": {
-        "stock_sales_profit": 750000,
-        "rental_profit": 250000
+        "stock_sales_profit": 750000.00,
+        "rental_profit": 250000.00
     },
     "main_account": {
         "account_id": 1,
         "account_name": "Total Revenue",
-        "account_balance": "1000000.00",
+        "account_balance": "800000.00",
         "account_type": "revenue",
         "is_main_account": true
     }
 }
 ```
 
+Notes:
+- `total_revenue`/`total_revenue_live` = `SUM(accounts.account_balance)`.
+- `profit_based_total` = legacy profit computation; kept for reporting. Frontend cards should ignore this and display `total_revenue`.
+
 ---
 
 ### 32. Allocate Revenue to Account
 **POST** `/core/account/{id}/allocate`
 
-Allocate a portion of total revenue to a specific account.
+Allocate a portion of total revenue to a specific account. This DEDUCTS from the main revenue account and CREDITS the target account atomically.
 
 **Headers:**
 ```
@@ -1431,7 +1437,16 @@ Behavior:
     "purchased_items": [
       { "item_id": 1, "item_name": "Rice",  "quantity": 2, "unit_price": 12.5, "line_total": 25 },
       { "item_id": 3, "item_name": "Sugar", "quantity": 1, "unit_price": 12.5, "line_total": 12.5 }
-    ]
+    ],
+    "invoice": {
+      "id": 101,
+      "invoice_number": "INV-20250101-101",
+      "total_amount": 37.5,
+      "paid_amount": 20,
+      "due_amount": 17.5,
+      "status": "partial",
+      "issued_at": "2025-01-01T10:00:00.000000Z"
+    }
   }
 }
 ```
@@ -1440,6 +1455,129 @@ Behavior:
 ```json
 { "message": "Purchase quantity exceeds available stock for item_id 3" }
 ```
+
+---
+
+## Invoice Management Endpoints
+
+### 35. List Invoices
+**GET** `/core/invoices`
+
+Returns all invoices with linked customers.
+
+**Headers:**
+```
+Authorization: Bearer {token}
+```
+
+**Response (200):** Array of invoices with `customers` relation.
+
+---
+
+## Transactions Endpoints
+
+Transactions let you record money moving into your business (inflow) or out (outflow). Each transaction affects a specific account's balance.
+
+### 37. Add Transaction
+**POST** `/core/transactions`
+
+**Headers:**
+```
+Authorization: Bearer {token}
+Content-Type: application/json
+```
+
+**Request Body:**
+```json
+{
+  "title": "Store Maintenance",
+  "type": "outflow",
+  "amount": 2500,
+  "account_id": 2,
+  "notes": "AC service",
+  "transacted_at": "2025-09-16T12:30:00Z"
+}
+```
+
+Rules:
+- type: inflow|outflow
+- amount: > 0
+- account_id: must exist
+- For outflow, must have sufficient account balance
+
+**Success (201):**
+```json
+{
+  "message": "Transaction recorded successfully",
+  "data": {
+    "id": 10,
+    "title": "Store Maintenance",
+    "type": "outflow",
+    "amount": "2500.00",
+    "account_id": 2,
+    "notes": "AC service",
+    "transacted_at": "2025-09-16T12:30:00.000000Z",
+    "created_at": "2025-09-16T12:30:10.000000Z",
+    "updated_at": "2025-09-16T12:30:10.000000Z",
+    "account": { "account_id": 2, "account_name": "Savings", "account_balance": "47500.00" }
+  },
+  "main_revenue": {
+    "account_id": 1,
+    "account_name": "Total Revenue",
+    "account_balance": 999750.00
+  }
+}
+```
+
+**Validation/Error (422):** `{ "message": "Insufficient balance in selected account." }`
+
+---
+
+### 38. Get Transactions
+**GET** `/core/transactions`
+
+Optional query params: `type`, `account_id`, `from`, `to`
+
+**Headers:**
+```
+Authorization: Bearer {token}
+```
+
+**Response (200):** Array of transactions with `account` relation.
+
+Note: On creation, the API returns `main_revenue` so the frontend can immediately refresh the revenue card. If you withdraw from the main revenue account, it will be reflected here.
+
+---
+
+### 39. Delete Transaction
+**DELETE** `/core/transactions/{id}`
+
+Deletes a transaction record only. This does not alter account balances or total revenue.
+
+**Headers:**
+```
+Authorization: Bearer {token}
+```
+
+**Response (200):** `{ "message": "Transaction deleted successfully" }`
+
+---
+
+### 36. Download Invoice by ID (PDF)
+**GET** `/core/invoices/{id}/download`
+
+Downloads the invoice as a PDF file.
+
+Notes:
+- Requires `barryvdh/laravel-dompdf`.
+- Uses the `resources/views/invoice.blade.php` template.
+
+**Headers:**
+```
+Authorization: Bearer {token}
+```
+
+**Response:** PDF file download.
 
 ---
 
@@ -1492,6 +1630,40 @@ Authorization: Bearer {token}
 ```
 
 **Response:** PDF file download.
+
+---
+
+### 18. Attach Existing Invoice to Customer
+**POST** `/core/customer/{id}/invoice/attach`
+
+Attach an existing invoice to a customer (manual association from a UI button).
+
+**Headers:**
+```
+Authorization: Bearer {token}
+Content-Type: application/json
+```
+
+**Request Body:**
+```json
+{ "invoice_id": 101 }
+```
+
+**Response (200):** `{ "message": "Invoice attached successfully" }`
+
+---
+
+### 19. List Customer Invoices
+**GET** `/core/customer/{id}/invoices`
+
+Returns all invoices attached to the customer.
+
+**Headers:**
+```
+Authorization: Bearer {token}
+```
+
+**Response (200):** Array of invoice objects.
 
 ---
 

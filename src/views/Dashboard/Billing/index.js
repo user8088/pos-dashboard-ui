@@ -91,6 +91,23 @@ function Billing() {
     fetchAccountSummary();
   }, []);
 
+  // Listen to billing-refresh to re-fetch accounts and revenue after transactions
+  React.useEffect(() => {
+    const refresh = () => { fetchAccounts(); fetchRevenueData(); fetchAccountSummary(); };
+    window.addEventListener('billing-refresh', refresh);
+    return () => window.removeEventListener('billing-refresh', refresh);
+  }, []);
+
+  // Derived values
+  const allocatedSum = React.useMemo(
+    () => accounts.filter(a => !a.is_main_account).reduce((sum, a) => sum + (parseFloat(a.account_balance) || 0), 0),
+    [accounts]
+  );
+  const currentTotalRevenue = React.useMemo(
+    () => accounts.reduce((sum, a) => sum + (parseFloat(a.account_balance) || 0), 0),
+    [accounts]
+  );
+
   // API Functions
   const fetchAccounts = async () => {
     try {
@@ -144,6 +161,16 @@ function Billing() {
 
   const handleAddAccount = async () => {
     if (!accountName || !accountBalance) return;
+    const initialAllocation = parseFloat(accountBalance);
+    if (isNaN(initialAllocation) || initialAllocation < 0) {
+      toast({ title: "Invalid amount", description: "Enter a valid non-negative balance.", status: "warning", duration: 4000, isClosable: true });
+      return;
+    }
+    const mainAccountBalance = mainAccount ? parseFloat(mainAccount.account_balance || 0) : 0;
+    if (initialAllocation > mainAccountBalance) {
+      toast({ title: "Insufficient total revenue", description: `You can allocate up to ${formatCurrency(mainAccountBalance)} from the main account.`, status: "error", duration: 5000, isClosable: true });
+      return;
+    }
     try {
       const token = localStorage.getItem('token');
       const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000/api'}/core/account`, {
@@ -152,7 +179,7 @@ function Billing() {
         body: JSON.stringify({
           account_name: accountName,
           account_details: accountDetails,
-          account_balance: parseFloat(accountBalance),
+          account_balance: initialAllocation,
           account_type: "other"
         }),
       });
@@ -223,13 +250,23 @@ function Billing() {
 
   const handleAllocateRevenue = async () => {
     if (!allocationForm.account_id || !allocationForm.amount) return;
+    const amount = parseFloat(allocationForm.amount);
+    if (isNaN(amount) || amount <= 0) {
+      toast({ title: "Invalid amount", description: "Enter a valid positive amount.", status: "warning", duration: 4000, isClosable: true });
+      return;
+    }
+    const mainAccountBalance = mainAccount ? parseFloat(mainAccount.account_balance || 0) : 0;
+    if (amount > mainAccountBalance) {
+      toast({ title: "Insufficient total revenue", description: `You can allocate up to ${formatCurrency(mainAccountBalance)} from the main account.`, status: "error", duration: 5000, isClosable: true });
+      return;
+    }
     try {
       const token = localStorage.getItem('token');
       const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000/api'}/core/account/${allocationForm.account_id}/allocate`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json', 'Accept': 'application/json' },
         body: JSON.stringify({
-          amount: parseFloat(allocationForm.amount),
+          amount: amount,
           description: allocationForm.description,
         }),
       });
@@ -301,15 +338,18 @@ function Billing() {
             <CreditCard
               backgroundImage={BackgroundCard1}
               title={mainAccount ? mainAccount.account_name : "Total Revenue"}
-              number={mainAccount ? formatCurrency(mainAccount.account_balance) : "PKR. 1,000,000"}
+              number={mainAccount ? formatCurrency(mainAccount.account_balance) : "PKR. 0"}
               validity={{
-                name: mainAccount ? (mainAccount.account_details || "Main Revenue Account") : "Your Total Business & Personal Income",
-                data: "05/24",
+                name: mainAccount ? (mainAccount.account_details || "Main Revenue Account") : "-",
+                date: "05/24",
               }}
               cvv={{
                 name: "Updated:",
                 code: "Today",
               }}
+              allocatedTotal={accounts.filter(a => !a.is_main_account).reduce((sum, a) => sum + (parseFloat(a.account_balance) || 0), 0)}
+              totalRevenue={revenueData ? parseFloat(revenueData.total_revenue || 0) : undefined}
+              accountsTotal={accounts.filter(a => !a.is_main_account).reduce((sum, a) => sum + (parseFloat(a.account_balance) || 0), 0)}
               icon={
                 <Icon
                   as={RiMastercardFill}
@@ -394,8 +434,8 @@ function Billing() {
                   </Stat>
                   <Divider />
                   <Stat>
-                    <StatLabel>Total Revenue</StatLabel>
-                    <StatNumber color="purple.500">{formatCurrency(revenueData.total_revenue)}</StatNumber>
+                    <StatLabel>Total Unallocated Income</StatLabel>
+                    <StatNumber color="purple.500">{mainAccount ? formatCurrency(mainAccount.account_balance) : "PKR. 0"}</StatNumber>
                   </Stat>
                 </VStack>
                 <VStack align='stretch' spacing='16px'>
@@ -409,8 +449,8 @@ function Billing() {
                   {accountSummary && (
                     <VStack align='stretch' spacing='8px' pt='16px'>
                       <Text fontSize='sm' fontWeight='semibold' color={headingColor}>Account Summary</Text>
-                      <Text fontSize='sm' color={labelColor}>Available: {formatCurrency(accountSummary.summary.available_revenue)}</Text>
-                      <Text fontSize='sm' color={labelColor}>Allocated: {formatCurrency(accountSummary.summary.total_allocated)}</Text>
+                      <Text fontSize='sm' color={labelColor}>Available: {mainAccount ? formatCurrency(mainAccount.account_balance) : "PKR. 0"}</Text>
+                      <Text fontSize='sm' color={labelColor}>Allocated: {formatCurrency(allocatedSum)}</Text>
                     </VStack>
                   )}
                 </VStack>

@@ -30,6 +30,7 @@ import { FiSearch } from "react-icons/fi";
 
 const Invoices = ({ title, data }) => {
   const textColor = useColorModeValue("gray.700", "white");
+  const subTextColor = useColorModeValue("gray.500", "gray.400");
   const { isOpen, onOpen, onClose } = useDisclosure();
   const { isOpen: isAddOpen, onOpen: onAddOpen, onClose: onAddClose } = useDisclosure();
   const [query, setQuery] = React.useState("");
@@ -39,6 +40,63 @@ const Invoices = ({ title, data }) => {
     price: "",
     format: "PDF"
   });
+  const [isLoading, setIsLoading] = React.useState(false);
+  const [invoices, setInvoices] = React.useState(data || []);
+
+  React.useEffect(() => {
+    fetchInvoices();
+    const handler = () => fetchInvoices();
+    window.addEventListener('refresh-invoices', handler);
+    return () => window.removeEventListener('refresh-invoices', handler);
+  }, []);
+
+  const fetchInvoices = async () => {
+    try {
+      setIsLoading(true);
+      const token = localStorage.getItem('token');
+      // Prefer dedicated invoices endpoint
+      const invRes = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000/api'}/core/invoices`, {
+        headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' }
+      });
+      if (invRes.ok) {
+        const list = await invRes.json();
+        const mapped = (Array.isArray(list) ? list : []).map((inv) => ({
+          date: new Date(inv.issued_at || inv.created_at || Date.now()).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: '2-digit' }),
+          code: inv.invoice_number ? `#${inv.invoice_number}` : `#INV-${inv.id}`,
+          price: `PKR. ${inv.total_amount ?? inv.amount ?? 0}`,
+          logo: () => null,
+          format: 'PDF',
+          _invoiceId: inv.id,
+          _customerId: inv.customer_id || inv.customer?.id || null
+        }));
+        setInvoices(mapped);
+      } else {
+        // Fallback: group customer purchases into one invoice per customer
+        const res = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000/api'}/core/customer`, {
+          headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' }
+        });
+        if (!res.ok) { setInvoices([]); setIsLoading(false); return; }
+        const customers = await res.json();
+        const rows = [];
+        customers.forEach((c) => {
+          const list = Array.isArray(c.purchased_items) ? c.purchased_items : [];
+          const total = list.reduce((sum, it) => sum + (it.line_total !== undefined ? it.line_total : (it.unit_price || 0) * (it.quantity || 0)), 0);
+          rows.push({
+            date: new Date(c.created_at || Date.now()).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: '2-digit' }),
+            code: `#CUST-${c.id}`,
+            price: `PKR. ${total}`,
+            logo: () => null,
+            format: 'PDF'
+          });
+        });
+        setInvoices(rows);
+      }
+    } catch (e) {
+      // ignore
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const navbarGlassBg = useColorModeValue(
     "linear-gradient(112.83deg, rgba(255, 255, 255, 0.82) 0%, rgba(255, 255, 255, 0.8) 110.84%)",
@@ -50,10 +108,10 @@ const Invoices = ({ title, data }) => {
   );
 
   const sortedData = React.useMemo(() => {
-    return [...data].sort(
+    return [...invoices].sort(
       (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
     );
-  }, [data]);
+  }, [invoices]);
 
   const filtered = React.useMemo(() => {
     const q = query.toLowerCase();
@@ -76,7 +134,7 @@ const Invoices = ({ title, data }) => {
       format: newInvoice.format
     };
     
-    data.push(newInvoiceData);
+    setInvoices((prev) => [newInvoiceData, ...prev]);
     setNewInvoice({
       date: "",
       code: "",
@@ -84,6 +142,44 @@ const Invoices = ({ title, data }) => {
       format: "PDF"
     });
     onAddClose();
+  };
+
+  const downloadCustomerPdf = async (customerId) => {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000/api'}/core/customer/${customerId}/invoice`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!res.ok) return;
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `invoice-${customerId}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch {}
+  };
+
+  const downloadInvoiceById = async (invoiceId) => {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000/api'}/core/invoices/${invoiceId}/download`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!res.ok) return;
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `invoice-${invoiceId}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch {}
   };
 
   return (
@@ -122,17 +218,31 @@ const Invoices = ({ title, data }) => {
       </CardHeader>
       <CardBody>
         <Flex direction='column' w='100%'>
-          {data.map((row) => {
-            return (
-              <InvoicesRow
-                date={row.date}
-                code={row.code}
-                price={row.price}
-                logo={row.logo}
-                format={row.format}
-              />
-            );
-          })}
+          {isLoading ? (
+            <Text color={textColor} fontSize='sm'>Loading invoices...</Text>
+          ) : (
+            invoices.length === 0 ? (
+              <Flex align='center' justify='center' w='100%' minH={{ base: '50vh', md: '60vh' }}>
+                <Flex direction='column' align='center' justify='center' p='24px' w={{ base: '100%', md: '60%' }} maxW='520px' borderRadius='16px' bg={useColorModeValue('white', 'gray.700')} border={useColorModeValue('1px solid #EDF2F7', '1px solid rgba(255,255,255,0.12)')} boxShadow={useColorModeValue('0 4px 12px rgba(0,0,0,0.06)', 'none')}>
+                  <Text fontSize='lg' fontWeight='bold' color={textColor} mb='6px'>No invoices yet</Text>
+                  <Text fontSize='sm' color={subTextColor} textAlign='center' mb='12px'>Create or attach an invoice to see it here. You can search and view all invoices anytime.</Text>
+                  <Button size='sm' colorScheme='teal' bg='#FF8D28' color='white' _hover={{ bg: '#E67E22' }} onClick={onAddOpen}>ADD NEW</Button>
+                </Flex>
+              </Flex>
+            ) : (
+              invoices.map((row) => (
+                <InvoicesRow
+                  key={`${row.code}-${row.date}`}
+                  date={row.date}
+                  code={row.code}
+                  price={row.price}
+                  logo={row.logo}
+                  format={row.format}
+                  onDownload={row._invoiceId ? () => downloadInvoiceById(row._invoiceId) : (row._customerId ? () => downloadCustomerPdf(row._customerId) : undefined)}
+                />
+              ))
+            )
+          )}
         </Flex>
       </CardBody>
       {/* Glassy Modal */}
@@ -166,6 +276,7 @@ const Invoices = ({ title, data }) => {
                   price={row.price}
                   logo={row.logo}
                   format={row.format}
+                  onDownload={row._invoiceId ? () => downloadInvoiceById(row._invoiceId) : (row._customerId ? () => downloadCustomerPdf(row._customerId) : undefined)}
                 />
               ))}
             </Flex>
