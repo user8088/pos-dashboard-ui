@@ -26,11 +26,13 @@ import {
   FormControl,
   FormLabel,
   Input,
+  Spinner,
+  useToast,
 } from "@chakra-ui/react";
 // Custom components
 import Card from "components/Card/Card.js";
 import CardBody from "components/Card/CardBody.js";
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { FaPlus, FaList } from "react-icons/fa";
 import logo from "assets/img/avatars/placeholder.png";
 
@@ -40,8 +42,10 @@ const SupplierTableRow = ({ supplier, onViewTransactions }) => {
 
   const getStatusColor = (status) => {
     switch (status) {
+      case "active":
       case "Active":
         return "green";
+      case "on_hold":
       case "On Hold":
         return "orange";
       default:
@@ -73,7 +77,7 @@ const SupplierTableRow = ({ supplier, onViewTransactions }) => {
 
       <Td>
         <Badge colorScheme={getStatusColor(supplier.status)} fontSize="14px" p="3px 10px" borderRadius="20px">
-          {supplier.status}
+          {typeof supplier.status === "string" ? supplier.status.replace(/_/g, " ") : supplier.status}
         </Badge>
       </Td>
 
@@ -94,50 +98,41 @@ function SupplierManagement() {
   const { isOpen: isAddOpen, onOpen: onAddOpen, onClose: onAddClose } = useDisclosure();
   const { isOpen: isTxnOpen, onOpen: onTxnOpen, onClose: onTxnClose } = useDisclosure();
 
-  const [suppliers, setSuppliers] = useState([
-    {
-      id: 1,
-      name: "Alpha Traders",
-      email: "alpha@suppliers.com",
-      phone: "+92 300 1111111",
-      status: "Active",
-      avatar: logo,
-    },
-    {
-      id: 2,
-      name: "Beta Raw Materials",
-      email: "beta@suppliers.com",
-      phone: "+92 300 2222222",
-      status: "Active",
-      avatar: logo,
-    },
-    {
-      id: 3,
-      name: "Gamma Industries",
-      email: "gamma@suppliers.com",
-      phone: "+92 300 3333333",
-      status: "On Hold",
-      avatar: logo,
-    },
-  ]);
+  const [suppliers, setSuppliers] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [transactions, setTransactions] = useState([]);
+  const [isTxnLoading, setIsTxnLoading] = useState(false);
 
-  // Demo transactions keyed by supplier id
-  const supplierIdToTransactions = useMemo(
-    () => ({
-      1: [
-        { id: "t-1", date: "2025-08-05", type: "Purchase", amount: "PKR 120,000", status: "Paid" },
-        { id: "t-2", date: "2025-08-18", type: "Purchase", amount: "PKR 80,000", status: "Pending" },
-      ],
-      2: [
-        { id: "t-3", date: "2025-08-11", type: "Refund", amount: "-PKR 10,000", status: "Settled" },
-        { id: "t-4", date: "2025-08-22", type: "Purchase", amount: "PKR 45,000", status: "Paid" },
-      ],
-      3: [
-        { id: "t-5", date: "2025-07-29", type: "Purchase", amount: "PKR 200,000", status: "On Hold" },
-      ],
-    }),
-    []
-  );
+  useEffect(() => {
+    const fetchSuppliers = async () => {
+      setIsLoading(true);
+      try {
+        const token = localStorage.getItem("token");
+        const res = await fetch("http://localhost:8000/api/core/suppliers", {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        });
+        const json = await res.json();
+        if (!res.ok || json.success === false) throw new Error(json.message || "Failed to load suppliers");
+        const mapped = (json.data || []).map((s) => ({
+          id: s.id,
+          name: s.supplier_name,
+          email: s.email,
+          phone: s.phone,
+          status: s.status || "active",
+          avatar: logo,
+        }));
+        setSuppliers(mapped);
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchSuppliers();
+  }, []);
 
   const [selectedSupplier, setSelectedSupplier] = useState(null);
 
@@ -148,21 +143,65 @@ function SupplierManagement() {
     status: "Active",
   });
 
-  const handleViewTransactions = (supplier) => {
+  const handleViewTransactions = async (supplier) => {
     setSelectedSupplier(supplier);
+    setIsTxnLoading(true);
+    setTransactions([]);
     onTxnOpen();
+    try {
+      const token = localStorage.getItem("token");
+      const res = await fetch(`http://localhost:8000/api/core/suppliers/${supplier.id}/transactions`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      });
+      const json = await res.json();
+      if (!res.ok || json.success === false) throw new Error(json.message || "Failed to fetch transactions");
+      const list = json.data?.transactions || json.data || [];
+      setTransactions(list);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsTxnLoading(false);
+    }
   };
 
-  const handleAddSupplier = () => {
+  const handleAddSupplier = async () => {
     if (!newSupplier.name || !newSupplier.email || !newSupplier.phone) return;
-    const created = {
-      id: suppliers.length + 1,
-      ...newSupplier,
-      avatar: logo,
-    };
-    setSuppliers((prev) => [...prev, created]);
-    setNewSupplier({ name: "", email: "", phone: "", status: "Active" });
-    onAddClose();
+    try {
+      const token = localStorage.getItem("token");
+      const payload = {
+        supplier_name: newSupplier.name,
+        email: newSupplier.email,
+        phone: newSupplier.phone,
+        status: (newSupplier.status || "Active").toString().toLowerCase().replace(/\s+/g, "_"),
+      };
+      const res = await fetch("http://localhost:8000/api/core/suppliers", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+      const json = await res.json();
+      if (!res.ok || json.success === false) throw new Error(json.message || "Failed to add supplier");
+      const s = json.data;
+      const created = {
+        id: s.id,
+        name: s.supplier_name,
+        email: s.email,
+        phone: s.phone,
+        status: s.status || payload.status,
+        avatar: logo,
+      };
+      setSuppliers((prev) => [created, ...prev]);
+      setNewSupplier({ name: "", email: "", phone: "", status: "Active" });
+      onAddClose();
+    } catch (e) {
+      console.error(e);
+    }
   };
 
   return (
@@ -195,6 +234,54 @@ function SupplierManagement() {
 
       <Card bg={cardBg} boxShadow={cardShadow}>
         <CardBody>
+          {isLoading ? (
+            <Flex 
+              justify="center" 
+              align="center" 
+              h="400px" 
+              w="100%"
+            >
+              <VStack spacing="16px" textAlign="center">
+                <Spinner
+                  thickness="4px"
+                  speed="0.65s"
+                  emptyColor="gray.200"
+                  color="#FF8D28"
+                  size="xl"
+                />
+              </VStack>
+            </Flex>
+          ) : suppliers.length === 0 ? (
+            <Flex 
+              direction="column" 
+              justify="center" 
+              align="center" 
+              h="400px" 
+              p="40px"
+              w="100%"
+            >
+              <VStack spacing="24px" maxW="400px" textAlign="center">
+                <Text fontSize="2xl" color={textColor} fontWeight="bold">
+                  No Suppliers Added
+                </Text>
+                <Text color="gray.500" fontSize="md" lineHeight="1.6">
+                  Start by adding your first supplier to manage your vendors and purchases.
+                </Text>
+                <Button
+                  leftIcon={<FaPlus />}
+                  colorScheme='teal'
+                  bg='#FF8D28'
+                  color='white'
+                  _hover={{ bg: '#E67E22' }}
+                  size="lg"
+                  px="32px"
+                  py="12px"
+                  onClick={onAddOpen}>
+                  ADD FIRST SUPPLIER
+                </Button>
+              </VStack>
+            </Flex>
+          ) : (
           <Table variant='simple' color={textColor}>
             <Thead>
               <Tr>
@@ -210,6 +297,7 @@ function SupplierManagement() {
               ))}
             </Tbody>
           </Table>
+          )}
         </CardBody>
       </Card>
 
@@ -225,7 +313,10 @@ function SupplierManagement() {
                 <FormLabel fontSize="sm" color="gray.500">Supplier Name</FormLabel>
                 <Input
                   value={newSupplier.name}
-                  onChange={(e) => setNewSupplier((prev) => ({ ...prev, name: e.target.value }))}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setNewSupplier((prev) => ({ ...prev, name: v }));
+                  }}
                   placeholder="Enter supplier name"
                   size="md"
                 />
@@ -235,7 +326,10 @@ function SupplierManagement() {
                 <Input
                   type="email"
                   value={newSupplier.email}
-                  onChange={(e) => setNewSupplier((prev) => ({ ...prev, email: e.target.value }))}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setNewSupplier((prev) => ({ ...prev, email: v }));
+                  }}
                   placeholder="Enter email address"
                   size="md"
                 />
@@ -244,7 +338,10 @@ function SupplierManagement() {
                 <FormLabel fontSize="sm" color="gray.500">Phone</FormLabel>
                 <Input
                   value={newSupplier.phone}
-                  onChange={(e) => setNewSupplier((prev) => ({ ...prev, phone: e.target.value }))}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setNewSupplier((prev) => ({ ...prev, phone: v }));
+                  }}
                   placeholder="Enter phone number"
                   size="md"
                 />
@@ -289,16 +386,32 @@ function SupplierManagement() {
                   </Tr>
                 </Thead>
                 <Tbody>
-                  {(supplierIdToTransactions[selectedSupplier.id] || []).map((t) => (
-                    <Tr key={t.id}>
-                      <Td>{t.date}</Td>
-                      <Td>{t.type}</Td>
-                      <Td isNumeric>{t.amount}</Td>
-                      <Td>
-                        <Badge>{t.status}</Badge>
+                  {isTxnLoading ? (
+                    <Tr>
+                      <Td colSpan={4}>
+                        <Flex align='center' justify='center' py='40px'>
+                          <Spinner />
+                        </Flex>
                       </Td>
                     </Tr>
-                  ))}
+                  ) : transactions.length === 0 ? (
+                    <Tr>
+                      <Td colSpan={4}>
+                        <Text color='gray.400' textAlign='center' py='24px'>No transactions found</Text>
+                      </Td>
+                    </Tr>
+                  ) : (
+                  transactions.map((t) => (
+                    <Tr key={t.id}>
+                      <Td>{t.date || t.created_at || "-"}</Td>
+                      <Td>{t.type || t.transaction_type || "-"}</Td>
+                      <Td isNumeric>{t.amount || t.total_amount || "-"}</Td>
+                      <Td>
+                        <Badge>{t.status || "-"}</Badge>
+                      </Td>
+                    </Tr>
+                  ))
+                  )}
                 </Tbody>
               </Table>
             )}

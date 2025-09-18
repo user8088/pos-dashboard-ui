@@ -7,20 +7,21 @@ import CardHeader from "components/Card/CardHeader.js";
 import React from "react";
 import ReactApexChart from "react-apexcharts";
 
-const MaterialsChart = () => {
+const MaterialsChart = ({ categoryData = [] }) => {
   const textColor = useColorModeValue("gray.700", "white");
   const gridColor = useColorModeValue("#E2E8F0", "#4A5568");
 
-  // Sample data for most produced materials
-  const materialsData = [
-    { material: "Others", production: 65 },
-    { material: "Misc", production: 75 },
-    { material: "Construction Materials", production: 85 },
-    { material: "Electrical Accessories", production: 90 },
-    { material: "Sanitary Materials", production: 95 },
-    { material: "Tools & Hardware", production: 80 },
-    { material: "PVC & Pipes", production: 100 }
-  ];
+  // Process API data for radar chart
+  const getProcessedCategoryData = () => {
+    if (!categoryData || categoryData.length === 0) return [];
+    
+    return categoryData.map(item => ({
+      material: item.category,
+      production: item.percentage || 0
+    }));
+  };
+
+  const materialsData = getProcessedCategoryData();
 
   const series = [
     {
@@ -99,7 +100,10 @@ const MaterialsChart = () => {
     <Card bg={useColorModeValue("white", "gray.700")} boxShadow={useColorModeValue("0 4px 20px rgba(0,0,0,0.06)", "0 4px 20px rgba(0,0,0,0.3)")}>
       <CardHeader>
         <Text fontSize='lg' color={textColor} fontWeight='bold'>
-          Most Produced Materials
+          Material Breakdown
+        </Text>
+        <Text fontSize='sm' color='gray.500'>
+          {materialsData.length > 0 ? 'Production by Category' : 'No Data Available'}
         </Text>
       </CardHeader>
       <CardBody>

@@ -13,7 +13,7 @@ import React from "react";
 import { FaTrash } from "react-icons/fa";
 
 function RawMaterialTableRow(props) {
-  const { logo, name, amountPerUnit, unitCost, totalPurchaseCost, wasteQuantity, lossCost, invoiceLink, status, amountPending, onEdit, onDelete, onWaste } = props;
+  const { logo, name, amountPerUnit, unitCost, totalPurchaseCost, supplierName, wasteQuantity, lossCost, invoiceLink, status, amountPending, onEdit, onDelete, onWaste } = props;
   const textColor = useColorModeValue("gray.700", "white");
 
   // Status color mapping
@@ -82,6 +82,12 @@ function RawMaterialTableRow(props) {
             {invoiceLink}
           </Button>
         </Flex>
+      </Td>
+
+      <Td>
+        <Text fontSize="md" color={textColor} fontWeight="bold">
+          {supplierName || "—"}
+        </Text>
       </Td>
 
       <Td>

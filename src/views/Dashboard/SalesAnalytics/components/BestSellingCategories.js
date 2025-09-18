@@ -11,7 +11,12 @@ import {
   Image,
   Flex,
   Badge,
+  Input,
+  InputGroup,
+  InputLeftElement,
+  VStack,
 } from "@chakra-ui/react";
+import { FaSearch } from "react-icons/fa";
 // Custom components
 import Card from "components/Card/Card.js";
 import CardBody from "components/Card/CardBody.js";
@@ -19,277 +24,90 @@ import CardHeader from "components/Card/CardHeader.js";
 import React from "react";
 import logo from "assets/img/avatars/placeholder.png";
 
-const BestSellingCategories = ({ timePeriod, customDateRange }) => {
+const BestSellingCategories = ({ timePeriod, customDateRange, categoryData }) => {
   const textColor = useColorModeValue("gray.700", "white");
+  const [searchTerm, setSearchTerm] = React.useState("");
 
-  // Dynamic data for best-selling categories based on time period
-  const getCategoriesData = (period) => {
-    const categoriesDataMap = {
-      "Today": [
-        {
-          id: 1,
-          name: "Construction Materials",
-          image: logo,
-          revenue: "PKR.20,000",
-          sales: 195,
-          description: "Building and construction supplies"
-        },
-        {
-          id: 2,
-          name: "Electrical Accessories",
-          image: logo,
-          revenue: "PKR.20,000",
-          sales: 90,
-          description: "Electrical components and tools"
-        },
-        {
-          id: 3,
-          name: "Sanitary Materials",
-          image: logo,
-          revenue: "PKR.20,000",
-          sales: 330,
-          description: "Plumbing and sanitary supplies"
-        },
-        {
-          id: 4,
-          name: "Tools & Hardware",
-          image: logo,
-          revenue: "PKR.20,000",
-          sales: 56,
-          description: "Hand tools and hardware items"
-        },
-        {
-          id: 5,
-          name: "PVC & Pipes",
-          image: logo,
-          revenue: "PKR.20,000",
-          sales: 35,
-          description: "PVC materials and piping systems"
-        }
-      ],
-      "Week": [
-        {
-          id: 1,
-          name: "Construction Materials",
-          image: logo,
-          revenue: "PKR.85,000",
-          sales: 850,
-          description: "Building and construction supplies"
-        },
-        {
-          id: 2,
-          name: "Electrical Accessories",
-          image: logo,
-          revenue: "PKR.65,000",
-          sales: 650,
-          description: "Electrical components and tools"
-        },
-        {
-          id: 3,
-          name: "Sanitary Materials",
-          image: logo,
-          revenue: "PKR.120,000",
-          sales: 1200,
-          description: "Plumbing and sanitary supplies"
-        },
-        {
-          id: 4,
-          name: "Tools & Hardware",
-          image: logo,
-          revenue: "PKR.45,000",
-          sales: 450,
-          description: "Hand tools and hardware items"
-        },
-        {
-          id: 5,
-          name: "PVC & Pipes",
-          image: logo,
-          revenue: "PKR.35,000",
-          sales: 350,
-          description: "PVC materials and piping systems"
-        }
-      ],
-      "Month": [
-        {
-          id: 1,
-          name: "Construction Materials",
-          image: logo,
-          revenue: "PKR.320,000",
-          sales: 3200,
-          description: "Building and construction supplies"
-        },
-        {
-          id: 2,
-          name: "Electrical Accessories",
-          image: logo,
-          revenue: "PKR.280,000",
-          sales: 2800,
-          description: "Electrical components and tools"
-        },
-        {
-          id: 3,
-          name: "Sanitary Materials",
-          image: logo,
-          revenue: "PKR.450,000",
-          sales: 4500,
-          description: "Plumbing and sanitary supplies"
-        },
-        {
-          id: 4,
-          name: "Tools & Hardware",
-          image: logo,
-          revenue: "PKR.180,000",
-          sales: 1800,
-          description: "Hand tools and hardware items"
-        },
-        {
-          id: 5,
-          name: "PVC & Pipes",
-          image: logo,
-          revenue: "PKR.150,000",
-          sales: 1500,
-          description: "PVC materials and piping systems"
-        }
-      ],
-      "Business Season": [
-        {
-          id: 1,
-          name: "Construction Materials",
-          image: logo,
-          revenue: "PKR.850,000",
-          sales: 8500,
-          description: "Building and construction supplies"
-        },
-        {
-          id: 2,
-          name: "Electrical Accessories",
-          image: logo,
-          revenue: "PKR.720,000",
-          sales: 7200,
-          description: "Electrical components and tools"
-        },
-        {
-          id: 3,
-          name: "Sanitary Materials",
-          image: logo,
-          revenue: "PKR.1,200,000",
-          sales: 12000,
-          description: "Plumbing and sanitary supplies"
-        },
-        {
-          id: 4,
-          name: "Tools & Hardware",
-          image: logo,
-          revenue: "PKR.480,000",
-          sales: 4800,
-          description: "Hand tools and hardware items"
-        },
-        {
-          id: 5,
-          name: "PVC & Pipes",
-          image: logo,
-          revenue: "PKR.380,000",
-          sales: 3800,
-          description: "PVC materials and piping systems"
-        }
-      ],
-      "Year": [
-        {
-          id: 1,
-          name: "Construction Materials",
-          image: logo,
-          revenue: "PKR.2,850,000",
-          sales: 28500,
-          description: "Building and construction supplies"
-        },
-        {
-          id: 2,
-          name: "Electrical Accessories",
-          image: logo,
-          revenue: "PKR.2,400,000",
-          sales: 24000,
-          description: "Electrical components and tools"
-        },
-        {
-          id: 3,
-          name: "Sanitary Materials",
-          image: logo,
-          revenue: "PKR.4,200,000",
-          sales: 42000,
-          description: "Plumbing and sanitary supplies"
-        },
-        {
-          id: 4,
-          name: "Tools & Hardware",
-          image: logo,
-          revenue: "PKR.1,800,000",
-          sales: 18000,
-          description: "Hand tools and hardware items"
-        },
-        {
-          id: 5,
-          name: "PVC & Pipes",
-          image: logo,
-          revenue: "PKR.1,500,000",
-          sales: 15000,
-          description: "PVC materials and piping systems"
-        }
-      ],
-      "Custom date": [
-        {
-          id: 1,
-          name: "Construction Materials",
-          image: logo,
-          revenue: "PKR.45,000",
-          sales: 450,
-          description: "Building and construction supplies"
-        },
-        {
-          id: 2,
-          name: "Electrical Accessories",
-          image: logo,
-          revenue: "PKR.38,000",
-          sales: 380,
-          description: "Electrical components and tools"
-        },
-        {
-          id: 3,
-          name: "Sanitary Materials",
-          image: logo,
-          revenue: "PKR.65,000",
-          sales: 650,
-          description: "Plumbing and sanitary supplies"
-        },
-        {
-          id: 4,
-          name: "Tools & Hardware",
-          image: logo,
-          revenue: "PKR.28,000",
-          sales: 280,
-          description: "Hand tools and hardware items"
-        },
-        {
-          id: 5,
-          name: "PVC & Pipes",
-          image: logo,
-          revenue: "PKR.22,000",
-          sales: 220,
-          description: "PVC materials and piping systems"
-        }
-      ]
-    };
-    
-    return categoriesDataMap[period] || categoriesDataMap["Today"];
+  // Format currency helper
+  const formatCurrency = (amount) => {
+    return `PKR. ${Number(amount || 0).toLocaleString()}`;
   };
 
-  const categoriesData = getCategoriesData(timePeriod);
+  // Use API data only - no fallback data
+  const getCategoriesData = () => {
+    if (categoryData && Array.isArray(categoryData) && categoryData.length > 0) {
+      return categoryData.map((item, index) => ({
+        id: index + 1,
+        name: item.category || "Unknown Category",
+        image: logo,
+        revenue: formatCurrency(item.revenue || 0),
+        sales: item.quantity || 0,
+        description: `${item.category || "Unknown"} category products`
+      }));
+    }
+
+    // No fallback - return empty array if no API data
+    return [];
+  };
+
+
+  const categoriesData = getCategoriesData();
+
+  // Filter categories based on search term
+  const filteredCategories = React.useMemo(() => {
+    if (!searchTerm.trim()) return categoriesData;
+    
+    return categoriesData.filter(category =>
+      category.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      category.description.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }, [categoriesData, searchTerm]);
+
+  // Show empty state if no data
+  if (!categoriesData || categoriesData.length === 0) {
+    return (
+      <Card bg={useColorModeValue("white", "gray.700")} boxShadow={useColorModeValue("0 4px 20px rgba(0,0,0,0.06)", "0 4px 20px rgba(0,0,0,0.3)")}>
+        <CardHeader>
+          <Text fontSize='lg' color={textColor} fontWeight='bold'>
+            Best selling categories list
+          </Text>
+        </CardHeader>
+        <CardBody>
+          <Flex h='200px' w='100%' align='center' justify='center' direction='column'>
+            <Text fontSize='md' color='gray.400' textAlign='center'>
+              No category data available
+            </Text>
+          </Flex>
+        </CardBody>
+      </Card>
+    );
+  }
 
   return (
     <Card bg={useColorModeValue("white", "gray.700")} boxShadow={useColorModeValue("0 4px 20px rgba(0,0,0,0.06)", "0 4px 20px rgba(0,0,0,0.3)")}>
       <CardHeader>
-        <Text fontSize='lg' color={textColor} fontWeight='bold'>
-          Best selling categories list
-        </Text>
+        <VStack align='stretch' spacing='16px'>
+          <Text fontSize='lg' color={textColor} fontWeight='bold'>
+            Best selling categories list
+          </Text>
+          <InputGroup>
+            <InputLeftElement pointerEvents='none'>
+              <FaSearch color='gray.400' />
+            </InputLeftElement>
+            <Input
+              placeholder='Search categories...'
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              bg={useColorModeValue("gray.50", "gray.600")}
+              border='1px solid'
+              borderColor={useColorModeValue("gray.200", "gray.600")}
+              _focus={{
+                borderColor: "teal.500",
+                boxShadow: "0 0 0 1px teal.500"
+              }}
+            />
+          </InputGroup>
+        </VStack>
       </CardHeader>
       <CardBody>
         <Table variant='simple' color={textColor}>
@@ -302,7 +120,18 @@ const BestSellingCategories = ({ timePeriod, customDateRange }) => {
             </Tr>
           </Thead>
           <Tbody>
-            {categoriesData.map((category, index) => (
+            {filteredCategories.length === 0 && searchTerm.trim() ? (
+              <Tr>
+                <Td colSpan={4}>
+                  <Flex h='100px' w='100%' align='center' justify='center'>
+                    <Text fontSize='md' color='gray.400' textAlign='center'>
+                      No categories found matching "{searchTerm}"
+                    </Text>
+                  </Flex>
+                </Td>
+              </Tr>
+            ) : (
+              filteredCategories.map((category, index) => (
               <Tr key={category.id}>
                 <Td>
                   <Text fontSize='sm' color={textColor} fontWeight='bold'>
@@ -333,7 +162,8 @@ const BestSellingCategories = ({ timePeriod, customDateRange }) => {
                   </Badge>
                 </Td>
               </Tr>
-            ))}
+              ))
+            )}
           </Tbody>
         </Table>
       </CardBody>

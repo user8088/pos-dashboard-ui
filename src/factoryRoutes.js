@@ -2,7 +2,7 @@
 import FactoryDashboard from "views/Factory/Dashboard";
 import ManufacturingReports from "views/Factory/ManufacturingReports";
 import RawMaterialManagement from "views/Factory/RawMaterialManagement";
-import FactoryExpensesCashflow from "views/Factory/ExpensesCashflow";
+import Billing from "views/Dashboard/Billing";
 import SupplierManagement from "views/Factory/SupplierManagement";
 import Profile from "views/Dashboard/Profile";
 import SignIn from "views/Auth/SignIn.js";
@@ -57,7 +57,7 @@ var factoryRoutes = [
     name: "Expenses & Cashflow",
     rtlName: "المصروفات والتدفق النقدي",
     icon: <CreditIcon color="inherit" />,
-    component: FactoryExpensesCashflow,
+    component: Billing,
     layout: "/factory",
   },
   {

@@ -11,7 +11,12 @@ import {
   Image,
   Flex,
   Badge,
+  Input,
+  InputGroup,
+  InputLeftElement,
+  VStack,
 } from "@chakra-ui/react";
+import { FaSearch } from "react-icons/fa";
 // Custom components
 import Card from "components/Card/Card.js";
 import CardBody from "components/Card/CardBody.js";
@@ -19,277 +24,98 @@ import CardHeader from "components/Card/CardHeader.js";
 import React from "react";
 import logo from "assets/img/avatars/placeholder.png";
 
-const BestProducedMaterials = ({ timePeriod, customDateRange }) => {
+const BestProducedMaterials = ({ timePeriod, customDateRange, data = [] }) => {
   const textColor = useColorModeValue("gray.700", "white");
+  const [searchTerm, setSearchTerm] = React.useState("");
+  const [stockItems, setStockItems] = React.useState([]);
+  const [isLoadingStock, setIsLoadingStock] = React.useState(true);
 
-  // Dynamic data for best-produced materials based on time period
-  const getMaterialsData = (period) => {
-    const materialsDataMap = {
-      "Today": [
-        {
-          id: 1,
-          name: "Copper Wires",
-          image: logo,
-          production: "PKR.30,000",
-          units: 123000,
-          category: "Electrical"
+  // Fetch stock items (produced materials)
+  const fetchStockItems = async () => {
+    try {
+      setIsLoadingStock(true);
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000/api'}/core/stock`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json',
         },
-        {
-          id: 2,
-          name: "Cement Bags",
-          image: logo,
-          production: "PKR.18,000",
-          units: 400,
-          category: "Construction"
-        },
-        {
-          id: 3,
-          name: "Sockets",
-          image: logo,
-          production: "PKR.50,000",
-          units: 7000,
-          category: "Electrical"
-        },
-        {
-          id: 4,
-          name: "Rubber Tapes",
-          image: logo,
-          production: "PKR.20,000",
-          units: 500,
-          category: "Tools"
-        },
-        {
-          id: 5,
-          name: "Nails",
-          image: logo,
-          production: "PKR.10,000",
-          units: 30000,
-          category: "Hardware"
-        }
-      ],
-      "Week": [
-        {
-          id: 1,
-          name: "Copper Wires",
-          image: logo,
-          production: "PKR.210,000",
-          units: 861000,
-          category: "Electrical"
-        },
-        {
-          id: 2,
-          name: "Cement Bags",
-          image: logo,
-          production: "PKR.126,000",
-          units: 2800,
-          category: "Construction"
-        },
-        {
-          id: 3,
-          name: "Sockets",
-          image: logo,
-          production: "PKR.350,000",
-          units: 49000,
-          category: "Electrical"
-        },
-        {
-          id: 4,
-          name: "Rubber Tapes",
-          image: logo,
-          production: "PKR.140,000",
-          units: 3500,
-          category: "Tools"
-        },
-        {
-          id: 5,
-          name: "Nails",
-          image: logo,
-          production: "PKR.70,000",
-          units: 210000,
-          category: "Hardware"
-        }
-      ],
-      "Month": [
-        {
-          id: 1,
-          name: "Copper Wires",
-          image: logo,
-          production: "PKR.900,000",
-          units: 3690000,
-          category: "Electrical"
-        },
-        {
-          id: 2,
-          name: "Cement Bags",
-          image: logo,
-          production: "PKR.540,000",
-          units: 12000,
-          category: "Construction"
-        },
-        {
-          id: 3,
-          name: "Sockets",
-          image: logo,
-          production: "PKR.1,500,000",
-          units: 210000,
-          category: "Electrical"
-        },
-        {
-          id: 4,
-          name: "Rubber Tapes",
-          image: logo,
-          production: "PKR.600,000",
-          units: 15000,
-          category: "Tools"
-        },
-        {
-          id: 5,
-          name: "Nails",
-          image: logo,
-          production: "PKR.300,000",
-          units: 900000,
-          category: "Hardware"
-        }
-      ],
-      "Seasonal": [
-        {
-          id: 1,
-          name: "Copper Wires",
-          image: logo,
-          production: "PKR.30,000",
-          units: 123000,
-          category: "Electrical"
-        },
-        {
-          id: 2,
-          name: "Cement Bags",
-          image: logo,
-          production: "PKR.18,000",
-          units: 400,
-          category: "Construction"
-        },
-        {
-          id: 3,
-          name: "Sockets",
-          image: logo,
-          production: "PKR.50,000",
-          units: 7000,
-          category: "Electrical"
-        },
-        {
-          id: 4,
-          name: "Rubber Tapes",
-          image: logo,
-          production: "PKR.20,000",
-          units: 500,
-          category: "Tools"
-        },
-        {
-          id: 5,
-          name: "Nails",
-          image: logo,
-          production: "PKR.10,000",
-          units: 30000,
-          category: "Hardware"
-        }
-      ],
-      "Year": [
-        {
-          id: 1,
-          name: "Copper Wires",
-          image: logo,
-          production: "PKR.10,800,000",
-          units: 44280000,
-          category: "Electrical"
-        },
-        {
-          id: 2,
-          name: "Cement Bags",
-          image: logo,
-          production: "PKR.6,480,000",
-          units: 144000,
-          category: "Construction"
-        },
-        {
-          id: 3,
-          name: "Sockets",
-          image: logo,
-          production: "PKR.18,000,000",
-          units: 2520000,
-          category: "Electrical"
-        },
-        {
-          id: 4,
-          name: "Rubber Tapes",
-          image: logo,
-          production: "PKR.7,200,000",
-          units: 180000,
-          category: "Tools"
-        },
-        {
-          id: 5,
-          name: "Nails",
-          image: logo,
-          production: "PKR.3,600,000",
-          units: 10800000,
-          category: "Hardware"
-        }
-      ],
-      "Custom date": [
-        {
-          id: 1,
-          name: "Copper Wires",
-          image: logo,
-          production: "PKR.45,000",
-          units: 184500,
-          category: "Electrical"
-        },
-        {
-          id: 2,
-          name: "Cement Bags",
-          image: logo,
-          production: "PKR.27,000",
-          units: 600,
-          category: "Construction"
-        },
-        {
-          id: 3,
-          name: "Sockets",
-          image: logo,
-          production: "PKR.75,000",
-          units: 10500,
-          category: "Electrical"
-        },
-        {
-          id: 4,
-          name: "Rubber Tapes",
-          image: logo,
-          production: "PKR.30,000",
-          units: 750,
-          category: "Tools"
-        },
-        {
-          id: 5,
-          name: "Nails",
-          image: logo,
-          production: "PKR.15,000",
-          units: 45000,
-          category: "Hardware"
-        }
-      ]
-    };
-    
-    return materialsDataMap[period] || materialsDataMap["Seasonal"];
+      });
+
+      if (response.ok) {
+        const stockData = await response.json();
+        setStockItems(stockData);
+      } else {
+        setStockItems([]);
+      }
+    } catch (error) {
+      console.error('Failed to fetch stock items:', error);
+      setStockItems([]);
+    } finally {
+      setIsLoadingStock(false);
+    }
   };
 
-  const materialsData = getMaterialsData(timePeriod);
+  React.useEffect(() => {
+    fetchStockItems();
+  }, []);
+
+  // Process stock items for materials table
+  const getProcessedMaterialsData = () => {
+    if (!stockItems || stockItems.length === 0) return [];
+    
+    return stockItems.map((item, index) => ({
+      id: item.item_id,
+      name: item.item_name,
+      image: logo,
+      production: item.stock_value ? `PKR.${parseFloat(item.stock_value).toLocaleString()}` : 'PKR.0',
+      units: parseFloat(item.quantity_per_unit) || 0,
+      category: item.category?.category_name || 'Uncategorized',
+      unit: item.unit?.unit_name || 'units'
+    }));
+  };
+
+  const materialsData = getProcessedMaterialsData();
+
+  // Filter materials based on search term
+  const filteredMaterials = React.useMemo(() => {
+    if (!searchTerm) return materialsData;
+    return materialsData.filter(material =>
+      material.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      material.category.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      material.unit.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }, [materialsData, searchTerm]);
 
   return (
     <Card bg={useColorModeValue("white", "gray.700")} boxShadow={useColorModeValue("0 4px 20px rgba(0,0,0,0.06)", "0 4px 20px rgba(0,0,0,0.3)")}>
       <CardHeader>
-        <Text fontSize='lg' color={textColor} fontWeight='bold'>
-          Best produced materials list
-        </Text>
+        <VStack spacing="16px" align="stretch">
+          <Flex direction="column">
+            <Text fontSize='lg' color={textColor} fontWeight='bold'>
+              Produced Materials
+            </Text>
+            <Text fontSize='sm' color='gray.500'>
+              {isLoadingStock ? 'Loading...' : materialsData.length > 0 ? `${materialsData.length} items` : 'No data available'}
+            </Text>
+          </Flex>
+          <InputGroup>
+            <InputLeftElement pointerEvents="none">
+              <FaSearch color="gray.300" />
+            </InputLeftElement>
+            <Input
+              placeholder="Search produced materials..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              bg={useColorModeValue("white", "gray.600")}
+              borderColor={useColorModeValue("gray.300", "gray.500")}
+              _focus={{
+                borderColor: "#FF8D28",
+                boxShadow: "0 0 0 1px #FF8D28"
+              }}
+            />
+          </InputGroup>
+        </VStack>
       </CardHeader>
       <CardBody>
         <Table variant='simple' color={textColor}>
@@ -297,43 +123,53 @@ const BestProducedMaterials = ({ timePeriod, customDateRange }) => {
             <Tr>
               <Th color='gray.400' fontSize='sm' fontWeight='semibold'>#</Th>
               <Th color='gray.400' fontSize='sm' fontWeight='semibold'>Materials</Th>
-              <Th color='gray.400' fontSize='sm' fontWeight='semibold'>Production Cost</Th>
-              <Th color='gray.400' fontSize='sm' fontWeight='semibold'>Units</Th>
+              <Th color='gray.400' fontSize='sm' fontWeight='semibold'>Stock Value</Th>
+              <Th color='gray.400' fontSize='sm' fontWeight='semibold'>Quantity</Th>
             </Tr>
           </Thead>
           <Tbody>
-            {materialsData.map((material, index) => (
-              <Tr key={material.id}>
-                <Td>
-                  <Text fontSize='sm' color={textColor} fontWeight='bold'>
-                    {index + 1}
-                  </Text>
-                </Td>
-                <Td>
-                  <Flex align='center' py='.8rem' minWidth='100%' flexWrap='nowrap'>
-                    <Image src={material.image} w='30px' h='30px' me='12px' objectFit='cover' />
-                    <Flex direction='column'>
-                      <Text fontSize='sm' color={textColor} fontWeight='bold' minWidth='100%'>
-                        {material.name}
-                      </Text>
-                      <Text fontSize='xs' color='gray.400' fontWeight='medium'>
-                        {material.category}
-                      </Text>
+            {filteredMaterials.length > 0 ? (
+              filteredMaterials.map((material, index) => (
+                <Tr key={material.id}>
+                  <Td>
+                    <Text fontSize='sm' color={textColor} fontWeight='bold'>
+                      {index + 1}
+                    </Text>
+                  </Td>
+                  <Td>
+                    <Flex align='center' py='.8rem' minWidth='100%' flexWrap='nowrap'>
+                      <Image src={material.image} w='30px' h='30px' me='12px' objectFit='cover' />
+                      <Flex direction='column'>
+                        <Text fontSize='sm' color={textColor} fontWeight='bold' minWidth='100%'>
+                          {material.name}
+                        </Text>
+                        <Text fontSize='xs' color='gray.400' fontWeight='medium'>
+                          {material.category}
+                        </Text>
+                      </Flex>
                     </Flex>
-                  </Flex>
-                </Td>
-                <Td>
-                  <Text fontSize='sm' color={textColor} fontWeight='bold'>
-                    {material.production}
+                  </Td>
+                  <Td>
+                    <Text fontSize='sm' color={textColor} fontWeight='bold'>
+                      {material.production}
+                    </Text>
+                  </Td>
+                  <Td>
+                    <Badge colorScheme='green' fontSize='12px' p='2px 8px' borderRadius='12px'>
+                      {material.units.toLocaleString()} {material.unit}
+                    </Badge>
+                  </Td>
+                </Tr>
+              ))
+            ) : (
+              <Tr>
+                <Td colSpan={4} textAlign="center" py="40px">
+                  <Text color="gray.500" fontSize="sm">
+                    {isLoadingStock ? "Loading materials..." : searchTerm ? "No materials found matching your search" : "No materials available"}
                   </Text>
-                </Td>
-                <Td>
-                  <Badge colorScheme='green' fontSize='12px' p='2px 8px' borderRadius='12px'>
-                    {material.units.toLocaleString()} units
-                  </Badge>
                 </Td>
               </Tr>
-            ))}
+            )}
           </Tbody>
         </Table>
       </CardBody>

@@ -7,113 +7,67 @@ import CardHeader from "components/Card/CardHeader.js";
 import React from "react";
 import ReactApexChart from "react-apexcharts";
 
-const StockValueChart = ({ timePeriod, customDateRange }) => {
+const StockValueChart = ({ timePeriod, customDateRange, chartData = [] }) => {
   const textColor = useColorModeValue("gray.700", "white");
   const gridColor = useColorModeValue("#E2E8F0", "#4A5568");
 
-  // Sample data for different time periods
-  const getChartData = (period) => {
-    switch (period) {
-      case "Today":
-        return [
-          { time: "00:00", stockValue: 3000 },
-          { time: "04:00", stockValue: 5500 },
-          { time: "08:00", stockValue: 4800 },
-          { time: "12:00", stockValue: 8500 },
-          { time: "16:00", stockValue: 12200 },
-          { time: "20:00", stockValue: 18000 },
-          { time: "24:00", stockValue: 15000 }
-        ];
-      case "Week":
-        return [
-          { day: "Mon", stockValue: 25000 },
-          { day: "Tue", stockValue: 32000 },
-          { day: "Wed", stockValue: 28000 },
-          { day: "Thu", stockValue: 35000 },
-          { day: "Fri", stockValue: 42000 },
-          { day: "Sat", stockValue: 38000 },
-          { day: "Sun", stockValue: 45000 }
-        ];
-      case "Month":
-        return [
-          { week: "Week 1", stockValue: 125000 },
-          { week: "Week 2", stockValue: 142000 },
-          { week: "Week 3", stockValue: 118000 },
-          { week: "Week 4", stockValue: 165000 }
-        ];
-      case "Seasonal":
-        return [
-          { month: "Mar", stockValue: 550000 },
-          { month: "Apr", stockValue: 580000 },
-          { month: "May", stockValue: 620000 },
-          { month: "Jun", stockValue: 650000 },
-          { month: "Jul", stockValue: 680000 },
-          { month: "Aug", stockValue: 720000 },
-          { month: "Sep", stockValue: 690000 },
-          { month: "Oct", stockValue: 660000 }
-        ];
-      case "Year":
-        return [
-          { month: "Jan", stockValue: 480000 },
-          { month: "Feb", stockValue: 520000 },
-          { month: "Mar", stockValue: 550000 },
-          { month: "Apr", stockValue: 580000 },
-          { month: "May", stockValue: 620000 },
-          { month: "Jun", stockValue: 650000 },
-          { month: "Jul", stockValue: 680000 },
-          { month: "Aug", stockValue: 720000 },
-          { month: "Sep", stockValue: 690000 },
-          { month: "Oct", stockValue: 660000 },
-          { month: "Nov", stockValue: 630000 },
-          { month: "Dec", stockValue: 700000 }
-        ];
-      case "Custom date":
-        if (customDateRange?.startDate && customDateRange?.endDate) {
-          // Calculate days between start and end date
-          const start = new Date(customDateRange.startDate);
-          const end = new Date(customDateRange.endDate);
-          const daysDiff = Math.ceil((end - start) / (1000 * 60 * 60 * 24));
-          
-          // Generate daily data for the custom range
-          const customData = [];
-          for (let i = 0; i <= daysDiff; i++) {
-            const currentDate = new Date(start);
-            currentDate.setDate(start.getDate() + i);
-            const dateStr = currentDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-            const stockValue = Math.floor(Math.random() * 80000) + 30000; // Random stock value between 30K-110K
-            customData.push({ date: dateStr, stockValue });
-          }
-          return customData;
-        }
-        return [
-          { time: "00:00", stockValue: 3000 },
-          { time: "04:00", stockValue: 5500 },
-          { time: "08:00", stockValue: 4800 },
-          { time: "12:00", stockValue: 8500 },
-          { time: "16:00", stockValue: 12200 },
-          { time: "20:00", stockValue: 18000 },
-          { time: "24:00", stockValue: 15000 }
-        ];
-      default:
-        return [
-          { time: "00:00", stockValue: 3000 },
-          { time: "04:00", stockValue: 5500 },
-          { time: "08:00", stockValue: 4800 },
-          { time: "12:00", stockValue: 8500 },
-          { time: "16:00", stockValue: 12200 },
-          { time: "20:00", stockValue: 18000 },
-          { time: "24:00", stockValue: 15000 }
-        ];
+  // Process API data for chart
+  const getProcessedChartData = () => {
+    if (!chartData || chartData.length === 0) return [];
+    
+    // For today period, chartData is hourly (0-23)
+    if (timePeriod === "Today") {
+      return chartData.map((value, index) => ({
+        time: `${index.toString().padStart(2, '0')}:00`,
+        stockValue: value
+      }));
     }
+    
+    // For other periods, chartData represents daily/monthly values
+    const labels = [];
+    if (timePeriod === "Week") {
+      const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+      labels.push(...days.slice(0, chartData.length));
+    } else if (timePeriod === "Month") {
+      const weeks = ['Week 1', 'Week 2', 'Week 3', 'Week 4'];
+      labels.push(...weeks.slice(0, chartData.length));
+    } else if (timePeriod === "Seasonal") {
+      const months = ['Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct'];
+      labels.push(...months.slice(0, chartData.length));
+    } else if (timePeriod === "Year") {
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      labels.push(...months.slice(0, chartData.length));
+    } else if (timePeriod === "Custom date") {
+      // Generate date labels for custom range
+      if (customDateRange?.startDate && customDateRange?.endDate) {
+        const start = new Date(customDateRange.startDate);
+        const end = new Date(customDateRange.endDate);
+        const daysDiff = Math.ceil((end - start) / (1000 * 60 * 60 * 24));
+        for (let i = 0; i <= daysDiff && i < chartData.length; i++) {
+          const currentDate = new Date(start);
+          currentDate.setDate(start.getDate() + i);
+          labels.push(currentDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }));
+        }
+      }
+    }
+    
+    return chartData.map((value, index) => ({
+      [timePeriod === "Today" ? "time" : 
+        timePeriod === "Week" ? "day" : 
+        timePeriod === "Month" ? "week" : 
+        timePeriod === "Seasonal" ? "month" : 
+        timePeriod === "Custom date" ? "date" : "month"]: labels[index] || `Point ${index + 1}`,
+      stockValue: value
+    }));
   };
 
-  const chartData = getChartData(timePeriod);
+  const processedData = getProcessedChartData();
   const xAxisKey = timePeriod === "Today" ? "time" : timePeriod === "Week" ? "day" : timePeriod === "Month" ? "week" : timePeriod === "Seasonal" ? "month" : timePeriod === "Custom date" ? "date" : "month";
 
   const series = [
     {
-      name: "Stock Value",
-      data: chartData.map(item => item.stockValue)
+      name: "Production Trend",
+      data: processedData.map(item => item.stockValue)
     }
   ];
 
@@ -154,7 +108,7 @@ const StockValueChart = ({ timePeriod, customDateRange }) => {
       width: 3
     },
     xaxis: {
-      categories: chartData.map(item => item[xAxisKey]),
+      categories: processedData.map(item => item[xAxisKey]),
       labels: {
         style: {
           colors: textColor,
@@ -218,10 +172,10 @@ const StockValueChart = ({ timePeriod, customDateRange }) => {
     <Card bg={useColorModeValue("white", "gray.700")} boxShadow={useColorModeValue("0 4px 20px rgba(0,0,0,0.06)", "0 4px 20px rgba(0,0,0,0.3)")}>
       <CardHeader>
         <Text fontSize='lg' color={textColor} fontWeight='bold'>
-          Stock Value Trend
+          Production Trend
         </Text>
         <Text fontSize='sm' color='gray.500'>
-          March 15 - October 21
+          {timePeriod} - {processedData.length > 0 ? 'Live Data' : 'No Data Available'}
         </Text>
       </CardHeader>
       <CardBody>

@@ -28,6 +28,7 @@ import CardBody from "components/Card/CardBody.js";
 import CardHeader from "components/Card/CardHeader.js";
 import React from "react";
 import { FaDownload, FaArrowUp, FaArrowDown } from "react-icons/fa";
+import { useToast, Spinner, Center } from "@chakra-ui/react";
 import RevenueChart from "./components/RevenueChart";
 import CategoriesChart from "./components/CategoriesChart";
 import BestSellingProducts from "./components/BestSellingProducts";
@@ -37,13 +38,135 @@ function SalesAnalytics() {
   const textColor = useColorModeValue("gray.700", "white");
   const cardBg = useColorModeValue("white", "gray.700");
   const cardShadow = useColorModeValue("0 4px 20px rgba(0,0,0,0.06)", "0 4px 20px rgba(0,0,0,0.3)");
-  const [timePeriod, setTimePeriod] = React.useState("Today");
+  const toast = useToast();
+  
+  // State management
+  const [timePeriod, setTimePeriod] = React.useState("today");
   const [compareMode, setCompareMode] = React.useState(false);
   const [customDateRange, setCustomDateRange] = React.useState({
     startDate: "",
     endDate: ""
   });
   const [showCustomDatePicker, setShowCustomDatePicker] = React.useState(false);
+  
+  // API data state
+  const [dashboardData, setDashboardData] = React.useState(null);
+  const [isLoading, setIsLoading] = React.useState(true);
+  const [error, setError] = React.useState(null);
+
+  // Fetch dashboard data from API
+  const fetchDashboardData = React.useCallback(async (period = "today", params = {}) => {
+    setIsLoading(true);
+    setError(null);
+    
+    try {
+      const token = localStorage.getItem('token');
+      const queryParams = new URLSearchParams({ period, ...params });
+      
+      const response = await fetch(`http://localhost:8000/api/core/analytics/dashboard?${queryParams}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      if (result.success) {
+        setDashboardData(result.data);
+      } else {
+        throw new Error(result.message || 'Failed to fetch analytics data');
+      }
+    } catch (error) {
+      console.error('Error fetching dashboard data:', error);
+      setError(error.message);
+      toast({
+        title: "Error",
+        description: "Failed to fetch analytics data",
+        status: "error",
+        duration: 3000,
+        isClosable: true,
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  }, [toast]);
+
+  // Export analytics data
+  const exportAnalytics = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const params = {
+        period: timePeriod === "Custom date" ? "business_season" : timePeriod,
+        format: "json"
+      };
+
+      if (timePeriod === "Custom date" && customDateRange.startDate && customDateRange.endDate) {
+        params.start_date = customDateRange.startDate;
+        params.end_date = customDateRange.endDate;
+      }
+      
+      const response = await fetch('http://localhost:8000/api/core/analytics/export', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(params)
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      if (result.success) {
+        // Create and download JSON file
+        const dataStr = JSON.stringify(result.data, null, 2);
+        const dataBlob = new Blob([dataStr], {type: 'application/json'});
+        const url = URL.createObjectURL(dataBlob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `analytics_${timePeriod}_${new Date().toISOString().split('T')[0]}.json`;
+        link.click();
+        URL.revokeObjectURL(url);
+
+        toast({
+          title: "Success",
+          description: "Analytics data exported successfully",
+          status: "success",
+          duration: 3000,
+          isClosable: true,
+        });
+      }
+    } catch (error) {
+      console.error('Error exporting analytics:', error);
+      toast({
+        title: "Error",
+        description: "Failed to export analytics data",
+        status: "error",
+        duration: 3000,
+        isClosable: true,
+      });
+    }
+  };
+
+  // Fetch data when component mounts or period changes
+  React.useEffect(() => {
+    const params = {};
+    
+    if (timePeriod === "Custom date" && customDateRange.startDate && customDateRange.endDate) {
+      params.start_date = customDateRange.startDate;
+      params.end_date = customDateRange.endDate;
+      fetchDashboardData("business_season", params);
+    } else {
+      fetchDashboardData(timePeriod);
+    }
+  }, [timePeriod, customDateRange, fetchDashboardData]);
 
   // Calculate custom date range duration
   const getCustomDateDuration = () => {
@@ -56,213 +179,112 @@ function SalesAnalytics() {
     return 0;
   };
 
-  // Dynamic KPI Data based on time period
-  const getKpiData = (period) => {
-    const kpiDataMap = {
-      "Today": [
-        {
-          title: "Gross revenue",
-          value: "PKR. 120,000",
-          change: "11%",
-          changeType: "increase",
-          period: "From yesterday"
-        },
-        {
-          title: "Avg. order value",
-          value: "PKR. 20,000",
-          change: "2%",
-          changeType: "increase",
-          period: "From yesterday"
-        },
-        {
-          title: "Conversion rate",
-          value: "3%",
-          change: "4%",
-          changeType: "increase",
-          period: "From yesterday"
-        },
-        {
-          title: "Customers",
-          value: "80",
-          change: "2",
-          changeType: "decrease",
-          period: "From yesterday"
-        }
-      ],
-      "Week": [
-        {
-          title: "Gross revenue",
-          value: "PKR. 850,000",
-          change: "18%",
-          changeType: "increase",
-          period: "From last week"
-        },
-        {
-          title: "Avg. order value",
-          value: "PKR. 25,000",
-          change: "8%",
-          changeType: "increase",
-          period: "From last week"
-        },
-        {
-          title: "Conversion rate",
-          value: "4.2%",
-          change: "12%",
-          changeType: "increase",
-          period: "From last week"
-        },
-        {
-          title: "Customers",
-          value: "340",
-          change: "45",
-          changeType: "increase",
-          period: "From last week"
-        }
-      ],
-      "Month": [
-        {
-          title: "Gross revenue",
-          value: "PKR. 3,200,000",
-          change: "25%",
-          changeType: "increase",
-          period: "From last month"
-        },
-        {
-          title: "Avg. order value",
-          value: "PKR. 28,000",
-          change: "15%",
-          changeType: "increase",
-          period: "From last month"
-        },
-        {
-          title: "Conversion rate",
-          value: "5.1%",
-          change: "18%",
-          changeType: "increase",
-          period: "From last month"
-        },
-        {
-          title: "Customers",
-          value: "1,140",
-          change: "180",
-          changeType: "increase",
-          period: "From last month"
-        }
-      ],
-      "Business Season": [
-        {
-          title: "Gross revenue",
-          value: "PKR. 8,500,000",
-          change: "32%",
-          changeType: "increase",
-          period: "From last business season (Mar-Jan)"
-        },
-        {
-          title: "Avg. order value",
-          value: "PKR. 32,000",
-          change: "22%",
-          changeType: "increase",
-          period: "From last business season (Mar-Jan)"
-        },
-        {
-          title: "Conversion rate",
-          value: "6.2%",
-          change: "24%",
-          changeType: "increase",
-          period: "From last business season (Mar-Jan)"
-        },
-        {
-          title: "Customers",
-          value: "2,650",
-          change: "420",
-          changeType: "increase",
-          period: "From last business season (Mar-Jan)"
-        }
-      ],
-      "Year": [
-        {
-          title: "Gross revenue",
-          value: "PKR. 28,500,000",
-          change: "45%",
-          changeType: "increase",
-          period: "From last year"
-        },
-        {
-          title: "Avg. order value",
-          value: "PKR. 35,000",
-          change: "28%",
-          changeType: "increase",
-          period: "From last year"
-        },
-        {
-          title: "Conversion rate",
-          value: "7.8%",
-          change: "35%",
-          changeType: "increase",
-          period: "From last year"
-        },
-        {
-          title: "Customers",
-          value: "8,140",
-          change: "1,200",
-          changeType: "increase",
-          period: "From last year"
-        }
-      ],
-      "Custom date": [
-        {
-          title: "Gross revenue",
-          value: customDateRange.startDate && customDateRange.endDate 
-            ? `PKR. ${(getCustomDateDuration() * 15000).toLocaleString()}`
-            : "PKR. 450,000",
-          change: "15%",
-          changeType: "increase",
-          period: customDateRange.startDate && customDateRange.endDate 
-            ? `From ${customDateRange.startDate} to ${customDateRange.endDate}`
-            : "From selected period"
-        },
-        {
-          title: "Avg. order value",
-          value: customDateRange.startDate && customDateRange.endDate 
-            ? `PKR. ${(15000 + Math.floor(Math.random() * 10000)).toLocaleString()}`
-            : "PKR. 22,000",
-          change: "5%",
-          changeType: "increase",
-          period: customDateRange.startDate && customDateRange.endDate 
-            ? `From ${customDateRange.startDate} to ${customDateRange.endDate}`
-            : "From selected period"
-        },
-        {
-          title: "Conversion rate",
-          value: customDateRange.startDate && customDateRange.endDate 
-            ? `${(3.5 + Math.random() * 2).toFixed(1)}%`
-            : "3.8%",
-          change: "8%",
-          changeType: "increase",
-          period: customDateRange.startDate && customDateRange.endDate 
-            ? `From ${customDateRange.startDate} to ${customDateRange.endDate}`
-            : "From selected period"
-        },
-        {
-          title: "Customers",
-          value: customDateRange.startDate && customDateRange.endDate 
-            ? (getCustomDateDuration() * 6).toString()
-            : "180",
-          change: "25",
-          changeType: "increase",
-          period: customDateRange.startDate && customDateRange.endDate 
-            ? `From ${customDateRange.startDate} to ${customDateRange.endDate}`
-            : "From selected period"
-        }
-      ]
-    };
-    
-    return kpiDataMap[period] || kpiDataMap["Today"];
+  // Format currency helper
+  const formatCurrency = (amount) => {
+    return `PKR. ${Number(amount || 0).toLocaleString()}`;
   };
 
-  const kpiData = getKpiData(timePeriod);
+  // Dynamic KPI Data based on API response or fallback
+  const getKpiData = () => {
+    if (!dashboardData || !dashboardData.kpis) {
+      // Fallback data while loading or on error
+      return [
+        {
+          title: "Gross revenue",
+          value: "PKR. 0",
+          change: "0%",
+          changeType: "increase",
+          period: "Loading..."
+        },
+        {
+          title: "Avg. order value",
+          value: "PKR. 0",
+          change: "0%",
+          changeType: "increase",
+          period: "Loading..."
+        },
+        {
+          title: "Conversion rate",
+          value: "0%",
+          change: "0%",
+          changeType: "increase",
+          period: "Loading..."
+        },
+        {
+          title: "Customers",
+          value: "0",
+          change: "0",
+          changeType: "increase",
+          period: "Loading..."
+        }
+      ];
+    }
 
-  const timePeriods = ["Today", "Week", "Month", "Business Season", "Year", "Custom date"];
+    const kpis = dashboardData.kpis;
+    const periodInfo = dashboardData.period_info;
+    const periodLabel = getPeriodLabel();
+
+    return [
+      {
+        title: "Gross revenue",
+        value: formatCurrency(kpis.gross_revenue?.value || 0),
+        change: `${kpis.gross_revenue?.change || 0}%`,
+        changeType: kpis.gross_revenue?.change_type || "increase",
+        period: `From ${periodLabel}`
+      },
+      {
+        title: "Avg. order value",
+        value: formatCurrency(kpis.avg_order_value?.value || 0),
+        change: `${kpis.avg_order_value?.change || 0}%`,
+        changeType: kpis.avg_order_value?.change_type || "increase",
+        period: `From ${periodLabel}`
+      },
+      {
+        title: "Conversion rate",
+        value: `${kpis.conversion_rate?.value || 0}%`,
+        change: `${kpis.conversion_rate?.change || 0}%`,
+        changeType: kpis.conversion_rate?.change_type || "increase",
+        period: `From ${periodLabel}`
+      },
+      {
+        title: "Customers",
+        value: `${kpis.customers?.value || 0}`,
+        change: `${kpis.customers?.change || 0}`,
+        changeType: kpis.customers?.change_type || "increase",
+        period: `From ${periodLabel}`
+      }
+    ];
+  };
+
+  // Get period label for comparison text
+  const getPeriodLabel = () => {
+    switch(timePeriod) {
+      case "today": return "yesterday";
+      case "week": return "last week";
+      case "month": return "last month";
+      case "year": return "last year";
+      case "business_season": return "last business season";
+      case "Custom date": return "previous period";
+      default: return "previous period";
+    }
+  };
+
+  const kpiData = getKpiData();
+
+  const timePeriods = ["today", "week", "month", "business_season", "year", "Custom date"];
+
+  // Map display names to API values
+  const getDisplayTimePeriod = (period) => {
+    const displayMap = {
+      "today": "Today",
+      "week": "Week", 
+      "month": "Month",
+      "business_season": "Business Season",
+      "year": "Year",
+      "Custom date": "Custom date"
+    };
+    return displayMap[period] || period;
+  };
 
   // Handle custom date selection
   const handleCustomDateSelect = () => {
@@ -281,6 +303,17 @@ function SalesAnalytics() {
       setShowCustomDatePicker(false);
     }
   };
+
+  // Show loading spinner if data is loading
+  if (isLoading) {
+    return (
+      <Flex direction='column' pt={{ base: "120px", md: "75px" }}>
+        <Center h="400px">
+          <Spinner size="xl" color="teal.500" />
+        </Center>
+      </Flex>
+    );
+  }
 
   return (
     <Flex direction='column' pt={{ base: "120px", md: "75px" }}>
@@ -317,7 +350,7 @@ function SalesAnalytics() {
                     bg: timePeriod === period ? '#E67E22' : 'rgba(255, 141, 40, 0.1)'
                   }}
                   onClick={() => handleTimePeriodChange(period)}>
-                  {period}
+                  {getDisplayTimePeriod(period)}
                 </Button>
               ))}
             </HStack>
@@ -406,7 +439,8 @@ function SalesAnalytics() {
                 borderColor='#FF8D28'
                 color='#FF8D28'
                 variant='outline'
-                size='sm'>
+                size='sm'
+                onClick={exportAnalytics}>
                 Export
               </Button>
             </HStack>
@@ -429,7 +463,7 @@ function SalesAnalytics() {
             borderRadius='full'
             fontSize='sm'
             fontWeight='bold'>
-            {timePeriod}
+            {getDisplayTimePeriod(timePeriod)}
           </Badge>
         </Flex>
       </Box>
@@ -485,8 +519,14 @@ function SalesAnalytics() {
         }}
         gap='24px'
         mb='24px'>
-        <RevenueChart timePeriod={timePeriod} customDateRange={customDateRange} />
-        <CategoriesChart />
+        <RevenueChart 
+          timePeriod={timePeriod} 
+          customDateRange={customDateRange}
+          chartData={dashboardData?.charts?.revenue_trend}
+        />
+        <CategoriesChart 
+          categoryData={dashboardData?.charts?.category_breakdown}
+        />
       </Grid>
 
       {/* Data Tables Section */}
@@ -496,8 +536,16 @@ function SalesAnalytics() {
           lg: "1fr 1fr",
         }}
         gap='24px'>
-        <BestSellingProducts timePeriod={timePeriod} customDateRange={customDateRange} />
-        <BestSellingCategories timePeriod={timePeriod} customDateRange={customDateRange} />
+        <BestSellingProducts 
+          timePeriod={timePeriod} 
+          customDateRange={customDateRange}
+          productsData={dashboardData?.best_selling_products}
+        />
+        <BestSellingCategories 
+          timePeriod={timePeriod} 
+          customDateRange={customDateRange}
+          categoryData={dashboardData?.charts?.category_breakdown}
+        />
       </Grid>
     </Flex>
   );

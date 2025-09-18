@@ -465,6 +465,7 @@ Content-Type: application/json
 - amount_pending (optional, number, min:0)
 - waste_quantity (optional, number, min:0, default: 0)
 - total_waste_cost (optional, number, min:0, default: 0)
+- supplier_id (optional, exists: suppliers.id)
 
 Computation behavior:
 - If unit_purchase_cost is provided and purchase_cost is omitted, the API computes purchase_cost = unit_purchase_cost × amount_per_unit.
@@ -480,14 +481,17 @@ Computation behavior:
   "status": "pending",
   "amount_pending": 2.50,
   "waste_quantity": 0,
-  "total_waste_cost": 0
+  "total_waste_cost": 0,
+  "supplier_id": 1
 }
 ```
 Notes:
 - **unit_purchase_cost (optional)**: If provided, the API will compute `purchase_cost = unit_purchase_cost × amount_per_unit` and persist both values.
 - If `unit_purchase_cost` is omitted, the provided `purchase_cost` is used as‑is.
 
-**Response (201):** Raw material JSON.
+**Response (201):** Raw material JSON with supplier relationship.
+
+**Note:** When `supplier_id` is provided, the supplier's order statistics are automatically updated with the purchase cost and order count.
 
 #### 11.2 Get Raw Materials
 **GET** `/core/raw-material`
@@ -513,6 +517,7 @@ Editable Fields & Rules:
 - amount_pending (number, min:0)
 - waste_quantity (number, min:0)
 - total_waste_cost (number, min:0)
+- supplier_id (exists: suppliers.id|null)
 
 Computation behavior:
 - If unit_purchase_cost and/or amount_per_unit change, and purchase_cost is NOT provided, the API computes purchase_cost = unit_purchase_cost × amount_per_unit (using the new or existing unit cost if available).
@@ -529,9 +534,12 @@ Content-Type: application/json
 {
   "amount_per_unit": 12.00,
   "unit_purchase_cost": 1.25,
-  "status": "delivered"
+  "status": "delivered",
+  "supplier_id": 2
 }
 ```
+
+**Note:** When `supplier_id` is changed or `purchase_cost` is updated, the supplier statistics are automatically recalculated. The old supplier's statistics are decremented and the new supplier's statistics are incremented accordingly.
 Notes:
 - You can also directly set `waste_quantity` and `total_waste_cost` if needed.
 - Prefer the waste endpoint (11.5) for operational waste events as it adjusts quantities and calculates loss while keeping `purchase_cost` unchanged.
@@ -546,7 +554,35 @@ Delete a raw material.
 Authorization: Bearer {token}
 ```
 
-#### 11.5 Record Raw Material Waste
+#### 11.5 Get Suppliers for Raw Material Dropdown
+**GET** `/core/raw-material/suppliers`
+
+Get all active suppliers for dropdown selection in raw material forms.
+
+**Headers:**
+```
+Authorization: Bearer {token}
+```
+
+**Response (200):**
+```json
+[
+    {
+        "id": 1,
+        "supplier_name": "ABC Materials Ltd",
+        "status": "active"
+    },
+    {
+        "id": 2,
+        "supplier_name": "Premium Materials Co",
+        "status": "active"
+    }
+]
+```
+
+---
+
+#### 11.6 Record Raw Material Waste
 **POST** `/core/raw-material/{id}/waste`
 
 Record a quantity of the raw material that goes to waste. This reduces `amount_per_unit`, increases `waste_quantity`, recalculates `purchase_cost` for the remaining amount, and updates `total_waste_cost`.
@@ -1917,6 +1953,2175 @@ curl -X POST http://localhost:8000/api/core/unit \
 4. **Relationships**: Stock items are linked to Units via foreign keys, and optionally to Categories
 5. **Decimal Precision**: Quantity fields use decimal(10,2) for precise calculations
 
+---
+
+## Sales Analytics Endpoints
+
+The Sales Analytics system provides comprehensive analytics for stock management with KPIs, charts, and period-based reporting. It computes sales statistics for today, week, month, year, and custom business seasons.
+
+### 40. Get Dashboard Data (Comprehensive)
+**GET** `/core/analytics/dashboard`
+
+Get comprehensive dashboard data including KPIs and chart data for the specified period.
+
+**Headers:**
+```
+Authorization: Bearer {token}
+```
+
+**Query Parameters:**
+- `period` (optional): `today`, `week`, `month`, `year`, `business_season` (default: `today`)
+- `start_date` (optional): Start date for week/business_season periods
+- `end_date` (optional): End date for business_season periods
+- `year` (optional): Year for year/month periods
+- `month` (optional): Month for month periods
+
+**Response (200):**
+```json
+{
+    "success": true,
+    "data": {
+        "kpis": {
+            "gross_revenue": {
+                "value": 120000,
+                "change": 11,
+                "change_type": "increase"
+            },
+            "avg_order_value": {
+                "value": 20000,
+                "change": 2,
+                "change_type": "increase"
+            },
+            "conversion_rate": {
+                "value": 3,
+                "change": 4,
+                "change_type": "increase"
+            },
+            "customers": {
+                "value": 80,
+                "change": -2,
+                "change_type": "decrease"
+            }
+        },
+        "charts": {
+            "revenue_trend": [2000, 1800, 2200, 4000, 6000, 8000, 10000, 9500, 8000, 6000, 4000, 2000],
+            "category_breakdown": [
+                {
+                    "category": "Construction Materials",
+                    "revenue": 45000,
+                    "quantity": 150,
+                    "percentage": 37.5
+                },
+                {
+                    "category": "PVC & Pipes",
+                    "revenue": 38000,
+                    "quantity": 120,
+                    "percentage": 31.7
+                }
+            ]
+        },
+        "best_selling_products": [
+            {
+                "rank": 1,
+                "product_id": 1,
+                "product_name": "Electric Drill",
+                "category": "Tools & Hardware",
+                "total_sales": 195,
+                "total_revenue": 20000.00,
+                "transaction_count": 45
+            },
+            {
+                "rank": 2,
+                "product_id": 2,
+                "product_name": "Electric Ranch",
+                "category": "Electrical Accessories",
+                "total_sales": 90,
+                "total_revenue": 20000.00,
+                "transaction_count": 30
+            },
+            {
+                "rank": 3,
+                "product_id": 3,
+                "product_name": "Rubber Hammer",
+                "category": "Tools & Hardware",
+                "total_sales": 330,
+                "total_revenue": 20000.00,
+                "transaction_count": 25
+            }
+        ],
+        "period": "today",
+        "period_info": {
+            "start": "2025-09-18T00:00:00.000000Z",
+            "end": "2025-09-18T23:59:59.000000Z"
+        }
+    }
+}
+```
+
+---
+
+### 41. Get Today's Analytics
+**GET** `/core/analytics/today`
+
+Get analytics for today with comparison to yesterday.
+
+**Headers:**
+```
+Authorization: Bearer {token}
+```
+
+**Response (200):**
+```json
+{
+    "success": true,
+    "data": {
+        "period_start": "2025-09-18T00:00:00.000000Z",
+        "period_end": "2025-09-18T23:59:59.000000Z",
+        "gross_revenue": 120000,
+        "avg_order_value": 20000,
+        "conversion_rate": 3,
+        "total_customers": 80,
+        "total_orders": 6,
+        "total_quantity_sold": 250,
+        "category_breakdown": [...],
+        "hourly_revenue": [2000, 1800, 2200, ...],
+        "gross_revenue_change": 11,
+        "avg_order_value_change": 2,
+        "conversion_rate_change": 4,
+        "customer_count_change": -2
+    },
+    "period": "today"
+}
+```
+
+---
+
+### 42. Get Week Analytics
+**GET** `/core/analytics/week`
+
+Get analytics for a specific week.
+
+**Headers:**
+```
+Authorization: Bearer {token}
+```
+
+**Query Parameters:**
+- `start_date` (optional): Week start date (default: current week start)
+
+**Response (200):**
+```json
+{
+    "success": true,
+    "data": {
+        "period_start": "2025-09-16T00:00:00.000000Z",
+        "period_end": "2025-09-22T23:59:59.000000Z",
+        "gross_revenue": 850000,
+        "avg_order_value": 18000,
+        "conversion_rate": 2.8,
+        "total_customers": 450,
+        "total_orders": 47,
+        "total_quantity_sold": 1850,
+        "category_breakdown": [...]
+    },
+    "period": "week"
+}
+```
+
+---
+
+### 43. Get Month Analytics
+**GET** `/core/analytics/month`
+
+Get analytics for a specific month.
+
+**Headers:**
+```
+Authorization: Bearer {token}
+```
+
+**Query Parameters:**
+- `year` (optional): Year (default: current year)
+- `month` (optional): Month 1-12 (default: current month)
+
+**Response (200):**
+```json
+{
+    "success": true,
+    "data": {
+        "period_start": "2025-09-01T00:00:00.000000Z",
+        "period_end": "2025-09-30T23:59:59.000000Z",
+        "gross_revenue": 3200000,
+        "avg_order_value": 19500,
+        "conversion_rate": 3.2,
+        "total_customers": 1650,
+        "total_orders": 164,
+        "total_quantity_sold": 7200,
+        "category_breakdown": [...]
+    },
+    "period": "month"
+}
+```
+
+---
+
+### 44. Get Year Analytics
+**GET** `/core/analytics/year`
+
+Get analytics for a specific year.
+
+**Headers:**
+```
+Authorization: Bearer {token}
+```
+
+**Query Parameters:**
+- `year` (optional): Year (default: current year)
+
+**Response (200):**
+```json
+{
+    "success": true,
+    "data": {
+        "period_start": "2025-01-01T00:00:00.000000Z",
+        "period_end": "2025-12-31T23:59:59.000000Z",
+        "gross_revenue": 38500000,
+        "avg_order_value": 21000,
+        "conversion_rate": 3.5,
+        "total_customers": 18500,
+        "total_orders": 1833,
+        "total_quantity_sold": 85000,
+        "category_breakdown": [...]
+    },
+    "period": "year"
+}
+```
+
+---
+
+### 45. Get Business Season Analytics
+**GET** `/core/analytics/business-season`
+
+Get analytics for a custom business season (date range).
+
+**Headers:**
+```
+Authorization: Bearer {token}
+```
+
+**Query Parameters:**
+- `start_date` (required): Start date (YYYY-MM-DD)
+- `end_date` (required): End date (YYYY-MM-DD, must be after start_date)
+
+**Response (200):**
+```json
+{
+    "success": true,
+    "data": {
+        "period_start": "2025-06-01T00:00:00.000000Z",
+        "period_end": "2025-08-31T23:59:59.000000Z",
+        "gross_revenue": 12500000,
+        "avg_order_value": 22000,
+        "conversion_rate": 3.8,
+        "total_customers": 5680,
+        "total_orders": 568,
+        "total_quantity_sold": 28500,
+        "category_breakdown": [...]
+    },
+    "period": "business_season"
+}
+```
+
+**Validation Errors (422):**
+```json
+{
+    "success": false,
+    "message": "The end date must be a date after start date."
+}
+```
+
+---
+
+### 46. Get Revenue Trend
+**GET** `/core/analytics/revenue-trend`
+
+Get revenue trend data for charts based on the specified period.
+
+**Headers:**
+```
+Authorization: Bearer {token}
+```
+
+**Query Parameters:**
+- `period` (optional): `today`, `week`, `month`, `year`, `business_season` (default: `today`)
+- `start_date` (optional): Start date for week/business_season periods
+- `end_date` (optional): End date for business_season periods
+
+**Response (200):**
+```json
+{
+    "success": true,
+    "data": {
+        "0": 2000,
+        "1": 1800,
+        "2": 2200,
+        "3": 4000,
+        "4": 6000,
+        "5": 8000,
+        "6": 10000,
+        "7": 9500,
+        "8": 8000,
+        "9": 6000,
+        "10": 4000,
+        "11": 2000
+    },
+    "period": "today"
+}
+```
+
+**Note:** For `today` period, returns hourly data (0-23). For other periods, returns daily/monthly/quarterly data.
+
+---
+
+### 47. Save Analytics
+**POST** `/core/analytics/save`
+
+Save computed analytics to database for caching purposes.
+
+**Headers:**
+```
+Authorization: Bearer {token}
+Content-Type: application/json
+```
+
+**Request Body:**
+```json
+{
+    "period_type": "today",
+    "analytics_data": {
+        "period_start": "2025-09-18T00:00:00.000000Z",
+        "period_end": "2025-09-18T23:59:59.000000Z",
+        "gross_revenue": 120000,
+        "avg_order_value": 20000,
+        "conversion_rate": 3,
+        "total_customers": 80,
+        "total_orders": 6,
+        "total_quantity_sold": 250,
+        "category_breakdown": [...],
+        "hourly_revenue": [...]
+    }
+}
+```
+
+**Response (200):**
+```json
+{
+    "success": true,
+    "data": {
+        "id": 1,
+        "period_type": "today",
+        "period_start": "2025-09-18T00:00:00.000000Z",
+        "period_end": "2025-09-18T23:59:59.000000Z",
+        "gross_revenue": "120000.00",
+        "avg_order_value": "20000.00",
+        "conversion_rate": "3.00",
+        "total_customers": 80,
+        "total_orders": 6,
+        "total_quantity_sold": "250.00",
+        "category_breakdown": {...},
+        "hourly_revenue": {...},
+        "created_at": "2025-09-18T10:00:00.000000Z",
+        "updated_at": "2025-09-18T10:00:00.000000Z"
+    },
+    "message": "Analytics saved successfully"
+}
+```
+
+---
+
+### 48. Get Cached Analytics
+**GET** `/core/analytics/cached`
+
+Retrieve cached analytics from database.
+
+**Headers:**
+```
+Authorization: Bearer {token}
+```
+
+**Query Parameters:**
+- `period_type` (optional): `today`, `week`, `month`, `year`, `business_season` (default: `today`)
+- `start_date` (optional): Start date filter
+- `end_date` (optional): End date filter
+
+**Response (200):**
+```json
+{
+    "success": true,
+    "data": [
+        {
+            "id": 1,
+            "period_type": "today",
+            "period_start": "2025-09-18T00:00:00.000000Z",
+            "period_end": "2025-09-18T23:59:59.000000Z",
+            "gross_revenue": "120000.00",
+            "avg_order_value": "20000.00",
+            "conversion_rate": "3.00",
+            "total_customers": 80,
+            "total_orders": 6,
+            "total_quantity_sold": "250.00",
+            "category_breakdown": {...},
+            "hourly_revenue": {...},
+            "created_at": "2025-09-18T10:00:00.000000Z",
+            "updated_at": "2025-09-18T10:00:00.000000Z"
+        }
+    ]
+}
+```
+
+---
+
+### 49. Get Best Selling Products Today
+**GET** `/core/analytics/best-selling-products/today`
+
+Get the best selling products for today.
+
+**Headers:**
+```
+Authorization: Bearer {token}
+```
+
+**Query Parameters:**
+- `limit` (optional): Number of products to return (default: 10, max: 50)
+
+**Response (200):**
+```json
+{
+    "success": true,
+    "data": [
+        {
+            "rank": 1,
+            "product_id": 1,
+            "product_name": "Electric Drill",
+            "category": "Tools & Hardware",
+            "total_sales": 195,
+            "total_revenue": 20000.00,
+            "transaction_count": 45
+        },
+        {
+            "rank": 2,
+            "product_id": 2,
+            "product_name": "Electric Ranch",
+            "category": "Electrical Accessories",
+            "total_sales": 90,
+            "total_revenue": 20000.00,
+            "transaction_count": 30
+        },
+        {
+            "rank": 3,
+            "product_id": 3,
+            "product_name": "Rubber Hammer",
+            "category": "Tools & Hardware",
+            "total_sales": 330,
+            "total_revenue": 20000.00,
+            "transaction_count": 25
+        },
+        {
+            "rank": 4,
+            "product_id": 4,
+            "product_name": "Electric Multi Tool",
+            "category": "Electrical Accessories",
+            "total_sales": 56,
+            "total_revenue": 20000.00,
+            "transaction_count": 15
+        },
+        {
+            "rank": 5,
+            "product_id": 5,
+            "product_name": "Steel Hammer",
+            "category": "Tools & Hardware",
+            "total_sales": 35,
+            "total_revenue": 20000.00,
+            "transaction_count": 10
+        }
+    ],
+    "period": "today"
+}
+```
+
+---
+
+### 50. Get Best Selling Products for Period
+**GET** `/core/analytics/best-selling-products`
+
+Get the best selling products for a specific period.
+
+**Headers:**
+```
+Authorization: Bearer {token}
+```
+
+**Query Parameters:**
+- `period` (optional): `today`, `week`, `month`, `year`, `business_season` (default: `today`)
+- `start_date` (optional): Start date for week/business_season periods
+- `end_date` (optional): End date for business_season periods
+- `year` (optional): Year for year/month periods
+- `month` (optional): Month for month periods
+- `limit` (optional): Number of products to return (default: 10, max: 50)
+
+**Response (200):**
+```json
+{
+    "success": true,
+    "data": [
+        {
+            "rank": 1,
+            "product_id": 1,
+            "product_name": "Electric Drill",
+            "category": "Tools & Hardware",
+            "total_sales": 195,
+            "total_revenue": 20000.00,
+            "transaction_count": 45
+        }
+    ],
+    "period": "today"
+}
+```
+
+---
+
+### 51. Export Analytics
+**POST** `/core/analytics/export`
+
+Export analytics data in various formats.
+
+**Headers:**
+```
+Authorization: Bearer {token}
+Content-Type: application/json
+```
+
+**Request Body:**
+```json
+{
+    "period": "today",
+    "format": "json",
+    "start_date": "2025-09-18",
+    "end_date": "2025-09-18"
+}
+```
+
+**Response (200):**
+```json
+{
+    "success": true,
+    "data": {
+        "period_start": "2025-09-18T00:00:00.000000Z",
+        "period_end": "2025-09-18T23:59:59.000000Z",
+        "gross_revenue": 120000,
+        "avg_order_value": 20000,
+        "conversion_rate": 3,
+        "total_customers": 80,
+        "total_orders": 6,
+        "total_quantity_sold": 250,
+        "category_breakdown": [...],
+        "hourly_revenue": [...]
+    },
+    "format": "json",
+    "exported_at": "2025-09-18T10:00:00.000000Z"
+}
+```
+
+---
+
+## Sales Analytics Data Models
+
+### SalesAnalytics Model
+```json
+{
+    "id": "integer",
+    "period_type": "enum (today|week|month|year|business_season)",
+    "period_start": "timestamp",
+    "period_end": "timestamp",
+    "gross_revenue": "decimal(15,2)",
+    "avg_order_value": "decimal(15,2)",
+    "conversion_rate": "decimal(5,2)",
+    "total_customers": "integer",
+    "total_orders": "integer",
+    "total_quantity_sold": "decimal(15,2)",
+    "category_breakdown": "json",
+    "hourly_revenue": "json",
+    "created_at": "timestamp",
+    "updated_at": "timestamp"
+}
+```
+
+### Category Breakdown Structure
+```json
+{
+    "category": "string (category name)",
+    "revenue": "decimal (total revenue for this category)",
+    "quantity": "decimal (total quantity sold for this category)",
+    "percentage": "decimal (percentage of total revenue)"
+}
+```
+
+### Hourly Revenue Structure (for today analytics)
+```json
+{
+    "0": "decimal (revenue for hour 0)",
+    "1": "decimal (revenue for hour 1)",
+    "2": "decimal (revenue for hour 2)",
+    ...
+    "23": "decimal (revenue for hour 23)"
+}
+```
+
+---
+
+## Sales Analytics Usage Examples
+
+### Frontend Integration Example (JavaScript)
+
+```javascript
+// Get dashboard data for today
+const getDashboardData = async (period = 'today', params = {}) => {
+    const token = localStorage.getItem('token');
+    const queryParams = new URLSearchParams({ period, ...params });
+    
+    const response = await fetch(`/api/core/analytics/dashboard?${queryParams}`, {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+        }
+    });
+    
+    return response.json();
+};
+
+// Get specific period analytics
+const getAnalytics = async (period, params = {}) => {
+    const token = localStorage.getItem('token');
+    const queryParams = new URLSearchParams(params);
+    
+    const response = await fetch(`/api/core/analytics/${period}?${queryParams}`, {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+        }
+    });
+    
+    return response.json();
+};
+
+// Export analytics data
+const exportAnalytics = async (period, format = 'json', params = {}) => {
+    const token = localStorage.getItem('token');
+    
+    const response = await fetch('/api/core/analytics/export', {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ period, format, ...params })
+    });
+    
+    return response.json();
+};
+
+// Get best selling products
+const getBestSellingProducts = async (period = 'today', params = {}) => {
+    const token = localStorage.getItem('token');
+    const queryParams = new URLSearchParams({ period, ...params });
+    
+    const response = await fetch(`/api/core/analytics/best-selling-products?${queryParams}`, {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+        }
+    });
+    
+    return response.json();
+};
+
+// Usage examples
+const todayData = await getDashboardData('today');
+const weekData = await getAnalytics('week', { start_date: '2025-09-16' });
+const monthData = await getAnalytics('month', { year: 2025, month: 9 });
+const seasonData = await getAnalytics('business-season', { 
+    start_date: '2025-06-01', 
+    end_date: '2025-08-31' 
+});
+
+// Best selling products examples
+const todayProducts = await getBestSellingProducts('today', { limit: 5 });
+const weekProducts = await getBestSellingProducts('week', { start_date: '2025-09-16', limit: 10 });
+const monthProducts = await getBestSellingProducts('month', { year: 2025, month: 9, limit: 15 });
+```
+
+### cURL Examples
+
+```bash
+# Get today's dashboard data
+curl -X GET "http://localhost:8000/api/core/analytics/dashboard?period=today" \
+  -H "Authorization: Bearer YOUR_TOKEN_HERE"
+
+# Get week analytics
+curl -X GET "http://localhost:8000/api/core/analytics/week?start_date=2025-09-16" \
+  -H "Authorization: Bearer YOUR_TOKEN_HERE"
+
+# Get business season analytics
+curl -X GET "http://localhost:8000/api/core/analytics/business-season?start_date=2025-06-01&end_date=2025-08-31" \
+  -H "Authorization: Bearer YOUR_TOKEN_HERE"
+
+# Get revenue trend for today
+curl -X GET "http://localhost:8000/api/core/analytics/revenue-trend?period=today" \
+  -H "Authorization: Bearer YOUR_TOKEN_HERE"
+
+# Export analytics data
+curl -X POST "http://localhost:8000/api/core/analytics/export" \
+  -H "Authorization: Bearer YOUR_TOKEN_HERE" \
+  -H "Content-Type: application/json" \
+  -d '{"period":"today","format":"json"}'
+
+# Get best selling products for today
+curl -X GET "http://localhost:8000/api/core/analytics/best-selling-products/today?limit=5" \
+  -H "Authorization: Bearer YOUR_TOKEN_HERE"
+
+# Get best selling products for a specific period
+curl -X GET "http://localhost:8000/api/core/analytics/best-selling-products?period=week&start_date=2025-09-16&limit=10" \
+  -H "Authorization: Bearer YOUR_TOKEN_HERE"
+```
+
+---
+
+## Supplier Management Endpoints
+
+The Supplier Management system allows you to manage raw material suppliers, track their order history, and monitor supplier statistics.
+
+### 52. Get All Suppliers
+**GET** `/core/suppliers`
+
+Retrieve all suppliers with their order statistics and status information.
+
+**Headers:**
+```
+Authorization: Bearer {token}
+```
+
+**Response (200):**
+```json
+{
+    "success": true,
+    "data": [
+        {
+            "id": 1,
+            "supplier_name": "ABC Materials Ltd",
+            "email": "contact@abcmaterials.com",
+            "phone": "+92-300-1234567",
+            "status": "active",
+            "status_badge": "green",
+            "address": "123 Industrial Area, Karachi, Pakistan",
+            "notes": "Primary supplier for construction materials",
+            "total_orders": 150000.00,
+            "total_spent": 125000.00,
+            "order_count": 45,
+            "created_at": "2025-09-18T10:00:00.000000Z",
+            "updated_at": "2025-09-18T10:00:00.000000Z",
+            "raw_material_orders_count": 45
+        },
+        {
+            "id": 2,
+            "supplier_name": "Steel Works Corp",
+            "email": "orders@steelworks.pk",
+            "phone": "+92-321-9876543",
+            "status": "on_hold",
+            "status_badge": "orange",
+            "address": "456 Steel Mill Road, Lahore, Pakistan",
+            "notes": "Temporarily suspended due to quality issues",
+            "total_orders": 75000.00,
+            "total_spent": 65000.00,
+            "order_count": 23,
+            "created_at": "2025-09-15T08:30:00.000000Z",
+            "updated_at": "2025-09-17T14:20:00.000000Z",
+            "raw_material_orders_count": 23
+        }
+    ]
+}
+```
+
+---
+
+### 53. Add New Supplier
+**POST** `/core/suppliers`
+
+Create a new supplier in the system.
+
+**Headers:**
+```
+Authorization: Bearer {token}
+Content-Type: application/json
+```
+
+**Request Body:**
+```json
+{
+    "supplier_name": "Premium Materials Co",
+    "email": "info@premiummaterials.com",
+    "phone": "+92-333-5555555",
+    "address": "789 Business District, Islamabad, Pakistan",
+    "notes": "High-quality materials supplier",
+    "status": "active"
+}
+```
+
+**Validation Rules:**
+- `supplier_name`: required, string, max:255
+- `email`: required, email, unique
+- `phone`: required, string, max:20
+- `address`: optional, string
+- `notes`: optional, string
+- `status`: optional, enum: `active|inactive|on_hold` (default: `active`)
+
+**Response (201):**
+```json
+{
+    "success": true,
+    "data": {
+        "id": 3,
+        "supplier_name": "Premium Materials Co",
+        "email": "info@premiummaterials.com",
+        "phone": "+92-333-5555555",
+        "status": "active",
+        "address": "789 Business District, Islamabad, Pakistan",
+        "notes": "High-quality materials supplier",
+        "total_orders": "0.00",
+        "total_spent": "0.00",
+        "order_count": 0,
+        "created_at": "2025-09-18T11:00:00.000000Z",
+        "updated_at": "2025-09-18T11:00:00.000000Z"
+    },
+    "message": "Supplier added successfully"
+}
+```
+
+**Validation Errors (422):**
+```json
+{
+    "success": false,
+    "message": "The given data was invalid.",
+    "errors": {
+        "email": ["The email has already been taken."],
+        "supplier_name": ["The supplier name field is required."]
+    }
+}
+```
+
+---
+
+### 54. Update Supplier
+**PUT** `/core/suppliers/{id}`
+
+Update an existing supplier's information.
+
+**Headers:**
+```
+Authorization: Bearer {token}
+Content-Type: application/json
+```
+
+**Request Body:**
+```json
+{
+    "supplier_name": "Premium Materials Co (Updated)",
+    "email": "newemail@premiummaterials.com",
+    "phone": "+92-333-6666666",
+    "address": "Updated Business District, Islamabad, Pakistan",
+    "notes": "Updated supplier notes",
+    "status": "active"
+}
+```
+
+**Response (200):**
+```json
+{
+    "success": true,
+    "data": {
+        "id": 3,
+        "supplier_name": "Premium Materials Co (Updated)",
+        "email": "newemail@premiummaterials.com",
+        "phone": "+92-333-6666666",
+        "status": "active",
+        "address": "Updated Business District, Islamabad, Pakistan",
+        "notes": "Updated supplier notes",
+        "total_orders": "0.00",
+        "total_spent": "0.00",
+        "order_count": 0,
+        "created_at": "2025-09-18T11:00:00.000000Z",
+        "updated_at": "2025-09-18T11:30:00.000000Z"
+    },
+    "message": "Supplier updated successfully"
+}
+```
+
+---
+
+### 55. Delete Supplier
+**DELETE** `/core/suppliers/{id}`
+
+Delete a supplier from the system.
+
+**Headers:**
+```
+Authorization: Bearer {token}
+```
+
+**Response (200):**
+```json
+{
+    "success": true,
+    "message": "Supplier deleted successfully"
+}
+```
+
+**Error (422) - Supplier has orders:**
+```json
+{
+    "success": false,
+    "message": "Cannot delete supplier with existing raw material orders. Please reassign or delete the orders first."
+}
+```
+
+---
+
+### 56. Get Supplier Transaction History
+**GET** `/core/suppliers/{id}/transactions`
+
+Get all raw material orders and transaction history for a specific supplier.
+
+**Headers:**
+```
+Authorization: Bearer {token}
+```
+
+**Response (200):**
+```json
+{
+    "success": true,
+    "data": {
+        "supplier": {
+            "id": 1,
+            "supplier_name": "ABC Materials Ltd",
+            "email": "contact@abcmaterials.com",
+            "phone": "+92-300-1234567",
+            "status": "active"
+        },
+        "transactions": [
+            {
+                "id": 1,
+                "date": "Sep 18, 2025",
+                "type": "Steel Rods",
+                "amount": 15000.00,
+                "status": "Delivered",
+                "material_name": "Steel Rods",
+                "amount_per_unit": "100.00",
+                "unit_purchase_cost": "150.00",
+                "purchase_cost": "15000.00",
+                "waste_quantity": "5.00",
+                "total_waste_cost": "750.00",
+                "created_at": "2025-09-18T09:00:00.000000Z",
+                "updated_at": "2025-09-18T09:00:00.000000Z"
+            },
+            {
+                "id": 2,
+                "date": "Sep 17, 2025",
+                "type": "Cement Bags",
+                "amount": 40000.00,
+                "status": "Pending",
+                "material_name": "Cement Bags",
+                "amount_per_unit": "50.00",
+                "unit_purchase_cost": "800.00",
+                "purchase_cost": "40000.00",
+                "waste_quantity": "0.00",
+                "total_waste_cost": "0.00",
+                "created_at": "2025-09-17T14:30:00.000000Z",
+                "updated_at": "2025-09-17T14:30:00.000000Z"
+            }
+        ],
+        "summary": {
+            "total_transactions": 2,
+            "total_spent": 55000.00,
+            "total_orders": 55000.00,
+            "order_count": 2
+        }
+    }
+}
+```
+
+---
+
+### 57. Get Supplier Statistics
+**GET** `/core/suppliers/stats`
+
+Get overall supplier statistics and summary information.
+
+**Headers:**
+```
+Authorization: Bearer {token}
+```
+
+**Response (200):**
+```json
+{
+    "success": true,
+    "data": {
+        "total_suppliers": 15,
+        "active_suppliers": 12,
+        "inactive_suppliers": 2,
+        "on_hold_suppliers": 1,
+        "total_spent": 2500000.00,
+        "total_orders": 2200000.00,
+        "average_order_value": 1250.00
+    }
+}
+```
+
+---
+
+## Manufacturing Analytics Endpoints
+
+The Manufacturing Analytics system provides comprehensive production analytics with KPIs, material breakdowns, and production trends for manufacturing operations.
+
+### 58. Get Manufacturing Dashboard Data
+**GET** `/core/manufacturing/dashboard`
+
+Get comprehensive manufacturing dashboard data including KPIs and production charts.
+
+**Headers:**
+```
+Authorization: Bearer {token}
+```
+
+**Query Parameters:**
+- `period` (optional): `today`, `week`, `month`, `year`, `business_season` (default: `today`)
+- `start_date` (optional): Start date for week/business_season periods
+- `end_date` (optional): End date for business_season periods
+- `year` (optional): Year for year/month periods
+- `month` (optional): Month for month periods
+
+**Response (200):**
+```json
+{
+    "success": true,
+    "data": {
+        "kpis": {
+            "gross_production_revenue": {
+                "value": 725000,
+                "change": 20,
+                "change_type": "increase"
+            },
+            "avg_stock_value": {
+                "value": 120000,
+                "change": 44,
+                "change_type": "increase"
+            },
+            "stock_conversion_rate": {
+                "value": 40,
+                "change": 12,
+                "change_type": "increase"
+            },
+            "suppliers": {
+                "value": 3000,
+                "change": 1200,
+                "change_type": "increase"
+            }
+        },
+        "charts": {
+            "production_trend": [10000, 12000, 15000, 18000, 22000, 25000, 28000, 30000, 32000, 30000, 28000, 25000],
+            "material_breakdown": [
+                {
+                    "category": "Construction Materials",
+                    "production_value": 450000,
+                    "quantity_produced": 1500,
+                    "percentage": 62.1
+                },
+                {
+                    "category": "Electrical Components",
+                    "production_value": 200000,
+                    "quantity_produced": 800,
+                    "percentage": 27.6
+                },
+                {
+                    "category": "Tools & Hardware",
+                    "production_value": 75000,
+                    "quantity_produced": 300,
+                    "percentage": 10.3
+                }
+            ]
+        },
+        "period": "today",
+        "period_info": {
+            "start": "2025-09-18T00:00:00.000000Z",
+            "end": "2025-09-18T23:59:59.000000Z"
+        }
+    }
+}
+```
+
+---
+
+### 59. Get Today's Manufacturing Analytics
+**GET** `/core/manufacturing/today`
+
+Get manufacturing analytics for today with comparison to yesterday.
+
+**Headers:**
+```
+Authorization: Bearer {token}
+```
+
+**Response (200):**
+```json
+{
+    "success": true,
+    "data": {
+        "period_start": "2025-09-18T00:00:00.000000Z",
+        "period_end": "2025-09-18T23:59:59.000000Z",
+        "gross_production_revenue": 725000,
+        "avg_stock_value": 120000,
+        "stock_conversion_rate": 40,
+        "total_suppliers": 15,
+        "total_materials_produced": 2500,
+        "total_quantity_produced": 1800,
+        "material_breakdown": [
+            {
+                "category": "Construction Materials",
+                "production_value": 450000,
+                "quantity_produced": 1500,
+                "percentage": 62.1
+            }
+        ],
+        "monthly_production_trend": {},
+        "gross_production_revenue_change": 20,
+        "avg_stock_value_change": 44,
+        "stock_conversion_rate_change": 12,
+        "supplier_count_change": 2
+    }
+}
+```
+
+---
+
+### 60. Get Week Manufacturing Analytics
+**GET** `/core/manufacturing/week`
+
+Get manufacturing analytics for a specific week.
+
+**Headers:**
+```
+Authorization: Bearer {token}
+```
+
+**Query Parameters:**
+- `start_date` (optional): Week start date (default: current week start)
+
+**Response (200):**
+```json
+{
+    "success": true,
+    "data": {
+        "period_start": "2025-09-16T00:00:00.000000Z",
+        "period_end": "2025-09-22T23:59:59.000000Z",
+        "gross_production_revenue": 4500000,
+        "avg_stock_value": 180000,
+        "stock_conversion_rate": 35,
+        "total_suppliers": 18,
+        "total_materials_produced": 15000,
+        "total_quantity_produced": 12000,
+        "material_breakdown": [...],
+        "monthly_production_trend": {
+            "9": 4500000
+        }
+    }
+}
+```
+
+---
+
+### 61. Get Month Manufacturing Analytics
+**GET** `/core/manufacturing/month`
+
+Get manufacturing analytics for a specific month.
+
+**Headers:**
+```
+Authorization: Bearer {token}
+```
+
+**Query Parameters:**
+- `year` (optional): Year (default: current year)
+- `month` (optional): Month 1-12 (default: current month)
+
+**Response (200):**
+```json
+{
+    "success": true,
+    "data": {
+        "period_start": "2025-09-01T00:00:00.000000Z",
+        "period_end": "2025-09-30T23:59:59.000000Z",
+        "gross_production_revenue": 18500000,
+        "avg_stock_value": 250000,
+        "stock_conversion_rate": 42,
+        "total_suppliers": 25,
+        "total_materials_produced": 65000,
+        "total_quantity_produced": 55000,
+        "material_breakdown": [...],
+        "monthly_production_trend": {
+            "9": 18500000
+        }
+    }
+}
+```
+
+---
+
+### 62. Get Year Manufacturing Analytics
+**GET** `/core/manufacturing/year`
+
+Get manufacturing analytics for a specific year.
+
+**Headers:**
+```
+Authorization: Bearer {token}
+```
+
+**Query Parameters:**
+- `year` (optional): Year (default: current year)
+
+**Response (200):**
+```json
+{
+    "success": true,
+    "data": {
+        "period_start": "2025-01-01T00:00:00.000000Z",
+        "period_end": "2025-12-31T23:59:59.000000Z",
+        "gross_production_revenue": 225000000,
+        "avg_stock_value": 350000,
+        "stock_conversion_rate": 38,
+        "total_suppliers": 45,
+        "total_materials_produced": 750000,
+        "total_quantity_produced": 650000,
+        "material_breakdown": [...],
+        "monthly_production_trend": {
+            "1": 18000000,
+            "2": 19500000,
+            "3": 21000000,
+            "4": 22500000,
+            "5": 24000000,
+            "6": 25500000,
+            "7": 27000000,
+            "8": 28500000,
+            "9": 30000000
+        }
+    }
+}
+```
+
+---
+
+### 63. Get Business Season Manufacturing Analytics
+**GET** `/core/manufacturing/business-season`
+
+Get manufacturing analytics for a custom business season (date range).
+
+**Headers:**
+```
+Authorization: Bearer {token}
+```
+
+**Query Parameters:**
+- `start_date` (required): Start date (YYYY-MM-DD)
+- `end_date` (required): End date (YYYY-MM-DD, must be after start_date)
+
+**Response (200):**
+```json
+{
+    "success": true,
+    "data": {
+        "period_start": "2025-06-01T00:00:00.000000Z",
+        "period_end": "2025-08-31T23:59:59.000000Z",
+        "gross_production_revenue": 75000000,
+        "avg_stock_value": 300000,
+        "stock_conversion_rate": 45,
+        "total_suppliers": 35,
+        "total_materials_produced": 250000,
+        "total_quantity_produced": 200000,
+        "material_breakdown": [...],
+        "monthly_production_trend": {
+            "6": 25000000,
+            "7": 25000000,
+            "8": 25000000
+        }
+    }
+}
+```
+
+---
+
+### 64. Get Production Trend
+**GET** `/core/manufacturing/production-trend`
+
+Get production trend data for charts based on the specified period.
+
+**Headers:**
+```
+Authorization: Bearer {token}
+```
+
+**Query Parameters:**
+- `period` (optional): `today`, `week`, `month`, `year`, `business_season` (default: `today`)
+- `start_date` (optional): Start date for week/business_season periods
+- `end_date` (optional): End date for business_season periods
+
+**Response (200):**
+```json
+{
+    "success": true,
+    "data": {
+        "0": 5000,
+        "1": 7500,
+        "2": 10000,
+        "3": 12500,
+        "4": 15000,
+        "5": 17500,
+        "6": 20000,
+        "7": 22000,
+        "8": 25000,
+        "9": 28000,
+        "10": 30000,
+        "11": 32000,
+        "12": 35000,
+        "13": 38000,
+        "14": 40000,
+        "15": 42000,
+        "16": 45000,
+        "17": 48000,
+        "18": 50000,
+        "19": 52000,
+        "20": 55000,
+        "21": 58000,
+        "22": 60000,
+        "23": 62000
+    },
+    "period": "today"
+}
+```
+
+**Note:** For `today` period, returns hourly data (0-23). For other periods, returns daily/monthly/quarterly data.
+
+---
+
+## Manufacturing Analytics Data Models
+
+### ManufacturingAnalytics Model
+```json
+{
+    "id": "integer",
+    "period_type": "enum (today|week|month|year|business_season)",
+    "period_start": "timestamp",
+    "period_end": "timestamp",
+    "gross_production_revenue": "decimal(15,2)",
+    "avg_stock_value": "decimal(15,2)",
+    "stock_conversion_rate": "decimal(5,2)",
+    "total_suppliers": "integer",
+    "total_materials_produced": "decimal(15,2)",
+    "total_quantity_produced": "decimal(15,2)",
+    "material_breakdown": "json",
+    "monthly_production_trend": "json",
+    "created_at": "timestamp",
+    "updated_at": "timestamp"
+}
+```
+
+### Supplier Model
+```json
+{
+    "id": "integer",
+    "supplier_name": "string",
+    "email": "string (email)",
+    "phone": "string",
+    "status": "enum (active|inactive|on_hold)",
+    "address": "string|null",
+    "notes": "string|null",
+    "total_orders": "decimal(15,2)",
+    "total_spent": "decimal(15,2)",
+    "order_count": "integer",
+    "created_at": "timestamp",
+    "updated_at": "timestamp"
+}
+```
+
+### Material Breakdown Structure
+```json
+{
+    "category": "string (category name)",
+    "production_value": "decimal (total production value for this category)",
+    "quantity_produced": "decimal (total quantity produced for this category)",
+    "percentage": "decimal (percentage of total production value)"
+}
+```
+
+---
+
+## Manufacturing Analytics Usage Examples
+
+### Frontend Integration Example (JavaScript)
+
+```javascript
+// Get manufacturing dashboard data
+const getManufacturingDashboard = async (period = 'today', params = {}) => {
+    const token = localStorage.getItem('token');
+    const queryParams = new URLSearchParams({ period, ...params });
+    
+    const response = await fetch(`/api/core/manufacturing/dashboard?${queryParams}`, {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+        }
+    });
+    
+    return response.json();
+};
+
+// Get supplier management data
+const getSuppliers = async () => {
+    const token = localStorage.getItem('token');
+    const response = await fetch('/api/core/suppliers', {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+        }
+    });
+    
+    return response.json();
+};
+
+// Add new supplier
+const addSupplier = async (supplierData) => {
+    const token = localStorage.getItem('token');
+    const response = await fetch('/api/core/suppliers', {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(supplierData)
+    });
+    
+    return response.json();
+};
+
+// Get supplier transaction history
+const getSupplierTransactions = async (supplierId) => {
+    const token = localStorage.getItem('token');
+    const response = await fetch(`/api/core/suppliers/${supplierId}/transactions`, {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+        }
+    });
+    
+    return response.json();
+};
+
+// Get suppliers for raw material dropdown
+const getSuppliersForRawMaterial = async () => {
+    const token = localStorage.getItem('token');
+    const response = await fetch('/api/core/raw-material/suppliers', {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+        }
+    });
+    
+    return response.json();
+};
+
+// Add raw material with supplier
+const addRawMaterialWithSupplier = async (rawMaterialData) => {
+    const token = localStorage.getItem('token');
+    const response = await fetch('/api/core/raw-material', {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(rawMaterialData)
+    });
+    
+    return response.json();
+};
+
+// Update raw material supplier
+const updateRawMaterialSupplier = async (rawMaterialId, supplierData) => {
+    const token = localStorage.getItem('token');
+    const response = await fetch(`/api/core/raw-material/${rawMaterialId}`, {
+        method: 'PUT',
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(supplierData)
+    });
+    
+    return response.json();
+};
+
+// Usage examples
+const todayManufacturing = await getManufacturingDashboard('today');
+const weekManufacturing = await getManufacturingDashboard('week', { start_date: '2025-09-16' });
+const monthManufacturing = await getManufacturingDashboard('month', { year: 2025, month: 9 });
+const seasonManufacturing = await getManufacturingDashboard('business-season', { 
+    start_date: '2025-06-01', 
+    end_date: '2025-08-31' 
+});
+
+const suppliers = await getSuppliers();
+const supplierTransactions = await getSupplierTransactions(1);
+
+// Raw material with supplier examples
+const suppliersForDropdown = await getSuppliersForRawMaterial();
+const rawMaterialWithSupplier = await addRawMaterialWithSupplier({
+    material_name: "Steel Rods",
+    amount_per_unit: 100.00,
+    unit_purchase_cost: 150.00,
+    status: "delivered",
+    supplier_id: 1
+});
+const updatedSupplier = await updateRawMaterialSupplier(1, {
+    supplier_id: 2,
+    purchase_cost: 18000.00
+});
+```
+
+### cURL Examples
+
+```bash
+# Get manufacturing dashboard for today
+curl -X GET "http://localhost:8000/api/core/manufacturing/dashboard?period=today" \
+  -H "Authorization: Bearer YOUR_TOKEN_HERE"
+
+# Get manufacturing analytics for a specific week
+curl -X GET "http://localhost:8000/api/core/manufacturing/week?start_date=2025-09-16" \
+  -H "Authorization: Bearer YOUR_TOKEN_HERE"
+
+# Get all suppliers
+curl -X GET "http://localhost:8000/api/core/suppliers" \
+  -H "Authorization: Bearer YOUR_TOKEN_HERE"
+
+# Add new supplier
+curl -X POST "http://localhost:8000/api/core/suppliers" \
+  -H "Authorization: Bearer YOUR_TOKEN_HERE" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "supplier_name": "Premium Materials Co",
+    "email": "info@premiummaterials.com",
+    "phone": "+92-333-5555555",
+    "address": "789 Business District, Islamabad, Pakistan",
+    "notes": "High-quality materials supplier",
+    "status": "active"
+  }'
+
+# Get supplier transaction history
+curl -X GET "http://localhost:8000/api/core/suppliers/1/transactions" \
+  -H "Authorization: Bearer YOUR_TOKEN_HERE"
+
+# Get supplier statistics
+curl -X GET "http://localhost:8000/api/core/suppliers/stats" \
+  -H "Authorization: Bearer YOUR_TOKEN_HERE"
+
+# Get production trend for today
+curl -X GET "http://localhost:8000/api/core/manufacturing/production-trend?period=today" \
+  -H "Authorization: Bearer YOUR_TOKEN_HERE"
+
+# Get suppliers for raw material dropdown
+curl -X GET "http://localhost:8000/api/core/raw-material/suppliers" \
+  -H "Authorization: Bearer YOUR_TOKEN_HERE"
+
+# Add raw material with supplier
+curl -X POST "http://localhost:8000/api/core/raw-material" \
+  -H "Authorization: Bearer YOUR_TOKEN_HERE" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "material_name": "Steel Rods",
+    "amount_per_unit": 100.00,
+    "unit_purchase_cost": 150.00,
+    "status": "delivered",
+    "supplier_id": 1
+  }'
+
+# Update raw material with new supplier
+curl -X PUT "http://localhost:8000/api/core/raw-material/1" \
+  -H "Authorization: Bearer YOUR_TOKEN_HERE" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "supplier_id": 2,
+    "purchase_cost": 18000.00
+  }'
+```
+
+---
+
+## Manufacturing Analytics Endpoints
+
+The Manufacturing Analytics system provides comprehensive production analytics with KPIs, material breakdowns, and production trends for manufacturing operations.
+
+### 58. Get Manufacturing Dashboard Data
+**GET** `/core/manufacturing/dashboard`
+
+Get comprehensive manufacturing dashboard data including KPIs and production charts.
+
+**Headers:**
+```
+Authorization: Bearer {token}
+```
+
+**Query Parameters:**
+- `period` (optional): `today`, `week`, `month`, `year`, `business_season` (default: `today`)
+- `start_date` (optional): Start date for week/business_season periods
+- `end_date` (optional): End date for business_season periods
+- `year` (optional): Year for year/month periods
+- `month` (optional): Month for month periods
+
+**Response (200):**
+```json
+{
+    "success": true,
+    "data": {
+        "kpis": {
+            "gross_production_revenue": {
+                "value": 725000,
+                "change": 20,
+                "change_type": "increase"
+            },
+            "avg_stock_value": {
+                "value": 120000,
+                "change": 44,
+                "change_type": "increase"
+            },
+            "stock_conversion_rate": {
+                "value": 40,
+                "change": 12,
+                "change_type": "increase"
+            },
+            "suppliers": {
+                "value": 15,
+                "change": 2,
+                "change_type": "increase"
+            }
+        },
+        "charts": {
+            "production_trend": [10000, 12000, 15000, 18000, 22000, 25000, 28000, 30000, 32000, 30000, 28000, 25000],
+            "material_breakdown": [
+                {
+                    "category": "Construction Materials",
+                    "production_value": 450000,
+                    "quantity_produced": 1500,
+                    "percentage": 62.1
+                },
+                {
+                    "category": "Electrical Components",
+                    "production_value": 200000,
+                    "quantity_produced": 800,
+                    "percentage": 27.6
+                },
+                {
+                    "category": "Tools & Hardware",
+                    "production_value": 75000,
+                    "quantity_produced": 300,
+                    "percentage": 10.3
+                }
+            ]
+        },
+        "period": "today",
+        "period_info": {
+            "start": "2025-09-18T00:00:00.000000Z",
+            "end": "2025-09-18T23:59:59.000000Z"
+        }
+    }
+}
+```
+
+---
+
+### 59. Get Today's Manufacturing Analytics
+**GET** `/core/manufacturing/today`
+
+Get manufacturing analytics for today with comparison to yesterday.
+
+**Headers:**
+```
+Authorization: Bearer {token}
+```
+
+**Response (200):**
+```json
+{
+    "success": true,
+    "data": {
+        "period_start": "2025-09-18T00:00:00.000000Z",
+        "period_end": "2025-09-18T23:59:59.000000Z",
+        "gross_production_revenue": 725000,
+        "avg_stock_value": 120000,
+        "stock_conversion_rate": 40,
+        "total_suppliers": 15,
+        "total_materials_produced": 2500,
+        "total_quantity_produced": 1800,
+        "material_breakdown": [
+            {
+                "category": "Construction Materials",
+                "production_value": 450000,
+                "quantity_produced": 1500,
+                "percentage": 62.1
+            }
+        ],
+        "monthly_production_trend": {},
+        "gross_production_revenue_change": 20,
+        "avg_stock_value_change": 44,
+        "stock_conversion_rate_change": 12,
+        "supplier_count_change": 2
+    },
+    "period": "today"
+}
+```
+
+---
+
+### 60. Get Week Manufacturing Analytics
+**GET** `/core/manufacturing/week`
+
+Get manufacturing analytics for a specific week.
+
+**Headers:**
+```
+Authorization: Bearer {token}
+```
+
+**Query Parameters:**
+- `start_date` (optional): Week start date (default: current week start)
+
+**Response (200):**
+```json
+{
+    "success": true,
+    "data": {
+        "period_start": "2025-09-16T00:00:00.000000Z",
+        "period_end": "2025-09-22T23:59:59.000000Z",
+        "gross_production_revenue": 4500000,
+        "avg_stock_value": 180000,
+        "stock_conversion_rate": 35,
+        "total_suppliers": 18,
+        "total_materials_produced": 15000,
+        "total_quantity_produced": 12000,
+        "material_breakdown": [
+            {
+                "category": "Construction Materials",
+                "production_value": 2800000,
+                "quantity_produced": 9000,
+                "percentage": 62.2
+            },
+            {
+                "category": "Electrical Components",
+                "production_value": 1200000,
+                "quantity_produced": 2400,
+                "percentage": 26.7
+            },
+            {
+                "category": "Tools & Hardware",
+                "production_value": 500000,
+                "quantity_produced": 600,
+                "percentage": 11.1
+            }
+        ],
+        "monthly_production_trend": {
+            "9": 4500000
+        }
+    },
+    "period": "week"
+}
+```
+
+---
+
+### 61. Get Month Manufacturing Analytics
+**GET** `/core/manufacturing/month`
+
+Get manufacturing analytics for a specific month.
+
+**Headers:**
+```
+Authorization: Bearer {token}
+```
+
+**Query Parameters:**
+- `year` (optional): Year (default: current year)
+- `month` (optional): Month 1-12 (default: current month)
+
+**Response (200):**
+```json
+{
+    "success": true,
+    "data": {
+        "period_start": "2025-09-01T00:00:00.000000Z",
+        "period_end": "2025-09-30T23:59:59.000000Z",
+        "gross_production_revenue": 18500000,
+        "avg_stock_value": 250000,
+        "stock_conversion_rate": 42,
+        "total_suppliers": 25,
+        "total_materials_produced": 65000,
+        "total_quantity_produced": 55000,
+        "material_breakdown": [
+            {
+                "category": "Construction Materials",
+                "production_value": 11500000,
+                "quantity_produced": 38000,
+                "percentage": 62.2
+            },
+            {
+                "category": "Electrical Components",
+                "production_value": 4900000,
+                "quantity_produced": 12000,
+                "percentage": 26.5
+            },
+            {
+                "category": "Tools & Hardware",
+                "production_value": 2100000,
+                "quantity_produced": 5000,
+                "percentage": 11.3
+            }
+        ],
+        "monthly_production_trend": {
+            "9": 18500000
+        }
+    },
+    "period": "month"
+}
+```
+
+---
+
+### 62. Get Year Manufacturing Analytics
+**GET** `/core/manufacturing/year`
+
+Get manufacturing analytics for a specific year.
+
+**Headers:**
+```
+Authorization: Bearer {token}
+```
+
+**Query Parameters:**
+- `year` (optional): Year (default: current year)
+
+**Response (200):**
+```json
+{
+    "success": true,
+    "data": {
+        "period_start": "2025-01-01T00:00:00.000000Z",
+        "period_end": "2025-12-31T23:59:59.000000Z",
+        "gross_production_revenue": 225000000,
+        "avg_stock_value": 350000,
+        "stock_conversion_rate": 38,
+        "total_suppliers": 45,
+        "total_materials_produced": 750000,
+        "total_quantity_produced": 650000,
+        "material_breakdown": [
+            {
+                "category": "Construction Materials",
+                "production_value": 140000000,
+                "quantity_produced": 450000,
+                "percentage": 62.2
+            },
+            {
+                "category": "Electrical Components",
+                "production_value": 59500000,
+                "quantity_produced": 150000,
+                "percentage": 26.4
+            },
+            {
+                "category": "Tools & Hardware",
+                "production_value": 25500000,
+                "quantity_produced": 50000,
+                "percentage": 11.4
+            }
+        ],
+        "monthly_production_trend": {
+            "1": 18000000,
+            "2": 19500000,
+            "3": 21000000,
+            "4": 22500000,
+            "5": 24000000,
+            "6": 25500000,
+            "7": 27000000,
+            "8": 28500000,
+            "9": 30000000
+        }
+    },
+    "period": "year"
+}
+```
+
+---
+
+### 63. Get Business Season Manufacturing Analytics
+**GET** `/core/manufacturing/business-season`
+
+Get manufacturing analytics for a custom business season (date range).
+
+**Headers:**
+```
+Authorization: Bearer {token}
+```
+
+**Query Parameters:**
+- `start_date` (required): Start date (YYYY-MM-DD)
+- `end_date` (required): End date (YYYY-MM-DD, must be after start_date)
+
+**Response (200):**
+```json
+{
+    "success": true,
+    "data": {
+        "period_start": "2025-06-01T00:00:00.000000Z",
+        "period_end": "2025-08-31T23:59:59.000000Z",
+        "gross_production_revenue": 75000000,
+        "avg_stock_value": 300000,
+        "stock_conversion_rate": 45,
+        "total_suppliers": 35,
+        "total_materials_produced": 250000,
+        "total_quantity_produced": 200000,
+        "material_breakdown": [
+            {
+                "category": "Construction Materials",
+                "production_value": 46500000,
+                "quantity_produced": 155000,
+                "percentage": 62.0
+            },
+            {
+                "category": "Electrical Components",
+                "production_value": 19800000,
+                "quantity_produced": 33000,
+                "percentage": 26.4
+            },
+            {
+                "category": "Tools & Hardware",
+                "production_value": 8700000,
+                "quantity_produced": 12000,
+                "percentage": 11.6
+            }
+        ],
+        "monthly_production_trend": {
+            "6": 25000000,
+            "7": 25000000,
+            "8": 25000000
+        }
+    },
+    "period": "business_season"
+}
+```
+
+**Validation Errors (422):**
+```json
+{
+    "success": false,
+    "message": "The end date must be a date after start date."
+}
+```
+
+---
+
+### 64. Get Production Trend
+**GET** `/core/manufacturing/production-trend`
+
+Get production trend data for charts based on the specified period.
+
+**Headers:**
+```
+Authorization: Bearer {token}
+```
+
+**Query Parameters:**
+- `period` (optional): `today`, `week`, `month`, `year`, `business_season` (default: `today`)
+- `start_date` (optional): Start date for week/business_season periods
+- `end_date` (optional): End date for business_season periods
+
+**Response (200):**
+```json
+{
+    "success": true,
+    "data": {
+        "0": 5000,
+        "1": 7500,
+        "2": 10000,
+        "3": 12500,
+        "4": 15000,
+        "5": 17500,
+        "6": 20000,
+        "7": 22000,
+        "8": 25000,
+        "9": 28000,
+        "10": 30000,
+        "11": 32000,
+        "12": 35000,
+        "13": 38000,
+        "14": 40000,
+        "15": 42000,
+        "16": 45000,
+        "17": 48000,
+        "18": 50000,
+        "19": 52000,
+        "20": 55000,
+        "21": 58000,
+        "22": 60000,
+        "23": 62000
+    },
+    "period": "today"
+}
+```
+
+**Note:** For `today` period, returns hourly data (0-23). For other periods, returns daily/monthly/quarterly data.
+
+---
+
+## Manufacturing Analytics Data Models
+
+### ManufacturingAnalytics Model
+```json
+{
+    "id": "integer",
+    "period_type": "enum (today|week|month|year|business_season)",
+    "period_start": "timestamp",
+    "period_end": "timestamp",
+    "gross_production_revenue": "decimal(15,2)",
+    "avg_stock_value": "decimal(15,2)",
+    "stock_conversion_rate": "decimal(5,2)",
+    "total_suppliers": "integer",
+    "total_materials_produced": "decimal(15,2)",
+    "total_quantity_produced": "decimal(15,2)",
+    "material_breakdown": "json",
+    "monthly_production_trend": "json",
+    "created_at": "timestamp",
+    "updated_at": "timestamp"
+}
+```
+
+### Material Breakdown Structure
+```json
+{
+    "category": "string (category name)",
+    "production_value": "decimal (total production value for this category)",
+    "quantity_produced": "decimal (total quantity produced for this category)",
+    "percentage": "decimal (percentage of total production value)"
+}
+```
+
+---
+
+## Manufacturing Analytics Usage Examples
+
+### Frontend Integration Example (JavaScript)
+
+```javascript
+// Get manufacturing dashboard data
+const getManufacturingDashboard = async (period = 'today', params = {}) => {
+    const token = localStorage.getItem('token');
+    const queryParams = new URLSearchParams({ period, ...params });
+    
+    const response = await fetch(`/api/core/manufacturing/dashboard?${queryParams}`, {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+        }
+    });
+    
+    return response.json();
+};
+
+// Get specific period manufacturing analytics
+const getManufacturingAnalytics = async (period, params = {}) => {
+    const token = localStorage.getItem('token');
+    const queryParams = new URLSearchParams(params);
+    
+    const response = await fetch(`/api/core/manufacturing/${period}?${queryParams}`, {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+        }
+    });
+    
+    return response.json();
+};
+
+// Get production trend data
+const getProductionTrend = async (period = 'today', params = {}) => {
+    const token = localStorage.getItem('token');
+    const queryParams = new URLSearchParams({ period, ...params });
+    
+    const response = await fetch(`/api/core/manufacturing/production-trend?${queryParams}`, {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+        }
+    });
+    
+    return response.json();
+};
+
+// Usage examples
+const todayManufacturing = await getManufacturingDashboard('today');
+const weekManufacturing = await getManufacturingAnalytics('week', { start_date: '2025-09-16' });
+const monthManufacturing = await getManufacturingAnalytics('month', { year: 2025, month: 9 });
+const seasonManufacturing = await getManufacturingAnalytics('business-season', { 
+    start_date: '2025-06-01', 
+    end_date: '2025-08-31' 
+});
+
+const todayTrend = await getProductionTrend('today');
+const weekTrend = await getProductionTrend('week', { start_date: '2025-09-16' });
+```
+
+### cURL Examples
+
+```bash
+# Get manufacturing dashboard for today
+curl -X GET "http://localhost:8000/api/core/manufacturing/dashboard?period=today" \
+  -H "Authorization: Bearer YOUR_TOKEN_HERE"
+
+# Get manufacturing analytics for a specific week
+curl -X GET "http://localhost:8000/api/core/manufacturing/week?start_date=2025-09-16" \
+  -H "Authorization: Bearer YOUR_TOKEN_HERE"
+
+# Get manufacturing analytics for a specific month
+curl -X GET "http://localhost:8000/api/core/manufacturing/month?year=2025&month=9" \
+  -H "Authorization: Bearer YOUR_TOKEN_HERE"
+
+# Get manufacturing analytics for a business season
+curl -X GET "http://localhost:8000/api/core/manufacturing/business-season?start_date=2025-06-01&end_date=2025-08-31" \
+  -H "Authorization: Bearer YOUR_TOKEN_HERE"
+
+# Get production trend for today
+curl -X GET "http://localhost:8000/api/core/manufacturing/production-trend?period=today" \
+  -H "Authorization: Bearer YOUR_TOKEN_HERE"
+
+# Get production trend for a specific week
+curl -X GET "http://localhost:8000/api/core/manufacturing/production-trend?period=week&start_date=2025-09-16" \
+  -H "Authorization: Bearer YOUR_TOKEN_HERE"
+```
+
+---
+
 ## Missing Endpoints
 
 The following endpoints are not yet implemented but would be useful:
@@ -1924,3 +4129,5 @@ The following endpoints are not yet implemented but would be useful:
 - Bulk operations for stock management
 - Search and filtering capabilities
 - Pagination for large datasets
+- Manufacturing Analytics caching and export functionality
+- Supplier performance ratings and reviews

@@ -7,25 +7,30 @@ import CardHeader from "components/Card/CardHeader.js";
 import React from "react";
 import ReactApexChart from "react-apexcharts";
 
-const CategoriesChart = () => {
+const CategoriesChart = ({ categoryData }) => {
   const textColor = useColorModeValue("gray.700", "white");
   const gridColor = useColorModeValue("#E2E8F0", "#4A5568");
 
-  // Sample data for best-selling categories
-  const categoriesData = [
-    { category: "Others", sales: 65 },
-    { category: "Misc", sales: 75 },
-    { category: "Construction Materials", sales: 85 },
-    { category: "Electrical Accessories", sales: 90 },
-    { category: "Sanitary Materials", sales: 95 },
-    { category: "Tools & Hardware", sales: 80 },
-    { category: "PVC & Pipes", sales: 100 }
-  ];
+  // Use API data only - no fallback data
+  const getProcessedCategoryData = () => {
+    if (categoryData && Array.isArray(categoryData) && categoryData.length > 0) {
+      // API returns category breakdown with category, revenue, quantity, percentage
+      return categoryData.map(item => ({
+        category: item.category || "Unknown",
+        sales: item.percentage || 0
+      }));
+    }
+
+    // No fallback - return empty array if no API data
+    return [];
+  };
+
+  const processedCategories = getProcessedCategoryData();
 
   const series = [
     {
       name: "Sales Performance",
-      data: categoriesData.map(item => item.sales)
+      data: processedCategories.map(item => item.sales)
     }
   ];
 
@@ -55,7 +60,7 @@ const CategoriesChart = () => {
       show: false
     },
     xaxis: {
-      categories: categoriesData.map(item => item.category),
+      categories: processedCategories.map(item => item.category),
       labels: {
         style: {
           colors: textColor,
@@ -94,6 +99,26 @@ const CategoriesChart = () => {
       show: false
     }
   };
+
+  // Show empty state if no data
+  if (!processedCategories || processedCategories.length === 0) {
+    return (
+      <Card bg={useColorModeValue("white", "gray.700")} boxShadow={useColorModeValue("0 4px 20px rgba(0,0,0,0.06)", "0 4px 20px rgba(0,0,0,0.3)")}>
+        <CardHeader>
+          <Text fontSize='lg' color={textColor} fontWeight='bold'>
+            Best selling categories
+          </Text>
+        </CardHeader>
+        <CardBody>
+          <Flex h='450px' w='100%' align='center' justify='center' direction='column'>
+            <Text fontSize='md' color='gray.400' textAlign='center'>
+              No category data available
+            </Text>
+          </Flex>
+        </CardBody>
+      </Card>
+    );
+  }
 
   return (
     <Card bg={useColorModeValue("white", "gray.700")} boxShadow={useColorModeValue("0 4px 20px rgba(0,0,0,0.06)", "0 4px 20px rgba(0,0,0,0.3)")}>

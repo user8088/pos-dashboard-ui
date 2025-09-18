@@ -56,10 +56,15 @@ const RawMaterialTable = ({ title, captions }) => {
   const [isLoading, setIsLoading] = React.useState(false);
   const [newUnitPurchaseCost, setNewUnitPurchaseCost] = React.useState("");
   const [editUnitPurchaseCost, setEditUnitPurchaseCost] = React.useState("");
+  const [suppliers, setSuppliers] = React.useState([]);
   
-  // Fetch raw materials on component mount
+  // Bootstrap: load suppliers first, then materials so supplier names resolve
   React.useEffect(() => {
-    fetchRawMaterials();
+    const bootstrap = async () => {
+      await fetchSuppliers();
+      await fetchRawMaterials();
+    };
+    bootstrap();
   }, []);
   
   const fetchRawMaterials = async () => {
@@ -95,6 +100,14 @@ const RawMaterialTable = ({ title, captions }) => {
           wasteQuantityRaw: material.waste_quantity || 0,
           lossCost: material.total_waste_cost ? `PKR.${material.total_waste_cost}` : 'PKR.0.00',
           totalWasteCostRaw: material.total_waste_cost || 0,
+          supplierName: (material.supplier && material.supplier.supplier_name)
+            || (typeof material.supplier_name === 'string' && material.supplier_name)
+            || (() => {
+                 const sid = material.supplier_id || (material.supplier && material.supplier.id);
+                 const found = suppliers.find(s => s.id === sid);
+                 return found ? found.name : '—';
+               })(),
+          supplierIdRaw: material.supplier_id || (material.supplier && material.supplier.id) || null,
         }));
         setRawMaterialData(formattedMaterials);
       } else {
@@ -106,6 +119,26 @@ const RawMaterialTable = ({ title, captions }) => {
       setRawMaterialData([]);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const fetchSuppliers = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000/api'}/core/raw-material/suppliers`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json',
+        },
+      });
+      const json = await res.json();
+      if (!res.ok || json.success === false) throw new Error(json.message || 'Failed to fetch suppliers');
+      const dataArr = Array.isArray(json) ? json : (json.data || []);
+      const list = dataArr.map(s => ({ id: s.id, name: s.supplier_name }));
+      setSuppliers(list);
+    } catch (e) {
+      console.error('Error fetching suppliers:', e);
+      setSuppliers([]);
     }
   };
 
@@ -145,6 +178,7 @@ const RawMaterialTable = ({ title, captions }) => {
             amount_pending: newMaterial.amountPending ? parseFloat(newMaterial.amountPending) : null,
             ...(newMaterial.wasteQuantity ? { waste_quantity: parseFloat(newMaterial.wasteQuantity) } : {}),
             ...(newMaterial.totalWasteCost ? { total_waste_cost: parseFloat(newMaterial.totalWasteCost) } : {}),
+            supplier_id: newMaterial.supplierId ?? null,
           };
         })()),
       });
@@ -169,7 +203,8 @@ const RawMaterialTable = ({ title, captions }) => {
           status: "pending",
           amountPending: "",
           wasteQuantity: "",
-          totalWasteCost: ""
+          totalWasteCost: "",
+          supplierId: undefined,
         });
         setNewUnitPurchaseCost("");
         
@@ -214,6 +249,7 @@ const RawMaterialTable = ({ title, captions }) => {
       wasteQuantity: (material.wasteQuantityRaw !== undefined ? material.wasteQuantityRaw : "").toString(),
       totalWasteCost: (material.totalWasteCostRaw !== undefined ? material.totalWasteCostRaw : "").toString(),
       unitCostExisting: material.unitCostRaw ? material.unitCostRaw.toString() : "",
+      supplierId: material.supplierIdRaw || undefined,
     });
     setEditUnitPurchaseCost("");
     onEditOpen();
@@ -245,6 +281,7 @@ const RawMaterialTable = ({ title, captions }) => {
             ...(typeof providedTotal === 'number' ? { purchase_cost: providedTotal } : (typeof computedTotal === 'number' ? { purchase_cost: computedTotal } : {})),
             ...(editingMaterial.wasteQuantity !== undefined && editingMaterial.wasteQuantity !== "" ? { waste_quantity: parseFloat(editingMaterial.wasteQuantity) } : {}),
             ...(editingMaterial.totalWasteCost !== undefined && editingMaterial.totalWasteCost !== "" ? { total_waste_cost: parseFloat(editingMaterial.totalWasteCost) } : {}),
+            supplier_id: (editingMaterial.supplierId ?? null),
           };
         })()),
       });
@@ -535,6 +572,7 @@ const RawMaterialTable = ({ title, captions }) => {
                     amountPerUnit={row.amountPerUnit}
                     unitCost={row.unitCost}
                     totalPurchaseCost={row.totalPurchaseCost}
+                    supplierName={row.supplierName}
                     wasteQuantity={row.wasteQuantity}
                     lossCost={row.lossCost}
                     invoiceLink={row.invoiceLink}
@@ -612,6 +650,19 @@ const RawMaterialTable = ({ title, captions }) => {
                   onChange={(e) => setNewMaterial({...newMaterial, status: e.target.value})}>
                   <option value='pending'>Pending</option>
                   <option value='delivered'>Delivered</option>
+                </Select>
+              </FormControl>
+
+              <FormControl>
+                <FormLabel color={textColor}>Supplier (Optional)</FormLabel>
+                <Select
+                  placeholder='Select supplier'
+                  value={newMaterial.supplierId || ''}
+                  onChange={(e) => setNewMaterial({ ...newMaterial, supplierId: e.target.value ? parseInt(e.target.value) : undefined })}
+                >
+                  {suppliers.map((s) => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
                 </Select>
               </FormControl>
               
@@ -716,6 +767,19 @@ const RawMaterialTable = ({ title, captions }) => {
                     onChange={(e) => setEditingMaterial({...editingMaterial, status: e.target.value})}>
                     <option value='pending'>Pending</option>
                     <option value='delivered'>Delivered</option>
+                  </Select>
+                </FormControl>
+
+                <FormControl>
+                  <FormLabel color={textColor}>Supplier (Optional)</FormLabel>
+                  <Select
+                    placeholder='Select supplier'
+                    value={editingMaterial.supplierId || ''}
+                    onChange={(e) => setEditingMaterial({ ...editingMaterial, supplierId: e.target.value ? parseInt(e.target.value) : undefined })}
+                  >
+                    {suppliers.map((s) => (
+                      <option key={s.id} value={s.id}>{s.name}</option>
+                    ))}
                   </Select>
                 </FormControl>
                 

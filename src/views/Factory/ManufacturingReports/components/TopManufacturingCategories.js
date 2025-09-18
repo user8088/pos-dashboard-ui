@@ -11,7 +11,12 @@ import {
   Image,
   Flex,
   Badge,
+  Input,
+  InputGroup,
+  InputLeftElement,
+  VStack,
 } from "@chakra-ui/react";
+import { FaSearch } from "react-icons/fa";
 // Custom components
 import Card from "components/Card/Card.js";
 import CardBody from "components/Card/CardBody.js";
@@ -19,277 +24,64 @@ import CardHeader from "components/Card/CardHeader.js";
 import React from "react";
 import logo from "assets/img/avatars/placeholder.png";
 
-const TopManufacturingCategories = ({ timePeriod, customDateRange }) => {
+const TopManufacturingCategories = ({ timePeriod, customDateRange, data = [] }) => {
   const textColor = useColorModeValue("gray.700", "white");
+  const [searchTerm, setSearchTerm] = React.useState("");
 
-  // Dynamic data for top manufacturing categories based on time period
-  const getCategoriesData = (period) => {
-    const categoriesDataMap = {
-      "Today": [
-        {
-          id: 1,
-          name: "Construction Materials",
-          image: logo,
-          production: "PKR.85,000",
-          units: 195000,
-          description: "Building and construction supplies"
-        },
-        {
-          id: 2,
-          name: "Electrical Accessories",
-          image: logo,
-          production: "PKR.80,000",
-          units: 130000,
-          description: "Electrical components and tools"
-        },
-        {
-          id: 3,
-          name: "Sanitary Materials",
-          image: logo,
-          production: "PKR.70,000",
-          units: 57000,
-          description: "Plumbing and sanitary supplies"
-        },
-        {
-          id: 4,
-          name: "Tools & Hardware",
-          image: logo,
-          production: "PKR.30,000",
-          units: 30500,
-          description: "Hand tools and hardware items"
-        },
-        {
-          id: 5,
-          name: "PVC & Pipes",
-          image: logo,
-          production: "PKR.25,000",
-          units: 35000,
-          description: "PVC materials and piping systems"
-        }
-      ],
-      "Week": [
-        {
-          id: 1,
-          name: "Construction Materials",
-          image: logo,
-          production: "PKR.595,000",
-          units: 1365000,
-          description: "Building and construction supplies"
-        },
-        {
-          id: 2,
-          name: "Electrical Accessories",
-          image: logo,
-          production: "PKR.560,000",
-          units: 910000,
-          description: "Electrical components and tools"
-        },
-        {
-          id: 3,
-          name: "Sanitary Materials",
-          image: logo,
-          production: "PKR.490,000",
-          units: 399000,
-          description: "Plumbing and sanitary supplies"
-        },
-        {
-          id: 4,
-          name: "Tools & Hardware",
-          image: logo,
-          production: "PKR.210,000",
-          units: 213500,
-          description: "Hand tools and hardware items"
-        },
-        {
-          id: 5,
-          name: "PVC & Pipes",
-          image: logo,
-          production: "PKR.175,000",
-          units: 245000,
-          description: "PVC materials and piping systems"
-        }
-      ],
-      "Month": [
-        {
-          id: 1,
-          name: "Construction Materials",
-          image: logo,
-          production: "PKR.2,550,000",
-          units: 5850000,
-          description: "Building and construction supplies"
-        },
-        {
-          id: 2,
-          name: "Electrical Accessories",
-          image: logo,
-          production: "PKR.2,400,000",
-          units: 3900000,
-          description: "Electrical components and tools"
-        },
-        {
-          id: 3,
-          name: "Sanitary Materials",
-          image: logo,
-          production: "PKR.2,100,000",
-          units: 1710000,
-          description: "Plumbing and sanitary supplies"
-        },
-        {
-          id: 4,
-          name: "Tools & Hardware",
-          image: logo,
-          production: "PKR.900,000",
-          units: 915000,
-          description: "Hand tools and hardware items"
-        },
-        {
-          id: 5,
-          name: "PVC & Pipes",
-          image: logo,
-          production: "PKR.750,000",
-          units: 1050000,
-          description: "PVC materials and piping systems"
-        }
-      ],
-      "Seasonal": [
-        {
-          id: 1,
-          name: "Construction Materials",
-          image: logo,
-          production: "PKR.85,000",
-          units: 195000,
-          description: "Building and construction supplies"
-        },
-        {
-          id: 2,
-          name: "Electrical Accessories",
-          image: logo,
-          production: "PKR.80,000",
-          units: 130000,
-          description: "Electrical components and tools"
-        },
-        {
-          id: 3,
-          name: "Sanitary Materials",
-          image: logo,
-          production: "PKR.70,000",
-          units: 57000,
-          description: "Plumbing and sanitary supplies"
-        },
-        {
-          id: 4,
-          name: "Tools & Hardware",
-          image: logo,
-          production: "PKR.30,000",
-          units: 30500,
-          description: "Hand tools and hardware items"
-        },
-        {
-          id: 5,
-          name: "PVC & Pipes",
-          image: logo,
-          production: "PKR.25,000",
-          units: 35000,
-          description: "PVC materials and piping systems"
-        }
-      ],
-      "Year": [
-        {
-          id: 1,
-          name: "Construction Materials",
-          image: logo,
-          production: "PKR.30,600,000",
-          units: 70200000,
-          description: "Building and construction supplies"
-        },
-        {
-          id: 2,
-          name: "Electrical Accessories",
-          image: logo,
-          production: "PKR.28,800,000",
-          units: 46800000,
-          description: "Electrical components and tools"
-        },
-        {
-          id: 3,
-          name: "Sanitary Materials",
-          image: logo,
-          production: "PKR.25,200,000",
-          units: 20520000,
-          description: "Plumbing and sanitary supplies"
-        },
-        {
-          id: 4,
-          name: "Tools & Hardware",
-          image: logo,
-          production: "PKR.10,800,000",
-          units: 10980000,
-          description: "Hand tools and hardware items"
-        },
-        {
-          id: 5,
-          name: "PVC & Pipes",
-          image: logo,
-          production: "PKR.9,000,000",
-          units: 12600000,
-          description: "PVC materials and piping systems"
-        }
-      ],
-      "Custom date": [
-        {
-          id: 1,
-          name: "Construction Materials",
-          image: logo,
-          production: "PKR.127,500",
-          units: 292500,
-          description: "Building and construction supplies"
-        },
-        {
-          id: 2,
-          name: "Electrical Accessories",
-          image: logo,
-          production: "PKR.120,000",
-          units: 195000,
-          description: "Electrical components and tools"
-        },
-        {
-          id: 3,
-          name: "Sanitary Materials",
-          image: logo,
-          production: "PKR.105,000",
-          units: 85500,
-          description: "Plumbing and sanitary supplies"
-        },
-        {
-          id: 4,
-          name: "Tools & Hardware",
-          image: logo,
-          production: "PKR.45,000",
-          units: 45750,
-          description: "Hand tools and hardware items"
-        },
-        {
-          id: 5,
-          name: "PVC & Pipes",
-          image: logo,
-          production: "PKR.37,500",
-          units: 52500,
-          description: "PVC materials and piping systems"
-        }
-      ]
-    };
+  // Process API data for categories table
+  const getProcessedCategoriesData = () => {
+    if (!data || data.length === 0) return [];
     
-    return categoriesDataMap[period] || categoriesDataMap["Seasonal"];
+    return data.map((item, index) => ({
+      id: index + 1,
+      name: item.category,
+      image: logo,
+      production: `PKR.${item.production_value.toLocaleString()}`,
+      units: item.quantity_produced,
+      description: `${item.percentage}% of total production`
+    }));
   };
 
-  const categoriesData = getCategoriesData(timePeriod);
+  const categoriesData = getProcessedCategoriesData();
+
+  // Filter categories based on search term
+  const filteredCategories = React.useMemo(() => {
+    if (!searchTerm) return categoriesData;
+    return categoriesData.filter(category =>
+      category.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      category.description.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }, [categoriesData, searchTerm]);
 
   return (
     <Card bg={useColorModeValue("white", "gray.700")} boxShadow={useColorModeValue("0 4px 20px rgba(0,0,0,0.06)", "0 4px 20px rgba(0,0,0,0.3)")}>
       <CardHeader>
-        <Text fontSize='lg' color={textColor} fontWeight='bold'>
-          Top manufacturing categories list
-        </Text>
+        <VStack spacing="16px" align="stretch">
+          <Flex direction="column">
+            <Text fontSize='lg' color={textColor} fontWeight='bold'>
+              Top Manufacturing Categories
+            </Text>
+            <Text fontSize='sm' color='gray.500'>
+              {categoriesData.length > 0 ? `${categoriesData.length} categories` : 'No data available'}
+            </Text>
+          </Flex>
+          <InputGroup>
+            <InputLeftElement pointerEvents="none">
+              <FaSearch color="gray.300" />
+            </InputLeftElement>
+            <Input
+              placeholder="Search categories..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              bg={useColorModeValue("white", "gray.600")}
+              borderColor={useColorModeValue("gray.300", "gray.500")}
+              _focus={{
+                borderColor: "#FF8D28",
+                boxShadow: "0 0 0 1px #FF8D28"
+              }}
+            />
+          </InputGroup>
+        </VStack>
       </CardHeader>
       <CardBody>
         <Table variant='simple' color={textColor}>
@@ -302,38 +94,48 @@ const TopManufacturingCategories = ({ timePeriod, customDateRange }) => {
             </Tr>
           </Thead>
           <Tbody>
-            {categoriesData.map((category, index) => (
-              <Tr key={category.id}>
-                <Td>
-                  <Text fontSize='sm' color={textColor} fontWeight='bold'>
-                    {index + 1}
-                  </Text>
-                </Td>
-                <Td>
-                  <Flex align='center' py='.8rem' minWidth='100%' flexWrap='nowrap'>
-                    <Image src={category.image} w='30px' h='30px' me='12px' objectFit='cover' />
-                    <Flex direction='column'>
-                      <Text fontSize='sm' color={textColor} fontWeight='bold' minWidth='100%'>
-                        {category.name}
-                      </Text>
-                      <Text fontSize='xs' color='gray.400' fontWeight='medium'>
-                        {category.description}
-                      </Text>
+            {filteredCategories.length > 0 ? (
+              filteredCategories.map((category, index) => (
+                <Tr key={category.id}>
+                  <Td>
+                    <Text fontSize='sm' color={textColor} fontWeight='bold'>
+                      {index + 1}
+                    </Text>
+                  </Td>
+                  <Td>
+                    <Flex align='center' py='.8rem' minWidth='100%' flexWrap='nowrap'>
+                      <Image src={category.image} w='30px' h='30px' me='12px' objectFit='cover' />
+                      <Flex direction='column'>
+                        <Text fontSize='sm' color={textColor} fontWeight='bold' minWidth='100%'>
+                          {category.name}
+                        </Text>
+                        <Text fontSize='xs' color='gray.400' fontWeight='medium'>
+                          {category.description}
+                        </Text>
+                      </Flex>
                     </Flex>
-                  </Flex>
-                </Td>
-                <Td>
-                  <Text fontSize='sm' color={textColor} fontWeight='bold'>
-                    {category.production}
+                  </Td>
+                  <Td>
+                    <Text fontSize='sm' color={textColor} fontWeight='bold'>
+                      {category.production}
+                    </Text>
+                  </Td>
+                  <Td>
+                    <Badge colorScheme='blue' fontSize='12px' p='2px 8px' borderRadius='12px'>
+                      {category.units.toLocaleString()} units
+                    </Badge>
+                  </Td>
+                </Tr>
+              ))
+            ) : (
+              <Tr>
+                <Td colSpan={4} textAlign="center" py="40px">
+                  <Text color="gray.500" fontSize="sm">
+                    {searchTerm ? "No categories found matching your search" : "No categories available"}
                   </Text>
-                </Td>
-                <Td>
-                  <Badge colorScheme='blue' fontSize='12px' p='2px 8px' borderRadius='12px'>
-                    {category.units.toLocaleString()} units
-                  </Badge>
                 </Td>
               </Tr>
-            ))}
+            )}
           </Tbody>
         </Table>
       </CardBody>

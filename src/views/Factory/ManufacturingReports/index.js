@@ -13,6 +13,9 @@ import {
   FormLabel,
   Badge,
   Input,
+  Spinner,
+  Center,
+  useToast,
   Modal,
   ModalOverlay,
   ModalContent,
@@ -43,6 +46,10 @@ function ManufacturingReports() {
     endDate: ""
   });
   const [showCustomDatePicker, setShowCustomDatePicker] = React.useState(false);
+  const [dashboardData, setDashboardData] = React.useState(null);
+  const [isLoading, setIsLoading] = React.useState(false);
+  const [error, setError] = React.useState(null);
+  const toast = useToast();
 
   // Calculate custom date range duration
   const getCustomDateDuration = () => {
@@ -55,211 +62,97 @@ function ManufacturingReports() {
     return 0;
   };
 
-  // Dynamic KPI Data based on time period
-  const getKpiData = (period) => {
-    const kpiDataMap = {
-      "Today": [
-        {
-          title: "Gross Production revenue",
-          value: "PKR. 725,000",
-          change: "20%",
-          changeType: "increase",
-          period: "From last season"
-        },
-        {
-          title: "Avg. Stock Value",
-          value: "PKR. 120,000",
-          change: "44%",
-          changeType: "increase",
-          period: "From last season"
-        },
-        {
-          title: "Stock Conversion Rate",
-          value: "40%",
-          change: "12%",
-          changeType: "increase",
-          period: "From last season"
-        },
-        {
-          title: "Suppliers",
-          value: "3000",
-          change: "1200",
-          changeType: "increase",
-          period: "From last season"
-        }
-      ],
-      "Week": [
-        {
-          title: "Gross Production revenue",
-          value: "PKR. 5,075,000",
-          change: "25%",
-          changeType: "increase",
-          period: "From last week"
-        },
-        {
-          title: "Avg. Stock Value",
-          value: "PKR. 840,000",
-          change: "52%",
-          changeType: "increase",
-          period: "From last week"
-        },
-        {
-          title: "Stock Conversion Rate",
-          value: "45%",
-          change: "18%",
-          changeType: "increase",
-          period: "From last week"
-        },
-        {
-          title: "Suppliers",
-          value: "21000",
-          change: "8400",
-          changeType: "increase",
-          period: "From last week"
-        }
-      ],
-      "Month": [
-        {
-          title: "Gross Production revenue",
-          value: "PKR. 21,750,000",
-          change: "30%",
-          changeType: "increase",
-          period: "From last month"
-        },
-        {
-          title: "Avg. Stock Value",
-          value: "PKR. 3,600,000",
-          change: "60%",
-          changeType: "increase",
-          period: "From last month"
-        },
-        {
-          title: "Stock Conversion Rate",
-          value: "48%",
-          change: "22%",
-          changeType: "increase",
-          period: "From last month"
-        },
-        {
-          title: "Suppliers",
-          value: "90000",
-          change: "36000",
-          changeType: "increase",
-          period: "From last month"
-        }
-      ],
-      "Seasonal": [
-        {
-          title: "Gross Production revenue",
-          value: "PKR. 725,000",
-          change: "20%",
-          changeType: "increase",
-          period: "From last season"
-        },
-        {
-          title: "Avg. Stock Value",
-          value: "PKR. 120,000",
-          change: "44%",
-          changeType: "increase",
-          period: "From last season"
-        },
-        {
-          title: "Stock Conversion Rate",
-          value: "40%",
-          change: "12%",
-          changeType: "increase",
-          period: "From last season"
-        },
-        {
-          title: "Suppliers",
-          value: "3000",
-          change: "1200",
-          changeType: "increase",
-          period: "From last season"
-        }
-      ],
-      "Year": [
-        {
-          title: "Gross Production revenue",
-          value: "PKR. 261,000,000",
-          change: "45%",
-          changeType: "increase",
-          period: "From last year"
-        },
-        {
-          title: "Avg. Stock Value",
-          value: "PKR. 43,200,000",
-          change: "72%",
-          changeType: "increase",
-          period: "From last year"
-        },
-        {
-          title: "Stock Conversion Rate",
-          value: "52%",
-          change: "35%",
-          changeType: "increase",
-          period: "From last year"
-        },
-        {
-          title: "Suppliers",
-          value: "1080000",
-          change: "432000",
-          changeType: "increase",
-          period: "From last year"
-        }
-      ],
-      "Custom date": [
-        {
-          title: "Gross Production revenue",
-          value: customDateRange.startDate && customDateRange.endDate 
-            ? `PKR. ${(getCustomDateDuration() * 25000).toLocaleString()}`
-            : "PKR. 750,000",
-          change: "18%",
-          changeType: "increase",
-          period: customDateRange.startDate && customDateRange.endDate 
-            ? `From ${customDateRange.startDate} to ${customDateRange.endDate}`
-            : "From selected period"
-        },
-        {
-          title: "Avg. Stock Value",
-          value: customDateRange.startDate && customDateRange.endDate 
-            ? `PKR. ${(25000 + Math.floor(Math.random() * 15000)).toLocaleString()}`
-            : "PKR. 125,000",
-          change: "48%",
-          changeType: "increase",
-          period: customDateRange.startDate && customDateRange.endDate 
-            ? `From ${customDateRange.startDate} to ${customDateRange.endDate}`
-            : "From selected period"
-        },
-        {
-          title: "Stock Conversion Rate",
-          value: customDateRange.startDate && customDateRange.endDate 
-            ? `${(35 + Math.random() * 15).toFixed(0)}%`
-            : "42%",
-          change: "15%",
-          changeType: "increase",
-          period: customDateRange.startDate && customDateRange.endDate 
-            ? `From ${customDateRange.startDate} to ${customDateRange.endDate}`
-            : "From selected period"
-        },
-        {
-          title: "Suppliers",
-          value: customDateRange.startDate && customDateRange.endDate 
-            ? (getCustomDateDuration() * 100).toString()
-            : "3200",
-          change: "1280",
-          changeType: "increase",
-          period: customDateRange.startDate && customDateRange.endDate 
-            ? `From ${customDateRange.startDate} to ${customDateRange.endDate}`
-            : "From selected period"
-        }
-      ]
+  // API period mapping
+  const getApiPeriod = (displayPeriod) => {
+    const map = {
+      "Today": "today",
+      "Week": "week",
+      "Month": "month",
+      "Seasonal": "business_season",
+      "Year": "year",
+      "Custom date": "business_season",
     };
-    
-    return kpiDataMap[period] || kpiDataMap["Seasonal"];
+    return map[displayPeriod] || "today";
   };
 
-  const kpiData = getKpiData(timePeriod);
+  // Fetch dashboard data
+  const fetchDashboardData = async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      const token = localStorage.getItem('token');
+      const params = new URLSearchParams();
+      params.set('period', getApiPeriod(timePeriod));
+      if ((timePeriod === 'Custom date') && customDateRange.startDate && customDateRange.endDate) {
+        params.set('start_date', customDateRange.startDate);
+        params.set('end_date', customDateRange.endDate);
+      }
+      const res = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000/api'}/core/manufacturing/dashboard?${params.toString()}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json',
+        },
+      });
+      if (!res.ok) throw new Error(`Failed (${res.status})`);
+      const json = await res.json();
+      if (json.success) {
+        setDashboardData(json.data);
+      } else {
+        throw new Error(json.message || 'Failed to load');
+      }
+    } catch (e) {
+      setError(e.message);
+      toast({
+        title: 'Error',
+        description: 'Failed to load manufacturing reports',
+        status: 'error',
+        duration: 3000,
+        isClosable: true,
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  React.useEffect(() => {
+    fetchDashboardData();
+  }, [timePeriod, customDateRange.startDate, customDateRange.endDate]);
+
+  // Build KPI cards from API
+  const kpiData = React.useMemo(() => {
+    const kpis = dashboardData?.kpis;
+    if (!kpis) return [];
+    return [
+      {
+        title: 'Gross Production revenue',
+        value: `PKR. ${(kpis.gross_production_revenue?.value || 0).toLocaleString()}`,
+        change: `${kpis.gross_production_revenue?.change_type === 'increase' ? '+' : ''}${kpis.gross_production_revenue?.change || 0}%`,
+        changeType: kpis.gross_production_revenue?.change_type || 'increase',
+        period: ''
+      },
+      {
+        title: 'Avg. Stock Value',
+        value: `PKR. ${(kpis.avg_stock_value?.value || 0).toLocaleString()}`,
+        change: `${kpis.avg_stock_value?.change_type === 'increase' ? '+' : ''}${kpis.avg_stock_value?.change || 0}%`,
+        changeType: kpis.avg_stock_value?.change_type || 'increase',
+        period: ''
+      },
+      {
+        title: 'Stock Conversion Rate',
+        value: `${kpis.stock_conversion_rate?.value || 0}%`,
+        change: `${kpis.stock_conversion_rate?.change_type === 'increase' ? '+' : ''}${kpis.stock_conversion_rate?.change || 0}%`,
+        changeType: kpis.stock_conversion_rate?.change_type || 'increase',
+        period: ''
+      },
+      {
+        title: 'Suppliers',
+        value: `${(kpis.suppliers?.value || 0).toLocaleString()}`,
+        change: `${kpis.suppliers?.change_type === 'increase' ? '+' : ''}${kpis.suppliers?.change || 0}`,
+        changeType: kpis.suppliers?.change_type || 'increase',
+        period: ''
+      },
+    ];
+  }, [dashboardData]);
 
   const timePeriods = ["Today", "Week", "Month", "Seasonal", "Year", "Custom date"];
 
@@ -434,6 +327,21 @@ function ManufacturingReports() {
       </Box>
 
       {/* KPI Summary Cards */}
+      {isLoading ? (
+        <Center h='200px' mb='24px'>
+          <VStack spacing='12px'>
+            <Spinner thickness='4px' speed='0.65s' emptyColor='gray.200' color='#FF8D28' size='lg' />
+            <Text color='gray.500' fontSize='sm'>Loading KPIs...</Text>
+          </VStack>
+        </Center>
+      ) : error ? (
+        <Center h='200px' mb='24px'>
+          <VStack spacing='12px'>
+            <Text color='red.500' fontSize='sm'>Failed to load KPIs: {error}</Text>
+            <Button size='sm' colorScheme='orange' onClick={fetchDashboardData}>Retry</Button>
+          </VStack>
+        </Center>
+      ) : (
       <Grid
         templateColumns={{
           sm: "1fr",
@@ -475,6 +383,7 @@ function ManufacturingReports() {
           </Card>
         ))}
       </Grid>
+      )}
 
       {/* Charts Section */}
       <Grid
@@ -484,8 +393,14 @@ function ManufacturingReports() {
         }}
         gap='24px'
         mb='24px'>
-        <StockValueChart timePeriod={timePeriod} customDateRange={customDateRange} />
-        <MaterialsChart />
+        <StockValueChart 
+          timePeriod={timePeriod} 
+          customDateRange={customDateRange} 
+          chartData={dashboardData?.charts?.production_trend || []}
+        />
+        <MaterialsChart 
+          categoryData={dashboardData?.charts?.material_breakdown || []}
+        />
       </Grid>
 
       {/* Data Tables Section */}
@@ -495,8 +410,16 @@ function ManufacturingReports() {
           lg: "1fr 1fr",
         }}
         gap='24px'>
-        <BestProducedMaterials timePeriod={timePeriod} customDateRange={customDateRange} />
-        <TopManufacturingCategories timePeriod={timePeriod} customDateRange={customDateRange} />
+        <BestProducedMaterials 
+          timePeriod={timePeriod} 
+          customDateRange={customDateRange}
+          data={dashboardData?.charts?.material_breakdown || []}
+        />
+        <TopManufacturingCategories 
+          timePeriod={timePeriod} 
+          customDateRange={customDateRange}
+          data={dashboardData?.charts?.material_breakdown || []}
+        />
       </Grid>
     </Flex>
   );
