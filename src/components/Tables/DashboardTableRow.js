@@ -41,24 +41,9 @@ function DashboardTableRow(props) {
       </Td>
 
       <Td>
-        <AvatarGroup size="sm">
-          {Array.isArray(members) ? members.map((member) => {
-            return (
-              <Avatar
-                name="Ryan Florence"
-                key={member}
-                src={member}
-                _hover={{ zIndex: "3", cursor: "pointer" }}
-              />
-            );
-          }) : (
-            <Text fontSize="md"
-            color={textColor}
-            fontWeight="bold">
-              {members}
-            </Text>
-          )}
-        </AvatarGroup>
+        <Text fontSize="md" color={textColor} fontWeight="bold">
+          {Array.isArray(members) ? members.join(', ') : members}
+        </Text>
       </Td>
       <Td>
         <Text fontSize="md" color={textColor} fontWeight="bold" pb=".5rem">

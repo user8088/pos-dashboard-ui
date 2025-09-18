@@ -30,32 +30,65 @@ import WorkWithTheRockets from "./components/WorkWithTheRockets";
 
 export default function Dashboard() {
   const iconBoxInside = useColorModeValue("white", "white");
+  const [dashboardData, setDashboardData] = React.useState(null);
+  const [isLoading, setIsLoading] = React.useState(true);
+  const [error, setError] = React.useState(null);
+
+  // Fetch dashboard data from Sales Analytics API
+  const fetchDashboardData = async () => {
+    try {
+      setIsLoading(true);
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000/api'}/core/analytics/dashboard?period=today`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json',
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setDashboardData(data.data);
+      } else {
+        setError('Failed to fetch dashboard data');
+      }
+    } catch (error) {
+      console.error('Failed to fetch dashboard data:', error);
+      setError('Failed to fetch dashboard data');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  React.useEffect(() => {
+    fetchDashboardData();
+  }, []);
 
   return (
     <Flex flexDirection='column' pt={{ base: "120px", md: "75px" }}>
       <SimpleGrid columns={{ sm: 1, md: 2, xl: 4 }} spacing='24px'>
         <MiniStatistics
           title={"Today's Moneys"}
-          amount={"PKR. 53,000"}
-          percentage={55}
+          amount={isLoading ? "Loading..." : dashboardData ? `PKR. ${dashboardData.kpis.gross_revenue.value.toLocaleString()}` : "PKR. 0"}
+          percentage={dashboardData ? dashboardData.kpis.gross_revenue.change : 0}
           icon={<WalletIcon h={"24px"} w={"24px"} color={iconBoxInside} />}
         />
         <MiniStatistics
           title={"Customers Today"}
-          amount={"2,300"}
-          percentage={5}
+          amount={isLoading ? "Loading..." : dashboardData ? dashboardData.kpis.customers.value.toLocaleString() : "0"}
+          percentage={dashboardData ? dashboardData.kpis.customers.change : 0}
           icon={<GlobeIcon h={"24px"} w={"24px"} color={iconBoxInside} />}
         />
         <MiniStatistics
-          title={"Comparitive Loss"}
-          amount={"PKR. 3,020"}
-          percentage={-14}
+          title={"Avg Order Value"}
+          amount={isLoading ? "Loading..." : dashboardData ? `PKR. ${dashboardData.kpis.avg_order_value.value.toLocaleString()}` : "PKR. 0"}
+          percentage={dashboardData ? dashboardData.kpis.avg_order_value.change : 0}
           icon={<DocumentIcon h={"24px"} w={"24px"} color={iconBoxInside} />}
         />
         <MiniStatistics
-          title={"Total Sales"}
-          amount={"PKR. 173,000"}
-          percentage={8}
+          title={"Conversion Rate"}
+          amount={isLoading ? "Loading..." : dashboardData ? `${dashboardData.kpis.conversion_rate.value}%` : "0%"}
+          percentage={dashboardData ? dashboardData.kpis.conversion_rate.change : 0}
           icon={<CartIcon h={"24px"} w={"24px"} color={iconBoxInside} />}
         />
       </SimpleGrid>
@@ -93,13 +126,15 @@ export default function Dashboard() {
         mb={{ lg: "26px" }}>
         <ActiveUsers
           title={"Sales & Analytics"}
-          percentage={23}
-          chart={<BarChart />}
+          percentage={dashboardData ? dashboardData.kpis.gross_revenue.change : 0}
+          chart={<BarChart data={dashboardData ? dashboardData.charts.revenue_trend : []} />}
+          dashboardData={dashboardData}
+          isLoading={isLoading}
         />
         <SalesOverview
           title={"Sales Overview"}
-          percentage={5}
-          chart={<LineChart />}
+          percentage={dashboardData ? dashboardData.kpis.gross_revenue.change : 0}
+          chart={<LineChart data={dashboardData ? dashboardData.charts.revenue_trend : []} />}
         />
       </Grid>
       <Grid
@@ -111,11 +146,13 @@ export default function Dashboard() {
           amount={30}
           captions={["Products", "Stocks Sold", "Stock Value", "Remaining Stock %"]}
           data={dashboardTableData}
+          isLoading={isLoading}
         />
         <OrdersOverview
-          title={"Expense Notifications"}
+          title={"Recent Transactions"}
           amount={30}
           data={timelineData}
+          isLoading={isLoading}
         />
       </Grid>
     </Flex>

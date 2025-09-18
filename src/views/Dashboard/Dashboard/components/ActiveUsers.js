@@ -14,7 +14,7 @@ import {
 import React from "react";
 import ChartStatistics from "./ChartStatistics";
 
-const ActiveUsers = ({ title, percentage, chart }) => {
+const ActiveUsers = ({ title, percentage, chart, dashboardData, isLoading }) => {
   const iconBoxInside = useColorModeValue("white", "white");
   const textColor = useColorModeValue("gray.700", "white");
   return (
@@ -81,32 +81,32 @@ const ActiveUsers = ({ title, percentage, chart }) => {
             >
             <ChartStatistics
               title={"Top Product"}
-              amount={"PKR. 82,984"}
+              amount={isLoading ? "Loading..." : dashboardData && dashboardData.best_selling_products && dashboardData.best_selling_products.length > 0 ? `PKR. ${dashboardData.best_selling_products[0].total_revenue.toLocaleString()}` : "PKR. 0"}
               percentage={20}
-              category={"Electric Drill"}
-                             icon={<WalletIcon h={{ base: "12px", sm: "13px", md: "15px", lg: "16px" }} w={{ base: "12px", sm: "13px", md: "15px", lg: "16px" }} color={iconBoxInside} />}
+              category={isLoading ? "Loading..." : dashboardData && dashboardData.best_selling_products && dashboardData.best_selling_products.length > 0 ? dashboardData.best_selling_products[0].product_name : "No data"}
+              icon={<WalletIcon h={{ base: "12px", sm: "13px", md: "15px", lg: "16px" }} w={{ base: "12px", sm: "13px", md: "15px", lg: "16px" }} color={iconBoxInside} />}
              />
              <ChartStatistics
                title={"Top Category"}
-               amount={"PKR. 100,000"}
+               amount={isLoading ? "Loading..." : dashboardData && dashboardData.charts.category_breakdown && dashboardData.charts.category_breakdown.length > 0 ? `PKR. ${dashboardData.charts.category_breakdown[0].revenue.toLocaleString()}` : "PKR. 0"}
                percentage={20}
-               category={"Construction Materials"}
+               category={isLoading ? "Loading..." : dashboardData && dashboardData.charts.category_breakdown && dashboardData.charts.category_breakdown.length > 0 ? dashboardData.charts.category_breakdown[0].category : "No data"}
                icon={<RocketIcon h={{ base: "12px", sm: "13px", md: "15px", lg: "16px" }} w={{ base: "12px", sm: "13px", md: "15px", lg: "16px" }} color={iconBoxInside} />}
              />
              <ChartStatistics
-               title={"Total Profit"}
-               amount={"PKR.320,000"}
+               title={"Total Revenue"}
+               amount={isLoading ? "Loading..." : dashboardData ? `PKR. ${dashboardData.kpis.gross_revenue.value.toLocaleString()}` : "PKR. 0"}
                percentage={20}
-               changeIndicator={"(+23) than last week"}
-               changeType={"positive"}
+               changeIndicator={dashboardData ? `(${dashboardData.kpis.gross_revenue.change > 0 ? '+' : ''}${dashboardData.kpis.gross_revenue.change}) than last week` : "(0) than last week"}
+               changeType={dashboardData && dashboardData.kpis.gross_revenue.change > 0 ? "positive" : "negative"}
                icon={<CartIcon h={{ base: "12px", sm: "13px", md: "15px", lg: "16px" }} w={{ base: "12px", sm: "13px", md: "15px", lg: "16px" }} color={iconBoxInside} />}
              />
              <ChartStatistics
-               title={"Total Loss"}
-               amount={"PKR.44,000"}
+               title={"Avg Order Value"}
+               amount={isLoading ? "Loading..." : dashboardData ? `PKR. ${dashboardData.kpis.avg_order_value.value.toLocaleString()}` : "PKR. 0"}
                percentage={20}
-               changeIndicator={"(-10) than last week"}
-               changeType={"negative"}
+               changeIndicator={dashboardData ? `(${dashboardData.kpis.avg_order_value.change > 0 ? '+' : ''}${dashboardData.kpis.avg_order_value.change}) than last week` : "(0) than last week"}
+               changeType={dashboardData && dashboardData.kpis.avg_order_value.change > 0 ? "positive" : "negative"}
                icon={<StatsIcon h={{ base: "12px", sm: "13px", md: "15px", lg: "16px" }} w={{ base: "12px", sm: "13px", md: "15px", lg: "16px" }} color={iconBoxInside} />}
             />
           </SimpleGrid>
