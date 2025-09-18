@@ -167,7 +167,7 @@ function CustomerManagement() {
     try {
       setIsLoading(true);
       const token = localStorage.getItem('token');
-      const res = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000/api'}/core/customer`, {
+      const res = await fetch(`${process.env.REACT_APP_API_URL || 'https://server.mughalsupplier.com'}/core/customer`, {
         headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' }
       });
       if (res.ok) {
@@ -203,7 +203,7 @@ function CustomerManagement() {
   const fetchSaleableStock = async () => {
     try {
       const token = localStorage.getItem('token');
-      const res = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000/api'}/core/stock`, {
+      const res = await fetch(`${process.env.REACT_APP_API_URL || 'https://server.mughalsupplier.com'}/core/stock`, {
         headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' }
       });
       if (res.ok) {
@@ -309,7 +309,7 @@ function CustomerManagement() {
           quantity: parseFloat(it.quantity)
         }))
       };
-      const res = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000/api'}/core/customer`, {
+      const res = await fetch(`${process.env.REACT_APP_API_URL || 'https://server.mughalsupplier.com'}/core/customer`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json', 'Accept': 'application/json' },
         body: JSON.stringify(payload)
@@ -344,7 +344,7 @@ function CustomerManagement() {
   const handleDownloadInvoice = async (customer) => {
     try {
       const token = localStorage.getItem('token');
-      const res = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000/api'}/core/customer/${customer.id}/invoice`, {
+      const res = await fetch(`${process.env.REACT_APP_API_URL || 'https://server.mughalsupplier.com'}/core/customer/${customer.id}/invoice`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (!res.ok) { toast({ title: "Download Failed", description: 'Unable to download invoice', status: "error", duration: 4000, isClosable: true }); return; }
@@ -370,7 +370,7 @@ function CustomerManagement() {
     onInvoicesOpen();
     try {
       const token = localStorage.getItem('token');
-      const res = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000/api'}/core/customer/${customer.id}/invoices`, {
+      const res = await fetch(`${process.env.REACT_APP_API_URL || 'https://server.mughalsupplier.com'}/core/customer/${customer.id}/invoices`, {
         headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' }
       });
       if (res.ok) {
@@ -390,7 +390,7 @@ function CustomerManagement() {
     if (!window.confirm(`Delete customer "${customer.name}" and their purchases?`)) return;
     try {
       const token = localStorage.getItem('token');
-      const res = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000/api'}/core/customer/${customer.id}`, {
+      const res = await fetch(`${process.env.REACT_APP_API_URL || 'https://server.mughalsupplier.com'}/core/customer/${customer.id}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' }
       });

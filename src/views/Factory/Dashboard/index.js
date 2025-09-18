@@ -56,7 +56,7 @@ export default function FactoryDashboard() {
         throw new Error('No authentication token found');
       }
 
-      const response = await fetch('http://localhost:8000/api/core/manufacturing/dashboard?period=today', {
+      const response = await fetch('https://server.mughalsupplier.com/core/manufacturing/dashboard?period=today', {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${token}`,

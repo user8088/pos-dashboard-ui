@@ -65,7 +65,7 @@ const ApiTest = () => {
         )}
         
         <Text fontSize="sm" color="gray.600">
-          API URL: {process.env.REACT_APP_API_URL || 'http://localhost:8000/api'}
+          API URL: {process.env.REACT_APP_API_URL || 'https://server.mughalsupplier.com'}
         </Text>
       </VStack>
     </Box>

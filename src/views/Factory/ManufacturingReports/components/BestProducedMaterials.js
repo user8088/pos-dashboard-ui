@@ -35,7 +35,7 @@ const BestProducedMaterials = ({ timePeriod, customDateRange, data = [] }) => {
     try {
       setIsLoadingStock(true);
       const token = localStorage.getItem('token');
-      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000/api'}/core/stock`, {
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'https://server.mughalsupplier.com'}/core/stock`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Accept': 'application/json',

@@ -71,7 +71,7 @@ const RawMaterialTable = ({ title, captions }) => {
     setIsLoading(true);
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000/api'}/core/raw-material`, {
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'https://server.mughalsupplier.com'}/core/raw-material`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -125,7 +125,7 @@ const RawMaterialTable = ({ title, captions }) => {
   const fetchSuppliers = async () => {
     try {
       const token = localStorage.getItem('token');
-      const res = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000/api'}/core/raw-material/suppliers`, {
+      const res = await fetch(`${process.env.REACT_APP_API_URL || 'https://server.mughalsupplier.com'}/core/raw-material/suppliers`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Accept': 'application/json',
@@ -157,7 +157,7 @@ const RawMaterialTable = ({ title, captions }) => {
     
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000/api'}/core/raw-material`, {
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'https://server.mughalsupplier.com'}/core/raw-material`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -260,7 +260,7 @@ const RawMaterialTable = ({ title, captions }) => {
     
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000/api'}/core/raw-material/${editingMaterial.materialId}`, {
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'https://server.mughalsupplier.com'}/core/raw-material/${editingMaterial.materialId}`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -342,7 +342,7 @@ const RawMaterialTable = ({ title, captions }) => {
     if (!wasteTarget || !wasteQuantity || parseFloat(wasteQuantity) <= 0) return;
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000/api'}/core/raw-material/${wasteTarget.materialId}/waste`, {
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'https://server.mughalsupplier.com'}/core/raw-material/${wasteTarget.materialId}/waste`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -391,7 +391,7 @@ const RawMaterialTable = ({ title, captions }) => {
     
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000/api'}/core/raw-material/${material.materialId}`, {
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'https://server.mughalsupplier.com'}/core/raw-material/${material.materialId}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`,

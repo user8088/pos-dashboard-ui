@@ -55,7 +55,7 @@ const Invoices = ({ title, data }) => {
       setIsLoading(true);
       const token = localStorage.getItem('token');
       // Prefer dedicated invoices endpoint
-      const invRes = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000/api'}/core/invoices`, {
+      const invRes = await fetch(`${process.env.REACT_APP_API_URL || 'https://server.mughalsupplier.com'}/core/invoices`, {
         headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' }
       });
       if (invRes.ok) {
@@ -72,7 +72,7 @@ const Invoices = ({ title, data }) => {
         setInvoices(mapped);
       } else {
         // Fallback: group customer purchases into one invoice per customer
-        const res = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000/api'}/core/customer`, {
+        const res = await fetch(`${process.env.REACT_APP_API_URL || 'https://server.mughalsupplier.com'}/core/customer`, {
           headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' }
         });
         if (!res.ok) { setInvoices([]); setIsLoading(false); return; }
@@ -147,7 +147,7 @@ const Invoices = ({ title, data }) => {
   const downloadCustomerPdf = async (customerId) => {
     try {
       const token = localStorage.getItem('token');
-      const res = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000/api'}/core/customer/${customerId}/invoice`, {
+      const res = await fetch(`${process.env.REACT_APP_API_URL || 'https://server.mughalsupplier.com'}/core/customer/${customerId}/invoice`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (!res.ok) return;
@@ -166,7 +166,7 @@ const Invoices = ({ title, data }) => {
   const downloadInvoiceById = async (invoiceId) => {
     try {
       const token = localStorage.getItem('token');
-      const res = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000/api'}/core/invoices/${invoiceId}/download`, {
+      const res = await fetch(`${process.env.REACT_APP_API_URL || 'https://server.mughalsupplier.com'}/core/invoices/${invoiceId}/download`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (!res.ok) return;

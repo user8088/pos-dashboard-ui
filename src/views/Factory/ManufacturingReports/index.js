@@ -87,7 +87,7 @@ function ManufacturingReports() {
         params.set('start_date', customDateRange.startDate);
         params.set('end_date', customDateRange.endDate);
       }
-      const res = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000/api'}/core/manufacturing/dashboard?${params.toString()}`, {
+      const res = await fetch(`${process.env.REACT_APP_API_URL || 'https://server.mughalsupplier.com'}/core/manufacturing/dashboard?${params.toString()}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Accept': 'application/json',

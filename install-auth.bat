@@ -6,7 +6,7 @@ npm install axios
 
 if not exist .env (
     echo Creating .env file...
-    echo REACT_APP_API_URL=http://localhost:8000/api > .env
+    echo REACT_APP_API_URL=https://server.mughalsupplier.com > .env
     echo .env file created with default API URL
 ) else (
     echo .env file already exists
