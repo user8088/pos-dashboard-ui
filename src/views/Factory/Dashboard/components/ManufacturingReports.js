@@ -44,7 +44,7 @@ const ManufacturingReports = () => {
       const token = localStorage.getItem('token');
       const queryParams = new URLSearchParams({ period });
       
-      const response = await fetch(`${process.env.REACT_APP_API_URL || 'https://server.mughalsupplier.com'}/core/manufacturing/dashboard?${queryParams}`, {
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'https://server.mughalsupplier.com/api'}/core/manufacturing/dashboard?${queryParams}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Accept': 'application/json',

@@ -1,5 +1,5 @@
 // Authentication service for Laravel API integration
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://server.mughalsupplier.com';
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://server.mughalsupplier.com/api';
 const BASE_URL = API_BASE_URL.replace('/api', ''); // Base Laravel URL without /api
 
 class AuthService {

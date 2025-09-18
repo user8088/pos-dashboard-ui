@@ -17,7 +17,7 @@ const OrdersOverview = ({ title, amount, data, isLoading }) => {
     try {
       setTransactionLoading(true);
       const token = localStorage.getItem('token');
-      const response = await fetch(`${process.env.REACT_APP_API_URL || 'https://server.mughalsupplier.com'}/core/transactions?limit=5`, {
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'https://server.mughalsupplier.com/api'}/core/transactions?limit=5`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Accept': 'application/json',

@@ -39,7 +39,7 @@ export default function Dashboard() {
     try {
       setIsLoading(true);
       const token = localStorage.getItem('token');
-      const response = await fetch(`${process.env.REACT_APP_API_URL || 'https://server.mughalsupplier.com'}/core/analytics/dashboard?period=today`, {
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'https://server.mughalsupplier.com/api'}/core/analytics/dashboard?period=today`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Accept': 'application/json',

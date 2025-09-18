@@ -108,7 +108,7 @@ function SupplierManagement() {
       setIsLoading(true);
       try {
         const token = localStorage.getItem("token");
-        const res = await fetch("https://server.mughalsupplier.com/core/suppliers", {
+        const res = await fetch("https://server.mughalsupplier.com/api/core/suppliers", {
           headers: {
             Authorization: `Bearer ${token}`,
             "Content-Type": "application/json",
@@ -150,7 +150,7 @@ function SupplierManagement() {
     onTxnOpen();
     try {
       const token = localStorage.getItem("token");
-      const res = await fetch(`https://server.mughalsupplier.com/core/suppliers/${supplier.id}/transactions`, {
+      const res = await fetch(`https://server.mughalsupplier.com/api/core/suppliers/${supplier.id}/transactions`, {
         headers: {
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
@@ -177,7 +177,7 @@ function SupplierManagement() {
         phone: newSupplier.phone,
         status: (newSupplier.status || "Active").toString().toLowerCase().replace(/\s+/g, "_"),
       };
-      const res = await fetch("https://server.mughalsupplier.com/core/suppliers", {
+      const res = await fetch("https://server.mughalsupplier.com/api/core/suppliers", {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,

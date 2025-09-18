@@ -75,7 +75,7 @@ const Transactions = ({
   const fetchTransactions = async () => {
     try {
       const token = localStorage.getItem('token');
-      const url = `${process.env.REACT_APP_API_URL || 'https://server.mughalsupplier.com'}/core/transactions`;
+      const url = `${process.env.REACT_APP_API_URL || 'https://server.mughalsupplier.com/api'}/core/transactions`;
       const res = await fetch(url, {
         headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' }
       });
@@ -103,7 +103,7 @@ const Transactions = ({
   const fetchAccounts = async () => {
     try {
       const token = localStorage.getItem('token');
-      const res = await fetch(`${process.env.REACT_APP_API_URL || 'https://server.mughalsupplier.com'}/core/accounts`, {
+      const res = await fetch(`${process.env.REACT_APP_API_URL || 'https://server.mughalsupplier.com/api'}/core/accounts`, {
         headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' }
       });
       if (!res.ok) { setAccounts([]); toast({ title: 'Failed to load accounts', status: 'error', duration: 3000, isClosable: true }); return; }
@@ -116,7 +116,7 @@ const Transactions = ({
     if (!id) return;
     try {
       const token = localStorage.getItem('token');
-      const res = await fetch(`${process.env.REACT_APP_API_URL || 'https://server.mughalsupplier.com'}/core/transactions/${id}`, {
+      const res = await fetch(`${process.env.REACT_APP_API_URL || 'https://server.mughalsupplier.com/api'}/core/transactions/${id}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' }
       });
@@ -182,7 +182,7 @@ const Transactions = ({
         notes: newTransaction.notes || undefined,
         transacted_at: newTransaction.transacted_at,
       };
-      const res = await fetch(`${process.env.REACT_APP_API_URL || 'https://server.mughalsupplier.com'}/core/transactions`, {
+      const res = await fetch(`${process.env.REACT_APP_API_URL || 'https://server.mughalsupplier.com/api'}/core/transactions`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json', 'Accept': 'application/json' },
         body: JSON.stringify(body)

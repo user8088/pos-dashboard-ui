@@ -112,7 +112,7 @@ function Billing() {
   const fetchAccounts = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`${process.env.REACT_APP_API_URL || 'https://server.mughalsupplier.com'}/core/accounts`, {
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'https://server.mughalsupplier.com/api'}/core/accounts`, {
         method: 'GET',
         headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' },
       });
@@ -130,7 +130,7 @@ function Billing() {
   const fetchRevenueData = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`${process.env.REACT_APP_API_URL || 'https://server.mughalsupplier.com'}/core/revenue/total`, {
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'https://server.mughalsupplier.com/api'}/core/revenue/total`, {
         method: 'GET',
         headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' },
       });
@@ -146,7 +146,7 @@ function Billing() {
   const fetchAccountSummary = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`${process.env.REACT_APP_API_URL || 'https://server.mughalsupplier.com'}/core/accounts/summary`, {
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'https://server.mughalsupplier.com/api'}/core/accounts/summary`, {
         method: 'GET',
         headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' },
       });
@@ -173,7 +173,7 @@ function Billing() {
     }
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`${process.env.REACT_APP_API_URL || 'https://server.mughalsupplier.com'}/core/account`, {
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'https://server.mughalsupplier.com/api'}/core/account`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json', 'Accept': 'application/json' },
         body: JSON.stringify({
@@ -203,7 +203,7 @@ function Billing() {
     if (!editingAccount) return;
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`${process.env.REACT_APP_API_URL || 'https://server.mughalsupplier.com'}/core/account/${editingAccount.account_id}`, {
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'https://server.mughalsupplier.com/api'}/core/account/${editingAccount.account_id}`, {
         method: 'PUT',
         headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json', 'Accept': 'application/json' },
         body: JSON.stringify({
@@ -231,7 +231,7 @@ function Billing() {
     if (!window.confirm('Are you sure you want to delete this account?')) return;
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`${process.env.REACT_APP_API_URL || 'https://server.mughalsupplier.com'}/core/account/${accountId}`, {
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'https://server.mughalsupplier.com/api'}/core/account/${accountId}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' },
       });
@@ -262,7 +262,7 @@ function Billing() {
     }
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`${process.env.REACT_APP_API_URL || 'https://server.mughalsupplier.com'}/core/account/${allocationForm.account_id}/allocate`, {
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'https://server.mughalsupplier.com/api'}/core/account/${allocationForm.account_id}/allocate`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json', 'Accept': 'application/json' },
         body: JSON.stringify({
@@ -289,7 +289,7 @@ function Billing() {
     if (!transferForm.from_account_id || !transferForm.to_account_id || !transferForm.amount) return;
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`${process.env.REACT_APP_API_URL || 'https://server.mughalsupplier.com'}/core/account/transfer`, {
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'https://server.mughalsupplier.com/api'}/core/account/transfer`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json', 'Accept': 'application/json' },
         body: JSON.stringify({

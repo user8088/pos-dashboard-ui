@@ -63,7 +63,7 @@ function SalesAnalytics() {
       const token = localStorage.getItem('token');
       const queryParams = new URLSearchParams({ period, ...params });
       
-      const response = await fetch(`https://server.mughalsupplier.com/core/analytics/dashboard?${queryParams}`, {
+      const response = await fetch(`https://server.mughalsupplier.com/api/core/analytics/dashboard?${queryParams}`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -110,7 +110,7 @@ function SalesAnalytics() {
         params.end_date = customDateRange.endDate;
       }
       
-      const response = await fetch('https://server.mughalsupplier.com/core/analytics/export', {
+      const response = await fetch('https://server.mughalsupplier.com/api/core/analytics/export', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
