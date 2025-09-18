@@ -45,10 +45,16 @@ class LineChart extends React.Component {
         chartOptions: processedOptions,
       });
     } else {
-      // Fallback to default data
+      // NO FALLBACK DATA - show empty chart
       this.setState({
-        chartData: lineChartData,
-        chartOptions: lineChartOptions,
+        chartData: [],
+        chartOptions: {
+          ...lineChartOptions,
+          xaxis: {
+            ...lineChartOptions.xaxis,
+            categories: []
+          }
+        },
       });
     }
   }
