@@ -45,10 +45,16 @@ class BarChart extends Component {
         chartOptions: processedOptions,
       });
     } else {
-      // Fallback to default data
+      // NO FALLBACK DATA - show empty chart
       this.setState({
-        chartData: barChartData,
-        chartOptions: barChartOptions,
+        chartData: [],
+        chartOptions: {
+          ...barChartOptions,
+          xaxis: {
+            ...barChartOptions.xaxis,
+            categories: []
+          }
+        },
       });
     }
   }
