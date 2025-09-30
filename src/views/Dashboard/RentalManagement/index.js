@@ -2,6 +2,7 @@
 import {
   Table,
   Tbody,
+  Td,
   Text,
   Th,
   Thead,
@@ -27,6 +28,11 @@ import {
   Box,
   Image,
   Badge,
+  IconButton,
+  Menu,
+  MenuButton,
+  MenuList,
+  MenuItem,
 } from "@chakra-ui/react";
 // Custom components
 import Card from "components/Card/Card.js";
@@ -34,7 +40,9 @@ import CardBody from "components/Card/CardBody.js";
 import CardHeader from "components/Card/CardHeader.js";
 import React from "react";
 import { FaPlus, FaFileCsv, FaRuler, FaTags } from "react-icons/fa";
+import { EditIcon, DeleteIcon, RepeatIcon, HamburgerIcon } from "@chakra-ui/icons";
 import RentalTableRow from "components/Tables/RentalTableRow";
+import ResponsiveTable from "components/Tables/ResponsiveTable";
 import logo from "assets/img/avatars/placeholder.png";
 
 function RentalManagement() {
@@ -151,8 +159,35 @@ function RentalManagement() {
     if (!newItem.name || !newItem.unit) return;
     try {
       const token = localStorage.getItem('token');
-      const selectedUnit = customUnits.find(u => u.unitName === newItem.unit);
-      const unitId = selectedUnit ? selectedUnit.unitId : null;
+      let selectedUnit = customUnits.find(u => u.unitName === newItem.unit);
+      let unitId = selectedUnit ? selectedUnit.unitId : null;
+
+      // If user selected Custom unit, create it first and use returned unit_id
+      if (!unitId && newItem.unit === 'Custom') {
+        if (!newItem.customUnit) {
+          toast({ title: "Unit required", description: 'Please enter a custom unit name.', status: "error", duration: 3000, isClosable: true });
+          return;
+        }
+
+        const unitResp = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000/api'}/core/unit`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json', 'Accept': 'application/json' },
+          body: JSON.stringify({
+            unit_name: newItem.customUnit,
+            metric: newItem.customUnit,
+            custom_metric: null
+          })
+        });
+        const unitData = await unitResp.json();
+        if (!unitResp.ok) {
+          toast({ title: 'Failed to create unit', description: unitData.message || 'Could not create custom unit', status: 'error', duration: 5000, isClosable: true });
+          return;
+        }
+        unitId = unitData.unit_id;
+        // add to local units and set selection to the new unit name for future interactions
+        setCustomUnits(prev => [...prev, { unitName: unitData.unit_name, unitMetric: unitData.metric, unitId: unitData.unit_id }]);
+        setNewItem(prev => ({ ...prev, unit: unitData.unit_name }));
+      }
       const selectedCategory = categories.find(c => c.name === newItem.category);
       const categoryId = selectedCategory ? selectedCategory.id : null;
       const payload = {
@@ -332,20 +367,46 @@ function RentalManagement() {
           <Text fontSize='xl' color={textColor} fontWeight='bold'>
             Rental Management
           </Text>
-          <HStack spacing='8px' wrap='wrap' justify={{ base: 'center', md: 'flex-end' }}>
-            <Button leftIcon={<FaFileCsv />} colorScheme='teal' borderColor='#FF8D28' color='#FF8D28' variant='outline' fontSize='xs' p='6px 16px' size='sm'>
-              IMPORT CSV
-            </Button>
-            <Button leftIcon={<FaTags />} colorScheme='teal' borderColor='#FF8D28' color='#FF8D28' variant='outline' fontSize='xs' p='6px 16px' size='sm'>
-              ADD CATEGORY
-            </Button>
-            <Button leftIcon={<FaRuler />} colorScheme='teal' borderColor='#FF8D28' color='#FF8D28' variant='outline' fontSize='xs' p='6px 16px' size='sm'>
-              ADD UNIT
-            </Button>
-            <Button leftIcon={<FaPlus />} colorScheme='teal' borderColor='#FF8D28' color='#FF8D28' variant='outline' fontSize='xs' p='6px 16px' size='sm' onClick={onOpen}>
-              ADD NEW RENTAL
-            </Button>
-          </HStack>
+          <Flex direction={{ base: "column", sm: "row" }} gap="8px">
+            {/* Desktop: Show all buttons */}
+            <HStack spacing='8px' wrap='wrap' justify={{ base: 'center', md: 'flex-end' }} display={{ base: "none", md: "flex" }}>
+              <Button leftIcon={<FaFileCsv />} colorScheme='teal' borderColor='#FF8D28' color='#FF8D28' variant='outline' fontSize='xs' p='6px 16px' size='sm'>
+                IMPORT CSV
+              </Button>
+              <Button leftIcon={<FaTags />} colorScheme='teal' borderColor='#FF8D28' color='#FF8D28' variant='outline' fontSize='xs' p='6px 16px' size='sm'>
+                ADD CATEGORY
+              </Button>
+              <Button leftIcon={<FaRuler />} colorScheme='teal' borderColor='#FF8D28' color='#FF8D28' variant='outline' fontSize='xs' p='6px 16px' size='sm'>
+                ADD UNIT
+              </Button>
+              <Button leftIcon={<FaPlus />} colorScheme='teal' borderColor='#FF8D28' color='#FF8D28' variant='outline' fontSize='xs' p='6px 16px' size='sm' onClick={onOpen}>
+                ADD NEW RENTAL
+              </Button>
+            </HStack>
+            
+            {/* Mobile/Tablet: Dropdown menu */}
+            <Box display={{ base: "block", md: "none" }}>
+              <Menu>
+                <MenuButton as={Button} rightIcon={<HamburgerIcon />} size="sm" variant="outline" colorScheme="teal" borderColor='#FF8D28' color='#FF8D28'>
+                  Actions
+                </MenuButton>
+                <MenuList>
+                  <MenuItem icon={<FaPlus />} onClick={onOpen}>
+                    Add New Rental
+                  </MenuItem>
+                  <MenuItem icon={<FaTags />}>
+                    Add Category
+                  </MenuItem>
+                  <MenuItem icon={<FaRuler />}>
+                    Add Unit
+                  </MenuItem>
+                  <MenuItem icon={<FaFileCsv />}>
+                    Import CSV
+                  </MenuItem>
+                </MenuList>
+              </Menu>
+            </Box>
+          </Flex>
         </Flex>
       </CardHeader>
       <CardBody>
@@ -365,151 +426,54 @@ function RentalManagement() {
             </VStack>
           </Flex>
         ) : (
-          <>
-            {/* Desktop Table View */}
-            <Box display={{ base: "none", lg: "block" }} overflowX="auto" maxW="100%">
-              <Table variant='simple' color={textColor} minW="1350px">
-                <Thead>
-                  <Tr my='.8rem' pl='0px' color='gray.400'>
-                    {captions.map((caption, idx) => (
-                             <Th 
-                               color='gray.400' 
-                               key={idx} 
-                               ps={idx === 0 ? "0px" : null}
-                               minW={idx === 0 ? "200px" : idx === 1 ? "100px" : idx === 2 ? "150px" : idx === 3 ? "120px" : idx === 4 ? "120px" : idx === 5 ? "120px" : idx === 6 ? "120px" : idx === 7 ? "120px" : idx === 8 ? "180px" : idx === 9 ? "100px" : "120px"}
-                               maxW={idx === 0 ? "250px" : idx === 1 ? "120px" : idx === 2 ? "180px" : idx === 3 ? "150px" : idx === 4 ? "150px" : idx === 5 ? "150px" : idx === 6 ? "150px" : idx === 7 ? "150px" : idx === 8 ? "220px" : idx === 9 ? "120px" : "150px"}
-                             >
-                        {caption}
-                      </Th>
-                    ))}
-                  </Tr>
-                </Thead>
-                <Tbody>
-                  {rentalData.map((row, index) => (
-                        <RentalTableRow
-                          key={`${row.name}-${index}`}
-                          logo={logo}
-                          name={row.name}
-                          quantity={row.quantity}
-                          category={row.category}
-                          status={row.status}
-                          stockValue={row.stockValue}
-                          totalRented={row.totalRented}
-                          currentRent={row.currentRent}
-                          totalProfit={row.totalProfit}
-                          rentedOn={row.rentedOn}
-                          rentedTill={row.rentedTill}
-                          rentalDurationDays={row.rentalDurationDays}
-                          dailyRate={row.dailyRate}
-                          isOverdue={row.isOverdue}
-                          onEdit={() => openEdit(row)}
-                          onDelete={() => handleDelete(row)}
-                          onRent={() => openRent(row)}
-                          onEndRental={() => openEndRental(row)}
-                        />
-                  ))}
-                </Tbody>
-              </Table>
-            </Box>
-
-            {/* Mobile Card View */}
-            <Box display={{ base: "block", lg: "none" }}>
-              <VStack spacing="16px" align="stretch">
-                {rentalData.map((row, index) => (
-                  <Card key={`${row.name}-${index}`} p="16px">
-                    <VStack spacing="12px" align="stretch">
-                      <Flex justify="space-between" align="center">
-                        <Flex align="center">
-                          <Image src={logo} w="40px" h="40px" me="12px" objectFit="cover" />
-                          <VStack align="start" spacing="2px">
-                            <Text fontSize="md" color={textColor} fontWeight="bold">
-                              {row.name}
-                            </Text>
-                            <Text fontSize="sm" color="gray.500">
-                              {row.category}
-                            </Text>
-                          </VStack>
-                        </Flex>
-                        <Badge colorScheme={row.status === "rented" && row.isOverdue ? "red" : row.status === "rented" ? "yellow" : row.status === "available" ? "green" : "gray"} fontSize="12px" p="4px 8px">
-                          {row.status}
-                        </Badge>
-                      </Flex>
-                      
-                             <Flex justify="space-between" wrap="wrap" gap="8px">
-                               <VStack align="start" spacing="2px">
-                                 <Text fontSize="xs" color="gray.500">Quantity</Text>
-                                 <Text fontSize="sm" color={textColor} fontWeight="bold">{row.quantity}</Text>
-                               </VStack>
-                               <VStack align="start" spacing="2px">
-                                 <Text fontSize="xs" color="gray.500">Stock Value</Text>
-                                 <Text fontSize="sm" color={textColor} fontWeight="bold">{row.stockValue ? `PKR.${row.stockValue}` : 'PKR.0'}</Text>
-                               </VStack>
-                               <VStack align="start" spacing="2px">
-                                 <Text fontSize="xs" color="gray.500">Total Rented</Text>
-                                 <Text fontSize="sm" color={textColor} fontWeight="bold">{row.totalRented || "0"}</Text>
-                               </VStack>
-                               <VStack align="start" spacing="2px">
-                                 <Text fontSize="xs" color="gray.500">Current Rent</Text>
-                                 <Text fontSize="sm" color={textColor} fontWeight="bold">{row.currentRent ? `PKR.${row.currentRent}` : 'PKR.0'}</Text>
-                               </VStack>
-                             </Flex>
-
-                             <Flex justify="space-between" wrap="wrap" gap="8px">
-                               <VStack align="start" spacing="2px">
-                                 <Text fontSize="xs" color="gray.500">Total Profit</Text>
-                                 <Text fontSize="sm" color={textColor} fontWeight="bold">{row.totalProfit ? `PKR.${row.totalProfit}` : 'PKR.0'}</Text>
-                               </VStack>
-                             </Flex>
-
-                      {row.rentalDurationDays && (
-                        <Flex justify="space-between" wrap="wrap" gap="8px">
-                          <VStack align="start" spacing="2px">
-                            <Text fontSize="xs" color="gray.500">Duration</Text>
-                            <Text fontSize="sm" color={textColor} fontWeight="bold">{row.rentalDurationDays} days</Text>
-                          </VStack>
-                          <VStack align="start" spacing="2px">
-                            <Text fontSize="xs" color="gray.500">Daily Rate</Text>
-                            <Text fontSize="sm" color={textColor} fontWeight="bold">{row.dailyRate ? `PKR.${row.dailyRate}/day` : "—"}</Text>
-                          </VStack>
-                        </Flex>
-                      )}
-
-                      {(row.rentedOn || row.rentedTill) && (
-                        <Flex justify="space-between" wrap="wrap" gap="8px">
-                          <VStack align="start" spacing="2px">
-                            <Text fontSize="xs" color="gray.500">Rented On</Text>
-                            <Text fontSize="sm" color={textColor} fontWeight="bold">{row.rentedOn ? new Date(row.rentedOn).toLocaleDateString() : "—"}</Text>
-                          </VStack>
-                          <VStack align="start" spacing="2px">
-                            <Text fontSize="xs" color="gray.500">Rented Till</Text>
-                            <Text fontSize="sm" color={textColor} fontWeight="bold">{row.rentedTill ? new Date(row.rentedTill).toLocaleDateString() : "—"}</Text>
-                          </VStack>
-                        </Flex>
-                      )}
-
-                      <HStack spacing="12px" justify="center" pt="8px">
-                        <Button size="sm" variant="outline" onClick={() => openEdit(row)}>
-                          Edit
-                        </Button>
-                        {row.status === "rented" ? (
-                          <Button size="sm" colorScheme="red" variant="outline" onClick={() => openEndRental(row)}>
-                            End Rental
-                          </Button>
-                        ) : (
-                          <Button size="sm" colorScheme="green" variant="outline" onClick={() => openRent(row)}>
-                            Record Rental
-                          </Button>
-                        )}
-                        <Button size="sm" colorScheme="red" variant="outline" onClick={() => handleDelete(row)}>
-                          Delete
-                        </Button>
-                      </HStack>
-                    </VStack>
-                  </Card>
-                ))}
-              </VStack>
-            </Box>
-          </>
+          <ResponsiveTable
+            captions={captions}
+            data={rentalData}
+            isLoading={isLoading}
+            actionButtons={[
+              {
+                label: "Edit",
+                icon: <EditIcon />,
+                onClick: (item) => openEdit(item),
+              },
+              {
+                label: "End Rental", 
+                icon: <RepeatIcon />,
+                onClick: (item) => openEndRental(item),
+              },
+              {
+                label: "Delete",
+                icon: <DeleteIcon />,
+                onClick: (item) => handleDelete(item),
+                color: "red.500",
+              },
+            ]}
+            minW="1600px"
+          >
+            {rentalData.map((row, index) => (
+              <RentalTableRow
+                key={`${row.name}-${index}`}
+                logo={logo}
+                name={row.name}
+                quantity={row.quantity}
+                category={row.category}
+                status={row.status}
+                stockValue={row.stockValue}
+                totalRented={row.totalRented}
+                currentRent={row.currentRent}
+                totalProfit={row.totalProfit}
+                rentedOn={row.rentedOn}
+                rentedTill={row.rentedTill}
+                rentalDurationDays={row.rentalDurationDays}
+                dailyRate={row.dailyRate}
+                isOverdue={row.isOverdue}
+                onEdit={() => openEdit(row)}
+                onDelete={() => handleDelete(row)}
+                onRent={() => openRent(row)}
+                onEndRental={() => openEndRental(row)}
+              />
+            ))}
+          </ResponsiveTable>
         )}
       </CardBody>
     </Card>

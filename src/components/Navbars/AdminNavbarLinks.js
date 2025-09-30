@@ -16,6 +16,9 @@ import {
   useColorModeValue,
   Avatar,
   useToast,
+  Box,
+  HStack,
+  VStack,
 } from "@chakra-ui/react";
 // Assets
 import avatar1 from "assets/img/avatars/avatar1.png";
@@ -77,20 +80,25 @@ export default function HeaderLinks(props) {
   const settingsRef = React.useRef();
   return (
     <Flex
-      pe={{ sm: "0px", md: "16px" }}
-      w={{ sm: "100%", md: "auto" }}
+      w={{ base: "100%", md: "auto" }}
       alignItems="center"
-      flexDirection="row"
+      justifyContent={{ base: "space-between", md: "flex-end" }}
+      flexDirection={{ base: "row", md: "row" }}
+      gap={{ base: "8px", md: "12px" }}
     >
+      {/* Search Bar - Hidden on mobile, visible on tablet+ */}
       <InputGroup
         cursor="pointer"
         bg={inputBg}
         borderRadius="15px"
         w={{
-          sm: "128px",
+          base: "0px",
+          sm: "0px", 
           md: "200px",
         }}
-        me={{ sm: "auto", md: "20px" }}
+        me={{ base: "0px", md: "20px" }}
+        size="sm"
+        display={{ base: "none", md: "flex" }}
         _focus={{
           borderColor: { mainTeal },
         }}
@@ -131,26 +139,25 @@ export default function HeaderLinks(props) {
           <MenuButton
             as={Button}
             variant="ghost"
-            ms="0px"
-            px="0px"
-            me={{ sm: "2px", md: "16px" }}
+            px={{ base: "4px", md: "8px" }}
             color={navbarIcon}
+            size="sm"
             rightIcon={
               document.documentElement.dir ? (
                 ""
               ) : (
-                <Avatar size="sm" name={user.name} src={avatar1} />
+                <Avatar size="xs" name={user.name} src={avatar1} />
               )
             }
             leftIcon={
               document.documentElement.dir ? (
-                <Avatar size="sm" name={user.name} src={avatar1} />
+                <Avatar size="xs" name={user.name} src={avatar1} />
               ) : (
                 ""
               )
             }
           >
-            <Text display={{ sm: "none", md: "flex" }}>{user.name}</Text>
+            <Text display={{ base: "none", lg: "flex" }} fontSize="xs">{user.name}</Text>
           </MenuButton>
           <MenuList>
             <MenuItem>
@@ -194,64 +201,68 @@ export default function HeaderLinks(props) {
               )
             }
           >
-            <Text display={{ sm: "none", md: "flex" }}>Sign In</Text>
+            <Text display={{ base: "none", sm: "flex" }}>Sign In</Text>
           </Button>
         </NavLink>
       )}
 
-      <SidebarResponsive
-        logoText={props.logoText}
-        secondary={props.secondary}
-        routes={routes}
-        // logo={logo}
-        {...rest}
-      />
-      <SettingsIcon
-        cursor="pointer"
-        ms={{ base: "16px", xl: "0px" }}
-        me="16px"
-        ref={settingsRef}
-        onClick={props.onOpen}
-        color={navbarIcon}
-        w="18px"
-        h="18px"
-      />
-      <Menu>
-        <MenuButton>
-          <BellIcon color={navbarIcon} w="18px" h="18px" />
-        </MenuButton>
-        <MenuList p="16px 8px">
-          <Flex flexDirection="column">
-            <MenuItem borderRadius="8px" mb="10px">
-              <ItemContent
-                time="13 minutes ago"
-                info="from Alicia"
-                boldInfo="New Message"
-                aName="Alicia"
-                aSrc={avatar1}
-              />
-            </MenuItem>
-            <MenuItem borderRadius="8px" mb="10px">
-              <ItemContent
-                time="2 days ago"
-                info="by Josh Henry"
-                boldInfo="New Album"
-                aName="Josh Henry"
-                aSrc={avatar2}
-              />
-            </MenuItem>
-            <MenuItem borderRadius="8px">
-              <ItemContent
-                time="3 days ago"
-                info="Payment succesfully completed!"
-                boldInfo=""
-                aName="Kara"
-                aSrc={avatar3}
-              />
-            </MenuItem>
-          </Flex>
-        </MenuList>
-      </Menu>
+      {/* Mobile Menu - Show hamburger on mobile, hide on larger screens */}
+      <Box display={{ base: "block", md: "none" }}>
+        <SidebarResponsive
+          logoText={props.logoText}
+          secondary={props.secondary}
+          routes={routes}
+          {...rest}
+        />
+      </Box>
+
+      {/* Desktop Actions - Hide on mobile, show on tablet+ */}
+      <HStack spacing="8px" display={{ base: "none", md: "flex" }}>
+        <SettingsIcon
+          cursor="pointer"
+          ref={settingsRef}
+          onClick={props.onOpen}
+          color={navbarIcon}
+          w="16px"
+          h="16px"
+        />
+        <Menu>
+          <MenuButton>
+            <BellIcon color={navbarIcon} w="16px" h="16px" />
+          </MenuButton>
+          <MenuList p="16px 8px">
+            <Flex flexDirection="column">
+              <MenuItem borderRadius="8px" mb="10px">
+                <ItemContent
+                  time="13 minutes ago"
+                  info="from Alicia"
+                  boldInfo="New Message"
+                  aName="Alicia"
+                  aSrc={avatar1}
+                />
+              </MenuItem>
+              <MenuItem borderRadius="8px" mb="10px">
+                <ItemContent
+                  time="2 days ago"
+                  info="by Josh Henry"
+                  boldInfo="New Album"
+                  aName="Josh Henry"
+                  aSrc={avatar2}
+                />
+              </MenuItem>
+              <MenuItem borderRadius="8px">
+                <ItemContent
+                  time="3 days ago"
+                  info="Payment succesfully completed!"
+                  boldInfo=""
+                  aName="Kara"
+                  aSrc={avatar3}
+                />
+              </MenuItem>
+            </Flex>
+          </MenuList>
+        </Menu>
+      </HStack>
     </Flex>
   );
 }

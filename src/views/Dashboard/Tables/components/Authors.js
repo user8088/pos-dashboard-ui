@@ -2,6 +2,7 @@
 import {
   Table,
   Tbody,
+  Box,
   Text,
   Th,
   Thead,
@@ -35,15 +36,21 @@ import {
   NumberInputStepper,
   NumberIncrementStepper,
   NumberDecrementStepper,
+  Menu,
+  MenuButton,
+  MenuList,
+  MenuItem,
 } from "@chakra-ui/react";
 // Custom components
 import Card from "components/Card/Card.js";
 import CardBody from "components/Card/CardBody.js";
 import CardHeader from "components/Card/CardHeader.js";
 import StockTableRow from "components/Tables/StockTableRow";
+import ResponsiveTable from "components/Tables/ResponsiveTable";
 import React from "react";
 import logo from "assets/img/avatars/placeholder.png";
 import { FaPlus, FaFileCsv, FaRuler, FaTags, FaTrash, FaCog } from "react-icons/fa";
+import { EditIcon, DeleteIcon, HamburgerIcon } from "@chakra-ui/icons";
 
 const Authors = ({ title, captions, data }) => {
   const textColor = useColorModeValue("gray.700", "white");
@@ -650,9 +657,31 @@ const Authors = ({ title, captions, data }) => {
     }
     
     try {
-      // Find the selected unit ID
-      const selectedUnit = customUnits.find(unit => unit.unitName === newStock.unit);
-      const unitId = selectedUnit ? selectedUnit.unitId : null;
+      // Find or create unit id
+      let selectedUnit = customUnits.find(unit => unit.unitName === newStock.unit);
+      let unitId = selectedUnit ? selectedUnit.unitId : null;
+      const token = localStorage.getItem('token');
+
+      if (!unitId && newStock.unit === 'Custom') {
+        if (!newStock.customUnit) {
+          toast({ title: "Invalid Unit", description: "Please enter a custom unit name.", status: "error", duration: 3000, isClosable: true });
+          return;
+        }
+        // Create custom unit first
+        const unitResp = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000/api'}/core/unit`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json', 'Accept': 'application/json' },
+          body: JSON.stringify({ unit_name: newStock.customUnit, metric: newStock.customUnit, custom_metric: null })
+        });
+        const unitData = await unitResp.json();
+        if (!unitResp.ok) {
+          toast({ title: 'Failed to create unit', description: unitData.message || 'Could not create custom unit', status: 'error', duration: 5000, isClosable: true });
+          return;
+        }
+        unitId = unitData.unit_id;
+        setCustomUnits(prev => [...prev, { unitName: unitData.unit_name, unitMetric: unitData.metric, unitId: unitData.unit_id }]);
+        setNewStock(prev => ({ ...prev, unit: unitData.unit_name }));
+      }
       
       // Find the selected category ID
       const selectedCategory = categories.find(cat => cat.categoryName === newStock.category);
@@ -669,7 +698,6 @@ const Authors = ({ title, captions, data }) => {
         return;
       }
       
-      const token = localStorage.getItem('token');
       const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000/api'}/core/stock`, {
         method: 'POST',
         headers: {
@@ -1122,52 +1150,78 @@ const Authors = ({ title, captions, data }) => {
           <Text fontSize='xl' color={textColor} fontWeight='bold'>
             Stock Management
           </Text>
-          <HStack spacing='12px'>
-            <Button
-              leftIcon={<FaFileCsv />}
-              colorScheme='teal'
-              borderColor='#FF8D28'
-              color='#FF8D28'
-              variant='outline'
-              fontSize='xs'
-              p='8px 24px'
-              onClick={handleImportCSV}>
-              IMPORT CSV
-            </Button>
-            <Button
-              leftIcon={<FaTags />}
-              colorScheme='teal'
-              borderColor='#FF8D28'
-              color='#FF8D28'
-              variant='outline'
-              fontSize='xs'
-              p='8px 24px'
-              onClick={onCategoryOpen}>
-              ADD CATEGORY
-            </Button>
-            <Button
-              leftIcon={<FaRuler />}
-              colorScheme='teal'
-              borderColor='#FF8D28'
-              color='#FF8D28'
-              variant='outline'
-              fontSize='xs'
-              p='8px 24px'
-              onClick={onUnitOpen}>
-              ADD UNIT
-            </Button>
-            <Button
-              leftIcon={<FaPlus />}
-              colorScheme='teal'
-              borderColor='#FF8D28'
-              color='#FF8D28'
-              variant='outline'
-              fontSize='xs'
-              p='8px 24px'
-              onClick={onOpen}>
-              ADD NEW STOCK
-            </Button>
-          </HStack>
+          <Flex direction={{ base: "column", sm: "row" }} gap="8px">
+            {/* Desktop: Show all buttons */}
+            <HStack spacing='12px' display={{ base: "none", md: "flex" }}>
+              <Button
+                leftIcon={<FaFileCsv />}
+                colorScheme='teal'
+                borderColor='#FF8D28'
+                color='#FF8D28'
+                variant='outline'
+                fontSize='xs'
+                p='8px 24px'
+                onClick={handleImportCSV}>
+                IMPORT CSV
+              </Button>
+              <Button
+                leftIcon={<FaTags />}
+                colorScheme='teal'
+                borderColor='#FF8D28'
+                color='#FF8D28'
+                variant='outline'
+                fontSize='xs'
+                p='8px 24px'
+                onClick={onCategoryOpen}>
+                ADD CATEGORY
+              </Button>
+              <Button
+                leftIcon={<FaRuler />}
+                colorScheme='teal'
+                borderColor='#FF8D28'
+                color='#FF8D28'
+                variant='outline'
+                fontSize='xs'
+                p='8px 24px'
+                onClick={onUnitOpen}>
+                ADD UNIT
+              </Button>
+              <Button
+                leftIcon={<FaPlus />}
+                colorScheme='teal'
+                borderColor='#FF8D28'
+                color='#FF8D28'
+                variant='outline'
+                fontSize='xs'
+                p='8px 24px'
+                onClick={onOpen}>
+                ADD NEW STOCK
+              </Button>
+            </HStack>
+            
+            {/* Mobile/Tablet: Dropdown menu */}
+            <Box display={{ base: "block", md: "none" }}>
+              <Menu>
+                <MenuButton as={Button} rightIcon={<HamburgerIcon />} size="sm" variant="outline" colorScheme="teal" borderColor='#FF8D28' color='#FF8D28'>
+                  Actions
+                </MenuButton>
+                <MenuList>
+                  <MenuItem icon={<FaPlus />} onClick={onOpen}>
+                    Add New Stock
+                  </MenuItem>
+                  <MenuItem icon={<FaTags />} onClick={onCategoryOpen}>
+                    Add Category
+                  </MenuItem>
+                  <MenuItem icon={<FaRuler />} onClick={onUnitOpen}>
+                    Add Unit
+                  </MenuItem>
+                  <MenuItem icon={<FaFileCsv />} onClick={handleImportCSV}>
+                    Import CSV
+                  </MenuItem>
+                </MenuList>
+              </Menu>
+            </Box>
+          </Flex>
         </Flex>
       </CardHeader>
       <CardBody>
@@ -1219,40 +1273,47 @@ const Authors = ({ title, captions, data }) => {
             </VStack>
           </Flex>
         ) : (
-        <Table variant='simple' color={textColor}>
-          <Thead>
-            <Tr my='.8rem' pl='0px' color='gray.400'>
-              {stockCaptions.map((caption, idx) => {
-                return (
-                  <Th color='gray.400' key={idx} ps={idx === 0 ? "0px" : null}>
-                    {caption}
-                  </Th>
-                );
-              })}
-            </Tr>
-          </Thead>
-          <Tbody>
-                         {stockData.map((row, index) => {
-               return (
-                 <StockTableRow
-                   key={`${row.name}-${index}`}
-                   logo={row.logo}
-                   name={row.name}
-                   quantity={row.quantity}
-                   itemPrice={row.itemPrice}
-                   category={row.category}
-                   status={row.status}
-                   stockValue={row.stockValue}
-                   totalSold={row.totalSold}
-                   totalProfit={row.totalProfit}
-                   onEdit={() => handleEditStock(row, index)}
-                     onDelete={() => handleDeleteStock(row)}
-                     onEditProduction={() => openEditProductionModal(row)}
-                 />
-               );
-             })}
-          </Tbody>
-        </Table>
+        <ResponsiveTable
+          captions={stockCaptions}
+          data={stockData}
+          isLoading={isLoading}
+          actionButtons={[
+            {
+              label: "Edit",
+              icon: <EditIcon />,
+              onClick: (item, index) => handleEditStock(item, index),
+            },
+            {
+              label: "Edit Production", 
+              icon: <FaCog />,
+              onClick: (item) => openEditProductionModal(item),
+            },
+            {
+              label: "Delete",
+              icon: <DeleteIcon />,
+              onClick: (item) => handleDeleteStock(item),
+              color: "red.500",
+            },
+          ]}
+        >
+          {stockData.map((row, index) => (
+            <StockTableRow
+              key={`${row.name}-${index}`}
+              logo={row.logo}
+              name={row.name}
+              quantity={row.quantity}
+              itemPrice={row.itemPrice}
+              category={row.category}
+              status={row.status}
+              stockValue={row.stockValue}
+              totalSold={row.totalSold}
+              totalProfit={row.totalProfit}
+              onEdit={() => handleEditStock(row, index)}
+              onDelete={() => handleDeleteStock(row)}
+              onEditProduction={() => openEditProductionModal(row)}
+            />
+          ))}
+        </ResponsiveTable>
         )}
       </CardBody>
 
@@ -1351,8 +1412,8 @@ const Authors = ({ title, captions, data }) => {
                    placeholder='Enter stock value (optional)'
                   value={newStock.stockValue}
                   onChange={(e) => {
+                    // Stock value is a manual override; do not feed it back into auto-calculation
                     setNewStock({...newStock, stockValue: e.target.value});
-                    recalcAddStockValue(newStock.itemPrice, e.target.value, immediateProductionQuantity);
                   }}
                 />
                 {(newStock.itemPrice && (newStock.quantity || (shouldProduceImmediately && immediateProductionQuantity))) ? (
@@ -1619,8 +1680,8 @@ const Authors = ({ title, captions, data }) => {
                      placeholder='Enter stock value (optional)'
                      value={editingStock.stockValue}
                      onChange={(e) => {
-                       setEditingStock({...editingStock, stockValue: e.target.value});
-                       recalcEditStockValue(editingStock.itemPrice, e.target.value);
+                      // Manual override; do not trigger auto-calc from stock value field
+                      setEditingStock({...editingStock, stockValue: e.target.value});
                      }}
                    />
                    {(editingStock.itemPrice && editingStock.quantity) ? (

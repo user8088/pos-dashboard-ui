@@ -103,18 +103,22 @@ export default function AdminNavbar(props) {
       }}
       pt="8px"
       top="18px"
-      w={{ sm: "calc(100vw - 30px)", md: "calc(100vw - 290px)", xl: "calc(100vw - 290px)" }}
+      w={{ base: "calc(100vw - 16px)", sm: "calc(100vw - 24px)", md: "calc(100vw - 290px)", xl: "calc(100vw - 290px)" }}
+      mx={{ base: "8px", sm: "12px", md: "0px" }}
     >
       <Flex
         w="100%"
         flexDirection={{
-          sm: "column",
+          base: "column",
+          sm: "column", 
           md: "row",
         }}
-        alignItems={{ xl: "center" }}
+        alignItems={{ base: "flex-start", md: "center" }}
+        justifyContent={{ base: "space-between", md: "flex-start" }}
+        gap={{ base: "8px", sm: "12px", md: "0px" }}
       >
-        <Box mb={{ sm: "8px", md: "0px" }}>
-          <Breadcrumb>
+        <Box mb={{ base: "4px", sm: "8px", md: "0px" }} w={{ base: "auto", md: "auto" }}>
+          <Breadcrumb fontSize={{ base: "xs", sm: "sm", md: "md" }} spacing={{ base: "4px", md: "8px" }}>
             <BreadcrumbItem color={mainText}>
               <BreadcrumbLink href="#" color={secondaryText}>
                 Pages
@@ -134,6 +138,7 @@ export default function AdminNavbar(props) {
             bg="inherit"
             borderRadius="inherit"
             fontWeight="bold"
+            fontSize={{ base: "md", sm: "lg", md: "xl" }}
             _hover={{ color: { mainText } }}
             _active={{
               bg: "inherit",
@@ -147,7 +152,7 @@ export default function AdminNavbar(props) {
             {brandText}
           </Link>
         </Box>
-        <Box ms="auto" w={{ sm: "100%", md: "unset" }}>
+        <Box ms="auto" w={{ base: "auto", sm: "auto", md: "unset" }}>
           <AdminNavbarLinks
             onOpen={props.onOpen}
             logoText={props.logoText}

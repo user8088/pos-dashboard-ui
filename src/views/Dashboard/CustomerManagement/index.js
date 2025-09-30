@@ -30,6 +30,10 @@ import {
   Select,
   useToast,
   Spinner,
+  Menu,
+  MenuButton,
+  MenuList,
+  MenuItem,
 } from "@chakra-ui/react";
 // Custom components
 import Card from "components/Card/Card.js";
@@ -37,6 +41,8 @@ import CardBody from "components/Card/CardBody.js";
 import CardHeader from "components/Card/CardHeader.js";
 import React, { useState, useEffect } from "react";
 import { FaPlus, FaFileCsv, FaDownload, FaTrash } from "react-icons/fa";
+import { EditIcon, DeleteIcon, HamburgerIcon } from "@chakra-ui/icons";
+import ResponsiveTable from "components/Tables/ResponsiveTable";
 import logo from "assets/img/avatars/placeholder.png";
 
 // Customer Table Row Component
@@ -427,40 +433,49 @@ function CustomerManagement() {
             w='100%'
             gap='16px'>
             
-            {/* Left Side - Add New Customer */}
-            <Button
-              leftIcon={<FaPlus />}
-              colorScheme='teal'
-              bg='#FF8D28'
-              color='white'
-              _hover={{ bg: '#E67E22' }}
-              onClick={onAddOpen}
-              size='md'>
-              Add New Customer
-            </Button>
-
-            {/* Right Side - Import/Export */}
-            <HStack spacing='16px'>
+            {/* Desktop: Show all buttons */}
+            <Flex direction={{ base: "column", sm: "row" }} gap="12px" w="100%">
               <Button
-                leftIcon={<FaFileCsv />}
+                leftIcon={<FaPlus />}
                 colorScheme='teal'
                 bg='#FF8D28'
                 color='white'
                 _hover={{ bg: '#E67E22' }}
-                size='md'>
-                Import CSV
+                onClick={onAddOpen}
+                size='md'
+                display={{ base: "none", md: "flex" }}>
+                Add New Customer
               </Button>
-              <Button
-                leftIcon={<FaDownload />}
-                variant='outline'
-                colorScheme='teal'
-                borderColor='gray.300'
-                color='gray.600'
-                _hover={{ bg: 'gray.50' }}
-                size='md'>
-                Export as CSV
-              </Button>
-            </HStack>
+
+              <HStack spacing='16px' display={{ base: "none", md: "flex" }}>
+                <Button
+                  leftIcon={<FaFileCsv />}
+                  colorScheme='teal'
+                  bg='#FF8D28'
+                  color='white'
+                  _hover={{ bg: '#E67E22' }}
+                  size='md'>
+                  Import CSV
+                </Button>
+              </HStack>
+
+              {/* Mobile/Tablet: Dropdown menu */}
+              <Box display={{ base: "block", md: "none" }}>
+                <Menu>
+                  <MenuButton as={Button} rightIcon={<HamburgerIcon />} size="md" colorScheme="teal" bg='#FF8D28' color='white' _hover={{ bg: '#E67E22' }}>
+                    Actions
+                  </MenuButton>
+                  <MenuList>
+                    <MenuItem icon={<FaPlus />} onClick={onAddOpen}>
+                      Add New Customer
+                    </MenuItem>
+                    <MenuItem icon={<FaFileCsv />}>
+                      Import CSV
+                    </MenuItem>
+                  </MenuList>
+                </Menu>
+              </Box>
+            </Flex>
           </Flex>
         </Flex>
       </Box>
@@ -517,31 +532,40 @@ function CustomerManagement() {
               </VStack>
             </Flex>
           ) : (
-          <Table variant='simple' color={textColor}>
-            <Thead>
-              <Tr>
-                <Th color='gray.400' fontSize='sm' fontWeight='semibold'>Customer / Phone</Th>
-                <Th color='gray.400' fontSize='sm' fontWeight='semibold'>TOTAL BILL</Th>
-                <Th color='gray.400' fontSize='sm' fontWeight='semibold'>BILL PAID</Th>
-                <Th color='gray.400' fontSize='sm' fontWeight='semibold'>BILL DUE</Th>
-                <Th color='gray.400' fontSize='sm' fontWeight='semibold'>PURCHASED ITEMS</Th>
-                <Th color='gray.400' fontSize='sm' fontWeight='semibold'>STATUS</Th>
-                <Th color='gray.400' fontSize='sm' fontWeight='semibold'>Edit</Th>
-              </Tr>
-            </Thead>
-            <Tbody>
-              {customers.map((customer) => (
-                <CustomerTableRow 
-                  key={customer.id} 
-                  customer={customer} 
-                  onEdit={handleEditCustomer}
-                  onDownload={handleDownloadInvoice}
-                  onDelete={handleDeleteCustomer}
-                  onViewInvoices={() => openCustomerInvoices(customer)}
-                />
-              ))}
-            </Tbody>
-          </Table>
+          <ResponsiveTable
+            captions={["Customer / Phone", "TOTAL BILL", "BILL PAID", "BILL DUE", "PURCHASED ITEMS", "STATUS", "Actions"]}
+            data={customers}
+            isLoading={isLoading}
+            actionButtons={[
+              {
+                label: "Edit",
+                icon: <EditIcon />,
+                onClick: (customer) => handleEditCustomer(customer),
+              },
+              {
+                label: "Download Invoice", 
+                icon: <FaDownload />,
+                onClick: (customer) => handleDownloadInvoice(customer),
+              },
+              {
+                label: "Delete",
+                icon: <DeleteIcon />,
+                onClick: (customer) => handleDeleteCustomer(customer),
+                color: "red.500",
+              },
+            ]}
+          >
+            {customers.map((customer) => (
+              <CustomerTableRow 
+                key={customer.id} 
+                customer={customer} 
+                onEdit={handleEditCustomer}
+                onDownload={handleDownloadInvoice}
+                onDelete={handleDeleteCustomer}
+                onViewInvoices={() => openCustomerInvoices(customer)}
+              />
+            ))}
+          </ResponsiveTable>
           )}
         </CardBody>
       </Card>
