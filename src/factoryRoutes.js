@@ -59,39 +59,31 @@ var factoryRoutes = [
     icon: <CreditIcon color="inherit" />,
     component: Billing,
     layout: "/factory",
+    adminOnly: true,
+  },
+  // Profile route (visible in sidebar)
+  {
+    path: "/profile",
+    name: "Profile",
+    rtlName: "لوحة القيادة",
+    icon: <PersonIcon color="inherit" />,
+    component: Profile,
+    layout: "/factory",
+  },
+  // Hidden routes (not shown in sidebar but still accessible via URL)
+  {
+    path: "/signin",
+    name: "Sign In",
+    component: SignIn,
+    layout: "/auth",
+    hidden: true,
   },
   {
-    name: "ACCOUNT PAGES",
-    category: "account",
-    rtlName: "صفحات",
-    state: "pageCollapse",
-    views: [
-      {
-        path: "/profile",
-        name: "Profile",
-        rtlName: "لوحة القيادة",
-        icon: <PersonIcon color="inherit" />,
-        component: Profile,
-        layout: "/factory",
-      },
-      {
-        path: "/signin",
-        name: "Sign In",
-        rtlName: "لوحة القيادة",
-        icon: <DocumentIcon color="inherit" />,
-        component: SignIn,
-        layout: "/auth",
-      },
-      {
-        path: "/signup",
-        name: "Sign Up",
-        rtlName: "لوحة القيادة",
-        icon: <RocketIcon color="inherit" />,
-        secondaryNavbar: true,
-        component: SignUp,
-        layout: "/auth",
-      },
-    ],
+    path: "/signup",
+    name: "Sign Up",
+    component: SignUp,
+    layout: "/auth",
+    hidden: true,
   },
 ];
 export default factoryRoutes;

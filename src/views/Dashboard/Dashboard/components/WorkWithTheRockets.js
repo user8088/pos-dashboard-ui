@@ -30,6 +30,10 @@ const WorkWithTheRockets = ({ title, description, backgroundImage }) => {
       history.push('/factory/dashboard');
     }
   };
+  
+  const handleManageCustomers = () => {
+    history.push('/admin/customer-management');
+  };
   return (
     <Card maxHeight='290.5px' p='1rem'>
       <CardBody
@@ -63,7 +67,7 @@ const WorkWithTheRockets = ({ title, description, backgroundImage }) => {
             </Text>
             <Spacer />
             <Flex align='center' mt={{ sm: "20px", lg: "40px", xl: "90px" }}>
-              <Button p='0px' variant='no-hover' bg='transparent' mt='12px' onClick={switchDashboard}>
+              <Button p='0px' variant='no-hover' bg='transparent' mt='12px' onClick={isFactoryDashboard ? switchDashboard : handleManageCustomers}>
                 <Text
                   fontSize='sm'
                   fontWeight='bold'

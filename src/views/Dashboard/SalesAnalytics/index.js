@@ -21,13 +21,20 @@ import {
   ModalFooter,
   ModalBody,
   ModalCloseButton,
+  SimpleGrid,
+  Menu,
+  MenuButton,
+  MenuList,
+  MenuItem,
+  Wrap,
+  WrapItem,
 } from "@chakra-ui/react";
 // Custom components
 import Card from "components/Card/Card.js";
 import CardBody from "components/Card/CardBody.js";
 import CardHeader from "components/Card/CardHeader.js";
 import React from "react";
-import { FaDownload, FaArrowUp, FaArrowDown } from "react-icons/fa";
+import { FaDownload, FaArrowUp, FaArrowDown, FaCalendar, FaChevronDown } from "react-icons/fa";
 import { useToast, Spinner, Center } from "@chakra-ui/react";
 import RevenueChart from "./components/RevenueChart";
 import CategoriesChart from "./components/CategoriesChart";
@@ -329,31 +336,56 @@ function SalesAnalytics() {
           
           {/* Date Filters and Controls */}
           <Flex
-            direction={{ sm: "column", lg: "row" }}
-            justify='space-between'
-            align={{ sm: "start", lg: "center" }}
+            direction='column'
             w='100%'
             gap='16px'>
             
-            {/* Time Period Buttons */}
-            <HStack spacing='8px' flexWrap='wrap'>
+            {/* Desktop: Time Period Buttons */}
+            <Wrap spacing='8px' display={{ base: "none", md: "flex" }}>
               {timePeriods.map((period) => (
-                <Button
-                  key={period}
-                  size='sm'
-                  variant={timePeriod === period ? 'solid' : 'outline'}
-                  colorScheme='teal'
-                  bg={timePeriod === period ? '#FF8D28' : 'transparent'}
-                  color={timePeriod === period ? 'white' : '#FF8D28'}
-                  borderColor='#FF8D28'
-                  _hover={{
-                    bg: timePeriod === period ? '#E67E22' : 'rgba(255, 141, 40, 0.1)'
-                  }}
-                  onClick={() => handleTimePeriodChange(period)}>
-                  {getDisplayTimePeriod(period)}
-                </Button>
+                <WrapItem key={period}>
+                  <Button
+                    size='md'
+                    variant={timePeriod === period ? 'solid' : 'outline'}
+                    colorScheme='teal'
+                    bg={timePeriod === period ? '#FF8D28' : 'transparent'}
+                    color={timePeriod === period ? 'white' : '#FF8D28'}
+                    borderColor='#FF8D28'
+                    fontWeight='semibold'
+                    px='20px'
+                    _hover={{
+                      bg: timePeriod === period ? '#E67E22' : 'rgba(255, 141, 40, 0.1)',
+                      transform: 'translateY(-2px)',
+                      boxShadow: 'md'
+                    }}
+                    transition='all 0.2s'
+                    onClick={() => handleTimePeriodChange(period)}>
+                    {getDisplayTimePeriod(period)}
+                  </Button>
+                </WrapItem>
               ))}
-            </HStack>
+            </Wrap>
+
+            {/* Mobile/Tablet: Dropdown Select */}
+            <Box display={{ base: "block", md: "none" }}>
+              <Select
+                value={timePeriod}
+                onChange={(e) => handleTimePeriodChange(e.target.value)}
+                size="md"
+                bg={cardBg}
+                borderColor='#FF8D28'
+                color='#FF8D28'
+                fontWeight='semibold'
+                icon={<FaChevronDown />}
+                _hover={{ borderColor: '#E67E22' }}
+              >
+                {timePeriods.map((period) => (
+                  <option key={period} value={period}>
+                    {getDisplayTimePeriod(period)}
+                  </option>
+                ))}
+              </Select>
+            </Box>
 
             {/* Custom Date Picker Modal */}
             <Modal isOpen={showCustomDatePicker} onClose={() => setShowCustomDatePicker(false)}>
@@ -363,37 +395,41 @@ function SalesAnalytics() {
                 <ModalCloseButton />
                 <ModalBody>
                   <VStack spacing="16px" align="stretch">
-                    <HStack spacing="16px">
-                      <FormControl>
-                        <FormLabel fontSize="sm" color="gray.500">
-                          Start Date
-                        </FormLabel>
-                        <Input
-                          type="date"
-                          value={customDateRange.startDate}
-                          onChange={(e) => setCustomDateRange(prev => ({
+                    <FormControl>
+                      <FormLabel fontSize="sm" color="gray.500">
+                        Start Date
+                      </FormLabel>
+                      <Input
+                        type="date"
+                        value={customDateRange.startDate}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          setCustomDateRange(prev => ({
                             ...prev,
-                            startDate: e.target.value
-                          }))}
-                          size="md"
-                        />
-                      </FormControl>
-                      <FormControl>
-                        <FormLabel fontSize="sm" color="gray.500">
-                          End Date
-                        </FormLabel>
-                        <Input
-                          type="date"
-                          value={customDateRange.endDate}
-                          onChange={(e) => setCustomDateRange(prev => ({
+                            startDate: value
+                          }));
+                        }}
+                        size="md"
+                      />
+                    </FormControl>
+                    <FormControl>
+                      <FormLabel fontSize="sm" color="gray.500">
+                        End Date
+                      </FormLabel>
+                      <Input
+                        type="date"
+                        value={customDateRange.endDate}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          setCustomDateRange(prev => ({
                             ...prev,
-                            endDate: e.target.value
-                          }))}
-                          size="md"
-                          min={customDateRange.startDate}
-                        />
-                      </FormControl>
-                    </HStack>
+                            endDate: value
+                          }));
+                        }}
+                        size="md"
+                        min={customDateRange.startDate}
+                      />
+                    </FormControl>
                   </VStack>
                 </ModalBody>
                 <ModalFooter>
@@ -420,30 +456,54 @@ function SalesAnalytics() {
             </Modal>
 
             {/* Comparison Toggle and Export */}
-            <HStack spacing='16px'>
-              <FormControl display='flex' alignItems='center'>
+            <Flex
+              direction={{ base: "column", sm: "row" }}
+              justify='space-between'
+              align={{ base: "start", sm: "center" }}
+              gap='16px'
+              mt='8px'>
+              
+              <HStack spacing='12px'>
                 <Switch
                   id='compare-mode'
-                  colorScheme='teal'
+                  colorScheme='orange'
+                  size='lg'
                   isChecked={compareMode}
-                  onChange={(e) => setCompareMode(e.target.checked)}
+                  onChange={(e) => {
+                    const checked = e.target.checked;
+                    setCompareMode(checked);
+                  }}
                 />
-                <FormLabel htmlFor='compare-mode' ml='8px' fontSize='sm' color='gray.600'>
+                <Text
+                  fontSize={{ base: "sm", md: "md" }}
+                  color={textColor}
+                  fontWeight='medium'
+                  cursor='pointer'
+                  onClick={() => setCompareMode(!compareMode)}
+                >
                   Do not compare
-                </FormLabel>
-              </FormControl>
+                </Text>
+              </HStack>
               
               <Button
                 leftIcon={<FaDownload />}
-                colorScheme='teal'
+                colorScheme='orange'
+                variant='outline'
                 borderColor='#FF8D28'
                 color='#FF8D28'
-                variant='outline'
                 size='sm'
+                fontWeight='semibold'
+                px='24px'
+                _hover={{
+                  bg: '#FF8D28',
+                  color: 'white',
+                  borderColor: '#FF8D28'
+                }}
+                transition='all 0.2s'
                 onClick={exportAnalytics}>
                 Export
               </Button>
-            </HStack>
+            </Flex>
           </Flex>
         </Flex>
       </Box>

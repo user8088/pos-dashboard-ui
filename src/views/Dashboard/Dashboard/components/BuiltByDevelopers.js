@@ -31,6 +31,19 @@ const BuiltByDevelopers = ({ title, name, description, image }) => {
       history.push('/factory/dashboard');
     }
   };
+  
+  const handleManageStaff = () => {
+    // Check if user is admin
+    const userString = localStorage.getItem('user');
+    const user = userString ? JSON.parse(userString) : null;
+    
+    if (user && user.user_role === 'admin') {
+      history.push('/admin/user-management');
+    } else {
+      // Staff users don't have access, show message or redirect
+      history.push('/admin/dashboard');
+    }
+  };
 
   return (
     <Card minHeight='290.5px' p='1.2rem'>
@@ -76,7 +89,7 @@ const BuiltByDevelopers = ({ title, name, description, image }) => {
                 variant='no-hover'
                 bg='transparent'
                 my={{ sm: "1.5rem", lg: "0px" }}
-                onClick={isFactoryDashboard ? switchDashboard : undefined}
+                onClick={isFactoryDashboard ? switchDashboard : handleManageStaff}
                 _hover={{ transform: 'translateY(-1px)' }}
                 transition='transform 0.2s ease'>
                 <Text

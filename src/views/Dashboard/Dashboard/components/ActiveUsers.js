@@ -12,11 +12,17 @@ import {
   WalletIcon,
 } from "components/Icons/Icons.js";
 import React from "react";
+import { useHistory } from "react-router-dom";
 import ChartStatistics from "./ChartStatistics";
 
 const ActiveUsers = ({ title, percentage, chart, dashboardData, isLoading }) => {
   const iconBoxInside = useColorModeValue("white", "white");
   const textColor = useColorModeValue("gray.700", "white");
+  const history = useHistory();
+  
+  const handleManageAnalytics = () => {
+    history.push('/admin/sales-analytics');
+  };
   return (
     <Card p='16px'>
       <CardBody>
@@ -49,7 +55,8 @@ const ActiveUsers = ({ title, percentage, chart, dashboardData, isLoading }) => 
                 p='0px'
                 variant='no-hover'
                 bg='transparent'
-                my={{ sm: "1.5rem", lg: "0px" }}>
+                my={{ sm: "1.5rem", lg: "0px" }}
+                onClick={handleManageAnalytics}>
                 <Text
                   fontSize='sm'
                   color={textColor}

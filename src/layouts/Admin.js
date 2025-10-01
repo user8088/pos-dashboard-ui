@@ -5,6 +5,7 @@ import Footer from 'components/Footer/Footer.js';
 // Layout components
 import AdminNavbar from 'components/Navbars/AdminNavbar.js';
 import Sidebar from 'components/Sidebar';
+import ProtectedRoute from 'components/ProtectedRoute';
 import React, { useState } from 'react';
 import { Redirect, Route, Switch } from 'react-router-dom';
 import routes from 'routes.js';
@@ -76,7 +77,15 @@ export default function Dashboard(props) {
 				return getRoutes(prop.views);
 			}
 			if (prop.layout === '/admin') {
-				return <Route path={prop.layout + prop.path} component={prop.component} key={key} />;
+				// Pass adminOnly prop to protected route if specified
+				return (
+					<ProtectedRoute 
+						path={prop.layout + prop.path} 
+						component={prop.component} 
+						adminOnly={prop.adminOnly}
+						key={key} 
+					/>
+				);
 			} else {
 				return null;
 			}

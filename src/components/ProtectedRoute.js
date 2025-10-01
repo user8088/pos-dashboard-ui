@@ -1,7 +1,7 @@
 import React from 'react';
 import { Redirect, Route } from 'react-router-dom';
 
-const ProtectedRoute = ({ component: Component, ...rest }) => {
+const ProtectedRoute = ({ component: Component, adminOnly, ...rest }) => {
   return (
     <Route
       {...rest}
@@ -16,10 +16,17 @@ const ProtectedRoute = ({ component: Component, ...rest }) => {
         console.log('- User:', user);
         console.log('- Current path:', props.location.pathname);
         console.log('- Route path:', rest.path);
+        console.log('- Admin only:', adminOnly);
 
         if (!token || !user) {
           console.log('No token or user, redirecting to signin');
           return <Redirect to="/auth/signin" />;
+        }
+
+        // Check if route requires admin access
+        if (adminOnly && user.user_role !== 'admin') {
+          console.log('Admin access required but user is not admin, redirecting to dashboard');
+          return <Redirect to="/admin/dashboard" />;
         }
 
         // Allow authenticated users to access both admin and factory routes

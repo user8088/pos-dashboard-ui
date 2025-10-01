@@ -27,13 +27,48 @@ function SignUp() {
   const history = useHistory();
   const toast = useToast();
   
+  // Check if user is admin - this page is admin-only
+  React.useEffect(() => {
+    try {
+      const userString = localStorage.getItem('user');
+      const user = userString ? JSON.parse(userString) : null;
+      
+      if (!user) {
+        toast({
+          title: "Authentication Required",
+          description: "Please log in to access this page.",
+          status: "error",
+          duration: 3000,
+          isClosable: true,
+        });
+        history.push('/auth/signin');
+        return;
+      }
+      
+      if (user.user_role !== 'admin') {
+        toast({
+          title: "Access Denied",
+          description: "Only administrators can create new users.",
+          status: "error",
+          duration: 5000,
+          isClosable: true,
+        });
+        history.push('/admin/dashboard');
+        return;
+      }
+    } catch (error) {
+      console.error('Failed to verify user role:', error);
+      history.push('/auth/signin');
+    }
+  }, [history, toast]);
+  
   // State management
   const [formData, setFormData] = useState({
     name: "",
     email: "",
     password: "",
     passwordConfirmation: "",
-    userRole: "user",
+    userRole: "staff",
     rememberMe: false,
   });
   const [isLoading, setIsLoading] = useState(false);
@@ -69,10 +104,10 @@ function SignUp() {
     }
 
     // Validate password length
-    if (formData.password.length < 6) {
+    if (formData.password.length < 8) {
       toast({
         title: "Password Too Short",
-        description: "Password must be at least 6 characters long.",
+        description: "Password must be at least 8 characters long.",
         status: "error",
         duration: 5000,
         isClosable: true,
@@ -83,6 +118,10 @@ function SignUp() {
     setIsLoading(true);
 
     try {
+      // Store current admin's token to restore after registration
+      const currentToken = localStorage.getItem('token');
+      const currentUserString = localStorage.getItem('user');
+      
       const result = await authService.register(
         formData.name,
         formData.email,
@@ -91,23 +130,30 @@ function SignUp() {
       );
       
       if (result.success) {
+        // Restore admin's token (don't login as the new user)
+        localStorage.setItem('token', currentToken);
+        localStorage.setItem('user', currentUserString);
+        
         toast({
-          title: "Registration Successful",
-          description: `Welcome, ${result.user.name}! Your account has been created.`,
+          title: "User Created Successfully",
+          description: `${result.user.name} has been added as a ${formData.userRole}.`,
           status: "success",
-          duration: 2000,
+          duration: 4000,
           isClosable: true,
         });
         
-        // Navigate immediately without timeout
-        const redirectPath = result.user.user_role === 'admin' ? '/admin/dashboard' 
-                           : result.user.user_role === 'factory' ? '/factory/dashboard' 
-                           : '/admin/dashboard';
+        // Reset form
+        setFormData({
+          name: "",
+          email: "",
+          password: "",
+          passwordConfirmation: "",
+          userRole: "staff",
+          rememberMe: false,
+        });
         
-        console.log('Redirecting to:', redirectPath); // Debug log
-        console.log('User role:', result.user.user_role); // Debug log
-        
-        history.push(redirectPath);
+        // Optionally redirect to user management
+        // history.push('/admin/user-management');
         
       } else {
         toast({
@@ -161,7 +207,7 @@ function SignUp() {
         mt='6.5rem'
         mb='30px'>
         <Text fontSize='4xl' color='white' fontWeight='bold'>
-          Welcome!
+          Create New User
         </Text>
         <Text
           fontSize='md'
@@ -170,7 +216,7 @@ function SignUp() {
           mt='10px'
           mb='26px'
           w={{ base: "90%", sm: "60%", lg: "40%", xl: "30%" }}>
-          Create your account to access the POS dashboard system.
+          Admin Only: Add new users to the POS dashboard system.
         </Text>
       </Flex>
       <Flex alignItems='center' justifyContent='center' mb='60px' mt='20px'>
@@ -189,74 +235,7 @@ function SignUp() {
             fontWeight='bold'
             textAlign='center'
             mb='22px'>
-            Register With
-          </Text>
-          <HStack spacing='15px' justify='center' mb='22px'>
-            <Flex
-              justify='center'
-              align='center'
-              w='75px'
-              h='75px'
-              borderRadius='15px'
-              border='1px solid lightgray'
-              cursor='pointer'
-              transition='all .25s ease'
-              _hover={{ filter: "brightness(120%)", bg: bgIcons }}>
-              <Link href='#'>
-                <Icon
-                  as={FaFacebook}
-                  w='30px'
-                  h='30px'
-                  _hover={{ filter: "brightness(120%)" }}
-                />
-              </Link>
-            </Flex>
-            <Flex
-              justify='center'
-              align='center'
-              w='75px'
-              h='75px'
-              borderRadius='15px'
-              border='1px solid lightgray'
-              cursor='pointer'
-              transition='all .25s ease'
-              _hover={{ filter: "brightness(120%)", bg: bgIcons }}>
-              <Link href='#'>
-                <Icon
-                  as={FaApple}
-                  w='30px'
-                  h='30px'
-                  _hover={{ filter: "brightness(120%)" }}
-                />
-              </Link>
-            </Flex>
-            <Flex
-              justify='center'
-              align='center'
-              w='75px'
-              h='75px'
-              borderRadius='15px'
-              border='1px solid lightgray'
-              cursor='pointer'
-              transition='all .25s ease'
-              _hover={{ filter: "brightness(120%)", bg: bgIcons }}>
-              <Link href='#'>
-                <Icon
-                  as={FaGoogle}
-                  w='30px'
-                  h='30px'
-                  _hover={{ filter: "brightness(120%)" }}
-                />
-              </Link>
-            </Flex>
-          </HStack>
-          <Text
-            fontSize='lg'
-            color='gray.400'
-            fontWeight='bold'
-            textAlign='center'
-            mb='22px'>
-            or
+            Create User Account
           </Text>
           <form onSubmit={handleSubmit}>
             <FormControl>
@@ -304,10 +283,12 @@ function SignUp() {
                 borderRadius='15px'
                 mb='24px'
                 size='lg'>
-                <option value="user">User</option>
+                <option value="staff">Staff</option>
                 <option value="admin">Admin</option>
-                <option value="factory">Factory</option>
               </Select>
+              <Text fontSize='xs' color='gray.400' ms='4px' mb='16px'>
+                Admin: Full access. Staff: Limited access (no user management, expenses, or transactions)
+              </Text>
               <FormLabel ms='4px' fontSize='sm' fontWeight='normal'>
                 Password
               </FormLabel>
@@ -319,7 +300,7 @@ function SignUp() {
                 ms='4px'
                 borderRadius='15px'
                 type='password'
-                placeholder='Your password (min 6 characters)'
+                placeholder='Your password (min 8 characters)'
                 mb='24px'
                 size='lg'
                 required
@@ -340,19 +321,6 @@ function SignUp() {
                 size='lg'
                 required
               />
-              <FormControl display='flex' alignItems='center' mb='24px'>
-                <Switch 
-                  id='remember-login' 
-                  colorScheme='brand' 
-                  me='10px'
-                  name="rememberMe"
-                  isChecked={formData.rememberMe}
-                  onChange={handleInputChange}
-                />
-                <FormLabel htmlFor='remember-login' mb='0' fontWeight='normal'>
-                  Remember me
-                </FormLabel>
-              </FormControl>
               <Button
                 type='submit'
                 bg='brand.300'
@@ -363,7 +331,7 @@ function SignUp() {
                 h='45'
                 mb='24px'
                 isLoading={isLoading}
-                loadingText="Creating Account..."
+                loadingText="Creating User..."
                 spinner={<Spinner size="sm" />}
                 disabled={isLoading}
                 _hover={{
@@ -372,7 +340,7 @@ function SignUp() {
                 _active={{
                   bg: "brand.400",
                 }}>
-                SIGN UP
+                CREATE USER
               </Button>
             </FormControl>
           </form>
@@ -382,18 +350,14 @@ function SignUp() {
             alignItems='center'
             maxW='100%'
             mt='0px'>
-            <Text color={textColor} fontWeight='medium'>
-              Already have an account?
-              <Link
-                color={titleColor}
-                as='span'
-                ms='5px'
-                fontWeight='bold'
-                onClick={() => history.push('/auth/signin')}
-                cursor="pointer">
-                Sign In
-              </Link>
-            </Text>
+            <Button
+              variant='outline'
+              colorScheme='brand'
+              w='100%'
+              onClick={() => history.push('/admin/user-management')}
+              size='sm'>
+              Go to User Management
+            </Button>
           </Flex>
         </Flex>
       </Flex>

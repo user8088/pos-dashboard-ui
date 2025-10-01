@@ -12,14 +12,38 @@ This API uses Laravel Sanctum for authentication. Include the Bearer token in th
 Authorization: Bearer {your_token_here}
 ```
 
+## Role-Based Access Control
+
+The system supports two user roles:
+
+### Admin Role
+- Full access to all features and endpoints
+- Can create, edit, and delete users
+- Can access expense management and transaction features
+- Can perform all stock, rental, customer, and analytics operations
+
+### Staff Role
+- Can access most features except:
+  - Expense Management (accounts, revenue, allocations, transfers)
+  - Transactions
+  - User Management (cannot view, create, edit, or delete users)
+- Can perform stock operations, customer management, rentals, and view analytics
+
+**Note:** The registration endpoint can only be accessed by admin users to create new accounts.
+
 ---
 
 ## Authentication Endpoints
 
-### 1. Register User
+### 1. Register User (Admin Only)
 **POST** `/auth/register`
 
-Register a new user account.
+Register a new user account. **This endpoint requires admin authentication.**
+
+**Headers:**
+```
+Authorization: Bearer {admin_token}
+```
 
 **Request Body:**
 ```json
@@ -31,6 +55,9 @@ Register a new user account.
     "user_role": "admin"
 }
 ```
+
+**Validation Rules:**
+- `user_role`: Must be either `admin` or `staff` (defaults to `staff` if not provided)
 
 **Response (201):**
 ```json
@@ -55,6 +82,14 @@ Register a new user account.
         "email": ["The email has already been taken."],
         "password": ["The password confirmation does not match."]
     }
+}
+```
+
+**Unauthorized (403):**
+```json
+{
+    "message": "Unauthorized. Admin access required.",
+    "error": "This action requires administrator privileges."
 }
 ```
 
@@ -142,6 +177,664 @@ Authorization: Bearer {token}
 {
     "message": "Logged out successfully"
 }
+```
+
+---
+
+## User Management Endpoints (Admin Only)
+
+All user management endpoints require admin authentication. Staff users cannot access these endpoints.
+
+### 65. Get All Users
+**GET** `/core/users`
+
+Retrieve all users in the system.
+
+**Headers:**
+```
+Authorization: Bearer {admin_token}
+```
+
+**Response (200):**
+```json
+{
+    "success": true,
+    "data": [
+        {
+            "id": 1,
+            "name": "John Doe",
+            "email": "john@example.com",
+            "user_role": "admin",
+            "created_at": "2025-09-14T10:00:00.000000Z",
+            "updated_at": "2025-09-14T10:00:00.000000Z"
+        },
+        {
+            "id": 2,
+            "name": "Jane Smith",
+            "email": "jane@example.com",
+            "user_role": "staff",
+            "created_at": "2025-09-15T14:30:00.000000Z",
+            "updated_at": "2025-09-15T14:30:00.000000Z"
+        }
+    ]
+}
+```
+
+---
+
+### 66. Get User by ID
+**GET** `/core/users/{id}`
+
+Retrieve a specific user by their ID.
+
+**Headers:**
+```
+Authorization: Bearer {admin_token}
+```
+
+**Response (200):**
+```json
+{
+    "success": true,
+    "data": {
+        "id": 1,
+        "name": "John Doe",
+        "email": "john@example.com",
+        "user_role": "admin",
+        "email_verified_at": null,
+        "created_at": "2025-09-14T10:00:00.000000Z",
+        "updated_at": "2025-09-14T10:00:00.000000Z"
+    }
+}
+```
+
+**Error (404):**
+```json
+{
+    "message": "No query results for model [App\\Models\\User] 1"
+}
+```
+
+---
+
+### 67. Create User
+**POST** `/core/users`
+
+Create a new user account (admin only).
+
+**Headers:**
+```
+Authorization: Bearer {admin_token}
+Content-Type: application/json
+```
+
+**Request Body:**
+```json
+{
+    "name": "Jane Smith",
+    "email": "jane@example.com",
+    "password": "securepassword123",
+    "user_role": "staff"
+}
+```
+
+**Validation Rules:**
+- `name`: required, string, max 255 characters
+- `email`: required, valid email, unique in users table
+- `password`: required, string, minimum 8 characters
+- `user_role`: required, either `admin` or `staff`
+
+**Response (201):**
+```json
+{
+    "success": true,
+    "message": "User created successfully",
+    "data": {
+        "id": 3,
+        "name": "Jane Smith",
+        "email": "jane@example.com",
+        "user_role": "staff",
+        "created_at": "2025-09-16T09:15:00.000000Z",
+        "updated_at": "2025-09-16T09:15:00.000000Z"
+    }
+}
+```
+
+**Validation Errors (422):**
+```json
+{
+    "message": "The given data was invalid.",
+    "errors": {
+        "email": ["The email has already been taken."],
+        "password": ["The password field must be at least 8 characters."]
+    }
+}
+```
+
+---
+
+### 68. Update User
+**PUT** `/core/users/{id}`
+
+Update an existing user's information.
+
+**Headers:**
+```
+Authorization: Bearer {admin_token}
+Content-Type: application/json
+```
+
+**Request Body:**
+```json
+{
+    "name": "Jane Smith Updated",
+    "email": "jane.updated@example.com",
+    "password": "newpassword123",
+    "user_role": "admin"
+}
+```
+
+**Validation Rules:**
+- All fields are optional
+- `name`: string, max 255 characters
+- `email`: valid email, unique (excluding current user)
+- `password`: string, minimum 8 characters (optional - only updated if provided)
+- `user_role`: either `admin` or `staff`
+
+**Response (200):**
+```json
+{
+    "success": true,
+    "message": "User updated successfully",
+    "data": {
+        "id": 3,
+        "name": "Jane Smith Updated",
+        "email": "jane.updated@example.com",
+        "user_role": "admin",
+        "created_at": "2025-09-16T09:15:00.000000Z",
+        "updated_at": "2025-09-16T10:30:00.000000Z"
+    }
+}
+```
+
+**Error (422) - Last Admin Protection:**
+```json
+{
+    "success": false,
+    "message": "Cannot change role. You are the only admin. Please assign another admin before changing your role."
+}
+```
+
+---
+
+### 69. Delete User
+**DELETE** `/core/users/{id}`
+
+Delete a user from the system.
+
+**Headers:**
+```
+Authorization: Bearer {admin_token}
+```
+
+**Response (200):**
+```json
+{
+    "success": true,
+    "message": "User deleted successfully"
+}
+```
+
+**Error (422) - Self-Deletion Prevention:**
+```json
+{
+    "success": false,
+    "message": "You cannot delete your own account."
+}
+```
+
+**Error (422) - Last Admin Protection:**
+```json
+{
+    "success": false,
+    "message": "Cannot delete the last admin user. Please assign another admin first."
+}
+```
+
+---
+
+### 70. Get User Statistics
+**GET** `/core/users/stats`
+
+Get statistics about users in the system.
+
+**Headers:**
+```
+Authorization: Bearer {admin_token}
+```
+
+**Response (200):**
+```json
+{
+    "success": true,
+    "data": {
+        "total_users": 15,
+        "admin_users": 3,
+        "staff_users": 12,
+        "recent_users_30_days": 5
+    }
+}
+```
+
+---
+
+## Notification System Endpoints
+
+The notification system automatically alerts users about important events such as transactions, rental due dates, and customer payments. Admins receive all notifications, while staff users only receive notifications specifically assigned to them.
+
+### Notification Types
+
+- **`transaction_created`**: Notifies admins when a transaction is created
+- **`rental_due_soon`**: Alerts when a rental is due within 3 days
+- **`rental_overdue`**: Alerts when a rental is past its due date
+- **`customer_payment_due`**: Notifies about customers with outstanding payments
+
+### 71. Get All Notifications
+**GET** `/core/notifications`
+
+Retrieve all notifications with optional filtering and pagination.
+
+**Headers:**
+```
+Authorization: Bearer {token}
+```
+
+**Query Parameters:**
+- `type` (optional): Filter by notification type (`transaction_created`, `rental_due_soon`, `rental_overdue`, `customer_payment_due`)
+- `is_read` (optional): Filter by read status (true/false)
+- `from_date` (optional): Filter from date (YYYY-MM-DD)
+- `to_date` (optional): Filter to date (YYYY-MM-DD)
+- `per_page` (optional): Number of items per page (default: 20)
+- `page` (optional): Page number
+
+**Response (200):**
+```json
+{
+    "success": true,
+    "data": [
+        {
+            "id": 1,
+            "type": "transaction_created",
+            "title": "Outflow Transaction Created",
+            "message": "Admin User created a outgoing transaction: Store Maintenance ($2500)",
+            "data": {
+                "transaction_id": 10,
+                "title": "Store Maintenance",
+                "type": "outflow",
+                "amount": 2500,
+                "account_name": "Savings",
+                "created_by": "Admin User"
+            },
+            "is_read": false,
+            "user_id": null,
+            "reference_type": "Transaction",
+            "reference_id": 10,
+            "created_at": "2025-10-01T09:30:00.000000Z",
+            "updated_at": "2025-10-01T09:30:00.000000Z"
+        },
+        {
+            "id": 2,
+            "type": "rental_due_soon",
+            "title": "Rental Due Soon",
+            "message": "Projector rental is due in 2 day(s). Due date: 2025-10-03",
+            "data": {
+                "rental_id": 5,
+                "item_name": "Projector",
+                "due_date": "2025-10-03",
+                "days_remaining": 2
+            },
+            "is_read": false,
+            "user_id": null,
+            "reference_type": "RentalStock",
+            "reference_id": 5,
+            "created_at": "2025-10-01T08:00:00.000000Z",
+            "updated_at": "2025-10-01T08:00:00.000000Z"
+        }
+    ],
+    "pagination": {
+        "current_page": 1,
+        "per_page": 20,
+        "total": 15,
+        "last_page": 1
+    }
+}
+```
+
+---
+
+### 72. Get Unread Notifications
+**GET** `/core/notifications/unread`
+
+Get recent unread notifications (limited to 10 by default).
+
+**Headers:**
+```
+Authorization: Bearer {token}
+```
+
+**Query Parameters:**
+- `limit` (optional): Number of notifications to return (default: 10)
+
+**Response (200):**
+```json
+{
+    "success": true,
+    "data": [
+        {
+            "id": 1,
+            "type": "transaction_created",
+            "title": "Outflow Transaction Created",
+            "message": "Admin User created a outgoing transaction: Store Maintenance ($2500)",
+            "data": {
+                "transaction_id": 10,
+                "title": "Store Maintenance",
+                "type": "outflow",
+                "amount": 2500,
+                "account_name": "Savings",
+                "created_by": "Admin User"
+            },
+            "is_read": false,
+            "user_id": null,
+            "reference_type": "Transaction",
+            "reference_id": 10,
+            "created_at": "2025-10-01T09:30:00.000000Z",
+            "updated_at": "2025-10-01T09:30:00.000000Z"
+        }
+    ]
+}
+```
+
+---
+
+### 73. Get Unread Count
+**GET** `/core/notifications/unread-count`
+
+Get the count of unread notifications for the current user.
+
+**Headers:**
+```
+Authorization: Bearer {token}
+```
+
+**Response (200):**
+```json
+{
+    "success": true,
+    "unread_count": 5
+}
+```
+
+---
+
+### 74. Get Notification by ID
+**GET** `/core/notifications/{id}`
+
+Retrieve a specific notification by its ID.
+
+**Headers:**
+```
+Authorization: Bearer {token}
+```
+
+**Response (200):**
+```json
+{
+    "success": true,
+    "data": {
+        "id": 1,
+        "type": "customer_payment_due",
+        "title": "Customer Payment Due",
+        "message": "Jane Doe has an outstanding balance of $17.5",
+        "data": {
+            "customer_id": 10,
+            "customer_name": "Jane Doe",
+            "bill_due": 17.5,
+            "total_bill": 37.5,
+            "bill_paid": 20
+        },
+        "is_read": false,
+        "user_id": null,
+        "reference_type": "Customer",
+        "reference_id": 10,
+        "created_at": "2025-10-01T09:00:00.000000Z",
+        "updated_at": "2025-10-01T09:00:00.000000Z"
+    }
+}
+```
+
+---
+
+### 75. Mark Notification as Read
+**POST** `/core/notifications/{id}/read`
+
+Mark a specific notification as read.
+
+**Headers:**
+```
+Authorization: Bearer {token}
+```
+
+**Response (200):**
+```json
+{
+    "success": true,
+    "message": "Notification marked as read",
+    "data": {
+        "id": 1,
+        "type": "transaction_created",
+        "title": "Outflow Transaction Created",
+        "message": "Admin User created a outgoing transaction: Store Maintenance ($2500)",
+        "is_read": true,
+        "created_at": "2025-10-01T09:30:00.000000Z",
+        "updated_at": "2025-10-01T09:35:00.000000Z"
+    }
+}
+```
+
+---
+
+### 76. Mark All Notifications as Read
+**POST** `/core/notifications/read-all`
+
+Mark all unread notifications as read for the current user.
+
+**Headers:**
+```
+Authorization: Bearer {token}
+```
+
+**Response (200):**
+```json
+{
+    "success": true,
+    "message": "All notifications marked as read",
+    "updated_count": 5
+}
+```
+
+---
+
+### 77. Delete Notification
+**DELETE** `/core/notifications/{id}`
+
+Delete a specific notification.
+
+**Headers:**
+```
+Authorization: Bearer {token}
+```
+
+**Response (200):**
+```json
+{
+    "success": true,
+    "message": "Notification deleted successfully"
+}
+```
+
+---
+
+### 78. Delete All Read Notifications
+**DELETE** `/core/notifications/read/all`
+
+Delete all read notifications for the current user.
+
+**Headers:**
+```
+Authorization: Bearer {token}
+```
+
+**Response (200):**
+```json
+{
+    "success": true,
+    "message": "All read notifications deleted",
+    "deleted_count": 12
+}
+```
+
+---
+
+### 79. Get Notification Statistics
+**GET** `/core/notifications/stats`
+
+Get statistics about notifications for the current user.
+
+**Headers:**
+```
+Authorization: Bearer {token}
+```
+
+**Response (200):**
+```json
+{
+    "success": true,
+    "data": {
+        "total": 25,
+        "unread": 5,
+        "read": 20,
+        "by_type": {
+            "transaction_created": 10,
+            "rental_due_soon": 3,
+            "rental_overdue": 2,
+            "customer_payment_due": 10
+        }
+    }
+}
+```
+
+---
+
+### 80. Check Due Rentals (Manual Trigger)
+**POST** `/core/notifications/check/rentals`
+
+Manually trigger a check for rentals that are due soon (within 3 days) or overdue. This creates notifications for any matching rentals.
+
+**Headers:**
+```
+Authorization: Bearer {token}
+```
+
+**Response (200):**
+```json
+{
+    "success": true,
+    "message": "Rental checks completed",
+    "rentals_due_soon": 2,
+    "overdue_rentals": 1,
+    "notifications_created": 3
+}
+```
+
+**Note:** This endpoint can be called manually or set up as a scheduled task (cron job) to run automatically. Recommended: Run daily.
+
+---
+
+### 81. Check Customer Dues (Manual Trigger)
+**POST** `/core/notifications/check/customers`
+
+Manually trigger a check for customers with outstanding payment dues. This creates notifications for any customers with `bill_due > 0`.
+
+**Headers:**
+```
+Authorization: Bearer {token}
+```
+
+**Response (200):**
+```json
+{
+    "success": true,
+    "message": "Customer due checks completed",
+    "customers_with_dues": 8,
+    "notifications_created": 8
+}
+```
+
+**Note:** This endpoint can be called manually or set up as a scheduled task (cron job) to run automatically. Recommended: Run daily or weekly.
+
+---
+
+## Notification System Features
+
+### Automatic Notifications
+
+The system automatically creates notifications for:
+
+1. **Transactions**: When any admin creates a transaction (inflow/outflow), all admins are notified
+2. **Rentals Due Soon**: Triggered when you call `/notifications/check/rentals` (set up as cron)
+3. **Overdue Rentals**: Triggered when you call `/notifications/check/rentals` (set up as cron)
+4. **Customer Payments**: Triggered when you call `/notifications/check/customers` (set up as cron)
+
+### Notification Visibility
+
+- **Admin users**: See all notifications (user_id = null) plus any specifically assigned to them
+- **Staff users**: Only see notifications specifically assigned to them (user_id = their ID)
+- **Transaction notifications**: Only visible to admins (since transactions are admin-only)
+
+### Setting Up Automated Checks
+
+For automated rental and customer due checks, you can set up a Laravel scheduled task. Add this to your `app/Console/Kernel.php`:
+
+```php
+protected function schedule(Schedule $schedule)
+{
+    // Check rentals daily at 9 AM
+    $schedule->call(function () {
+        Http::withToken(config('app.admin_token'))
+            ->post(config('app.url') . '/api/core/notifications/check/rentals');
+    })->dailyAt('09:00');
+    
+    // Check customer dues daily at 10 AM
+    $schedule->call(function () {
+        Http::withToken(config('app.admin_token'))
+            ->post(config('app.url') . '/api/core/notifications/check/customers');
+    })->dailyAt('10:00');
+}
+```
+
+Or manually call these endpoints from your frontend:
+```javascript
+// Check rentals
+await fetch('/api/core/notifications/check/rentals', {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${token}` }
+});
+
+// Check customers
+await fetch('/api/core/notifications/check/customers', {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${token}` }
+});
 ```
 
 ---
@@ -1098,7 +1791,9 @@ Content-Type: application/json
 
 ---
 
-## Expense Management Endpoints
+## Expense Management Endpoints (Admin Only)
+
+**IMPORTANT: All expense management endpoints require admin authentication. Staff users cannot access these features.**
 
 The expense management system allows you to create and manage different accounts, track total revenue from stock sales and rentals, and allocate revenue to specific accounts.
 
@@ -1510,7 +2205,9 @@ Authorization: Bearer {token}
 
 ---
 
-## Transactions Endpoints
+## Transactions Endpoints (Admin Only)
+
+**IMPORTANT: All transaction endpoints require admin authentication. Staff users cannot access these features.**
 
 Transactions let you record money moving into your business (inflow) or out (outflow). Each transaction affects a specific account's balance.
 
@@ -1908,6 +2605,72 @@ const getStock = async () => {
     return response.json();
 };
 
+// User Management (Admin only)
+const getUsers = async () => {
+    const token = localStorage.getItem('token');
+    const response = await fetch('/api/core/users', {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+        }
+    });
+    
+    return response.json();
+};
+
+const createUser = async (userData) => {
+    const token = localStorage.getItem('token');
+    const response = await fetch('/api/core/users', {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(userData)
+    });
+    
+    return response.json();
+};
+
+const updateUser = async (userId, userData) => {
+    const token = localStorage.getItem('token');
+    const response = await fetch(`/api/core/users/${userId}`, {
+        method: 'PUT',
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(userData)
+    });
+    
+    return response.json();
+};
+
+const deleteUser = async (userId) => {
+    const token = localStorage.getItem('token');
+    const response = await fetch(`/api/core/users/${userId}`, {
+        method: 'DELETE',
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+        }
+    });
+    
+    return response.json();
+};
+
+const getUserStats = async () => {
+    const token = localStorage.getItem('token');
+    const response = await fetch('/api/core/users/stats', {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+        }
+    });
+    
+    return response.json();
+};
+
 // Add new stock item
 const addStock = async (stockData) => {
     const token = localStorage.getItem('token');
@@ -1932,6 +2695,26 @@ curl -X POST http://localhost:8000/api/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email":"john@example.com","password":"password123"}'
 
+# Register new user (Admin only)
+curl -X POST http://localhost:8000/api/auth/register \
+  -H "Authorization: Bearer ADMIN_TOKEN_HERE" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"New User","email":"newuser@example.com","password":"password123","password_confirmation":"password123","user_role":"staff"}'
+
+# Get all users (Admin only)
+curl -X GET http://localhost:8000/api/core/users \
+  -H "Authorization: Bearer ADMIN_TOKEN_HERE"
+
+# Update user (Admin only)
+curl -X PUT http://localhost:8000/api/core/users/2 \
+  -H "Authorization: Bearer ADMIN_TOKEN_HERE" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Updated Name","user_role":"admin"}'
+
+# Delete user (Admin only)
+curl -X DELETE http://localhost:8000/api/core/users/2 \
+  -H "Authorization: Bearer ADMIN_TOKEN_HERE"
+
 # Get stock items
 curl -X GET http://localhost:8000/api/core/stock \
   -H "Authorization: Bearer YOUR_TOKEN_HERE"
@@ -1948,10 +2731,18 @@ curl -X POST http://localhost:8000/api/core/unit \
 ## Notes
 
 1. **Authentication**: All core endpoints require authentication via Bearer token
-2. **CORS**: Make sure your frontend domain is configured in the CORS settings
-3. **Validation**: All input data is validated according to Laravel validation rules
-4. **Relationships**: Stock items are linked to Units via foreign keys, and optionally to Categories
-5. **Decimal Precision**: Quantity fields use decimal(10,2) for precise calculations
+2. **Role-Based Access**: 
+   - Admin users have full access to all features
+   - Staff users cannot access expense management, transactions, or user management
+   - Only admin users can create new accounts via the registration endpoint
+3. **User Management Protection**:
+   - Admins cannot delete their own account
+   - Cannot delete or demote the last admin in the system
+   - Password updates are optional when editing users
+4. **CORS**: Make sure your frontend domain is configured in the CORS settings
+5. **Validation**: All input data is validated according to Laravel validation rules
+6. **Relationships**: Stock items are linked to Units via foreign keys, and optionally to Categories
+7. **Decimal Precision**: Quantity fields use decimal(10,2) for precise calculations
 
 ---
 
@@ -2658,6 +3449,104 @@ const seasonData = await getAnalytics('business-season', {
 const todayProducts = await getBestSellingProducts('today', { limit: 5 });
 const weekProducts = await getBestSellingProducts('week', { start_date: '2025-09-16', limit: 10 });
 const monthProducts = await getBestSellingProducts('month', { year: 2025, month: 9, limit: 15 });
+
+// Notification Management
+const getNotifications = async (filters = {}) => {
+    const token = localStorage.getItem('token');
+    const queryParams = new URLSearchParams(filters);
+    
+    const response = await fetch(`/api/core/notifications?${queryParams}`, {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+        }
+    });
+    
+    return response.json();
+};
+
+const getUnreadCount = async () => {
+    const token = localStorage.getItem('token');
+    const response = await fetch('/api/core/notifications/unread-count', {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+        }
+    });
+    
+    return response.json();
+};
+
+const markAsRead = async (notificationId) => {
+    const token = localStorage.getItem('token');
+    const response = await fetch(`/api/core/notifications/${notificationId}/read`, {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+        }
+    });
+    
+    return response.json();
+};
+
+const markAllAsRead = async () => {
+    const token = localStorage.getItem('token');
+    const response = await fetch('/api/core/notifications/read-all', {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+        }
+    });
+    
+    return response.json();
+};
+
+const deleteNotification = async (notificationId) => {
+    const token = localStorage.getItem('token');
+    const response = await fetch(`/api/core/notifications/${notificationId}`, {
+        method: 'DELETE',
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+        }
+    });
+    
+    return response.json();
+};
+
+const checkRentals = async () => {
+    const token = localStorage.getItem('token');
+    const response = await fetch('/api/core/notifications/check/rentals', {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+        }
+    });
+    
+    return response.json();
+};
+
+const checkCustomers = async () => {
+    const token = localStorage.getItem('token');
+    const response = await fetch('/api/core/notifications/check/customers', {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+        }
+    });
+    
+    return response.json();
+};
+
+// Usage
+const notifications = await getNotifications({ is_read: false, per_page: 10 });
+const unreadCount = await getUnreadCount();
+await markAsRead(5);
+await markAllAsRead();
 ```
 
 ### cURL Examples
@@ -2691,6 +3580,42 @@ curl -X GET "http://localhost:8000/api/core/analytics/best-selling-products/toda
 
 # Get best selling products for a specific period
 curl -X GET "http://localhost:8000/api/core/analytics/best-selling-products?period=week&start_date=2025-09-16&limit=10" \
+  -H "Authorization: Bearer YOUR_TOKEN_HERE"
+
+# Get all notifications
+curl -X GET "http://localhost:8000/api/core/notifications" \
+  -H "Authorization: Bearer YOUR_TOKEN_HERE"
+
+# Get unread notifications
+curl -X GET "http://localhost:8000/api/core/notifications/unread" \
+  -H "Authorization: Bearer YOUR_TOKEN_HERE"
+
+# Get unread count
+curl -X GET "http://localhost:8000/api/core/notifications/unread-count" \
+  -H "Authorization: Bearer YOUR_TOKEN_HERE"
+
+# Mark notification as read
+curl -X POST "http://localhost:8000/api/core/notifications/5/read" \
+  -H "Authorization: Bearer YOUR_TOKEN_HERE"
+
+# Mark all as read
+curl -X POST "http://localhost:8000/api/core/notifications/read-all" \
+  -H "Authorization: Bearer YOUR_TOKEN_HERE"
+
+# Delete notification
+curl -X DELETE "http://localhost:8000/api/core/notifications/5" \
+  -H "Authorization: Bearer YOUR_TOKEN_HERE"
+
+# Check due rentals
+curl -X POST "http://localhost:8000/api/core/notifications/check/rentals" \
+  -H "Authorization: Bearer YOUR_TOKEN_HERE"
+
+# Check customer dues
+curl -X POST "http://localhost:8000/api/core/notifications/check/customers" \
+  -H "Authorization: Bearer YOUR_TOKEN_HERE"
+
+# Filter notifications by type
+curl -X GET "http://localhost:8000/api/core/notifications?type=rental_due_soon&is_read=false" \
   -H "Authorization: Bearer YOUR_TOKEN_HERE"
 ```
 

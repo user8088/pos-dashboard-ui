@@ -25,6 +25,19 @@ const SidebarContent = ({ logoText, routes }) => {
   // this is for the rest of the collapses
   const [state, setState] = React.useState({});
 
+  // Get current user to check role
+  const getCurrentUserRole = () => {
+    try {
+      const userString = localStorage.getItem('user');
+      const user = userString ? JSON.parse(userString) : null;
+      return user ? user.user_role : null;
+    } catch {
+      return null;
+    }
+  };
+
+  const isAdmin = getCurrentUserRole() === 'admin';
+
   // verifies if routeName is the one active (in browser input)
   const activeRoute = (routeName) => {
     return location.pathname === routeName ? "active" : "";
@@ -40,9 +53,25 @@ const SidebarContent = ({ logoText, routes }) => {
       if (prop.redirect) {
         return null;
       }
+      // Filter hidden routes (they exist for routing but not for sidebar display)
+      if (prop.hidden) {
+        return null;
+      }
+      // Filter admin-only routes for staff users
+      if (prop.adminOnly && !isAdmin) {
+        return null;
+      }
       if (prop.category) {
         var st = {};
         st[prop["state"]] = !state[prop.state];
+        // Filter views for staff users and hidden routes in categories
+        const filteredViews = prop.views ? prop.views.filter(view => 
+          !view.hidden && (!view.adminOnly || isAdmin)
+        ) : [];
+        // Don't show category if all views are filtered out
+        if (filteredViews.length === 0) {
+          return null;
+        }
         return (
           <div key={prop.name}>
             <Text
@@ -62,7 +91,7 @@ const SidebarContent = ({ logoText, routes }) => {
                 ? prop.rtlName
                 : prop.name}
             </Text>
-            {createLinks(prop.views)}
+            {createLinks(filteredViews)}
           </div>
         );
       }

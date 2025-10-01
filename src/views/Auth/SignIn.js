@@ -205,25 +205,6 @@ function SignIn() {
                 </Button>
               </FormControl>
             </form>
-            <Flex
-              flexDirection='column'
-              justifyContent='center'
-              alignItems='center'
-              maxW='100%'
-              mt='0px'>
-              <Text color={textColor} fontWeight='medium'>
-                Don't have an account?
-                <Link 
-                  color={titleColor} 
-                  as='span' 
-                  ms='5px' 
-                  fontWeight='bold'
-                  onClick={() => history.push('/auth/signup')}
-                  cursor="pointer">
-                  Sign Up
-                </Link>
-              </Text>
-            </Flex>
           </Flex>
         </Flex>
         <Box
