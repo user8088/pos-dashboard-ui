@@ -13,8 +13,11 @@ import React from "react";
 import { FaTrash } from "react-icons/fa";
 
 function RawMaterialTableRow(props) {
-  const { logo, name, amountPerUnit, unitCost, totalPurchaseCost, supplierName, wasteQuantity, lossCost, invoiceLink, status, amountPending, onEdit, onDelete, onWaste } = props;
+  const { logo, name, amountPerUnit, unitCost, totalPurchaseCost, supplierName, wasteQuantity, lossCost, invoiceLink, status, amountPending, materialId, billNumber, paymentMethod, paymentMethodNote, image, onEdit, onDelete, onWaste, onDownloadInvoice } = props;
   const textColor = useColorModeValue("gray.700", "white");
+
+  // Debug log to see what image data we're receiving
+  console.log(`Image for ${name}:`, image, 'Logo:', logo);
 
   // Status color mapping
   const getStatusColor = (status) => {
@@ -29,16 +32,33 @@ function RawMaterialTableRow(props) {
   };
 
   const handleDownloadInvoice = () => {
-    // Here you would typically trigger a download
-    // For now, we'll just show an alert
-    alert(`Downloading invoice for ${name}`);
+    if (onDownloadInvoice && materialId) {
+      onDownloadInvoice();
+    } else {
+      console.error('Download handler or material ID not provided');
+    }
   };
 
   return (
     <Tr>
       <Td minWidth={{ sm: "250px" }} pl="0px">
         <Flex align="center" py=".8rem" minWidth="100%" flexWrap="nowrap">
-          <Image src={logo} w="30px" h="30px" me="18px" objectFit="cover" />
+          <Image 
+            src={image || logo} 
+            w="30px" 
+            h="30px" 
+            me="18px" 
+            objectFit="cover"
+            borderRadius="md"
+            alt={name}
+            onError={(e) => {
+              console.error(`Failed to load image for ${name}:`, image, e);
+              e.target.src = logo; // Fallback to logo
+            }}
+            onLoad={() => {
+              console.log(`Successfully loaded image for ${name}:`, image);
+            }}
+          />
           <Flex direction="column">
             <Text
               fontSize="md"
@@ -78,9 +98,34 @@ function RawMaterialTableRow(props) {
             fontWeight="normal"
             onClick={handleDownloadInvoice}
             _hover={{ textDecoration: "underline" }}
+            title={billNumber && billNumber !== 'N/A' ? `Bill Number: ${billNumber}` : 'Download Invoice'}
           >
             {invoiceLink}
           </Button>
+        </Flex>
+      </Td>
+
+      <Td>
+        <Text 
+          fontSize="md" 
+          color={billNumber && billNumber !== 'N/A' ? textColor : "gray.400"} 
+          fontWeight="bold"
+          fontFamily="mono"
+        >
+          {billNumber && billNumber !== 'N/A' ? billNumber : "—"}
+        </Text>
+      </Td>
+
+      <Td>
+        <Flex direction="column">
+          <Text fontSize="md" color={textColor} fontWeight="bold" textTransform="capitalize">
+            {paymentMethod && paymentMethod !== 'N/A' ? paymentMethod.replace('_', ' ') : "—"}
+          </Text>
+          {paymentMethodNote && (
+            <Text fontSize="xs" color="gray.500" mt="1">
+              {paymentMethodNote}
+            </Text>
+          )}
         </Flex>
       </Td>
 

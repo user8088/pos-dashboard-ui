@@ -24,6 +24,9 @@ import {
   Select,
   useToast,
   Spinner,
+  Box,
+  Image,
+  Textarea,
 } from "@chakra-ui/react";
 // Custom components
 import Card from "components/Card/Card.js";
@@ -47,9 +50,24 @@ const RawMaterialTable = ({ title, captions }) => {
     status: "pending",
     amountPending: "",
     wasteQuantity: "",
-    totalWasteCost: ""
+    totalWasteCost: "",
+    paymentMethod: "",
+    paymentMethodNote: "",
+    image: null
   });
-  const [editingMaterial, setEditingMaterial] = React.useState(null);
+  const [editingMaterial, setEditingMaterial] = React.useState({
+    id: null,
+    name: "",
+    amountPerUnit: "",
+    totalPurchaseCost: "",
+    status: "pending",
+    amountPending: "",
+    wasteQuantity: "",
+    totalWasteCost: "",
+    paymentMethod: "",
+    paymentMethodNote: "",
+    image: null
+  });
   const [wasteTarget, setWasteTarget] = React.useState(null);
   const [wasteQuantity, setWasteQuantity] = React.useState("");
   const [rawMaterialData, setRawMaterialData] = React.useState([]);
@@ -81,6 +99,7 @@ const RawMaterialTable = ({ title, captions }) => {
 
       if (response.ok) {
         const rawMaterials = await response.json();
+        console.log('Raw materials from API:', rawMaterials); // Debug log
         const formattedMaterials = rawMaterials.map(material => ({
           logo: logo,
           name: material.material_name,
@@ -100,6 +119,20 @@ const RawMaterialTable = ({ title, captions }) => {
           wasteQuantityRaw: material.waste_quantity || 0,
           lossCost: material.total_waste_cost ? `PKR.${material.total_waste_cost}` : 'PKR.0.00',
           totalWasteCostRaw: material.total_waste_cost || 0,
+          billNumber: material.bill_number || 'N/A', // Include bill number from API
+          paymentMethod: material.payment_method || 'N/A', // Include payment method
+          paymentMethodNote: material.payment_method_note || '', // Include payment method note
+          image: (() => {
+            let imageUrl = material.image_url || null;
+            if (imageUrl) {
+              // Fix localhost URLs that might be missing port number
+              if (imageUrl.includes('localhost') && !imageUrl.includes(':8000')) {
+                imageUrl = imageUrl.replace('localhost', 'localhost:8000');
+              }
+              console.log(`Material "${material.material_name}" image_url:`, imageUrl, 'Original:', material.image_url); // Debug log
+            }
+            return imageUrl;
+          })(), // Use the absolute URL from API response
           supplierName: (material.supplier && material.supplier.supplier_name)
             || (typeof material.supplier_name === 'string' && material.supplier_name)
             || (() => {
@@ -157,30 +190,40 @@ const RawMaterialTable = ({ title, captions }) => {
     
     try {
       const token = localStorage.getItem('token');
+      // Create FormData for multipart upload
+      const formData = new FormData();
+      
+      const amount = parseFloat(newMaterial.amountPerUnit);
+      const unitCost = newUnitPurchaseCost !== "" ? parseFloat(newUnitPurchaseCost) : undefined;
+      const computedTotal = (typeof unitCost === 'number' && isFinite(unitCost) && isFinite(amount)) ? amount * unitCost : undefined;
+      const providedTotal = newMaterial.totalPurchaseCost !== "" ? parseFloat(newMaterial.totalPurchaseCost) : undefined;
+      
+      // Add all form fields
+      formData.append('material_name', newMaterial.name);
+      formData.append('amount_per_unit', amount);
+      if (unitCost !== undefined) formData.append('unit_purchase_cost', unitCost);
+      formData.append('purchase_cost', computedTotal || providedTotal);
+      formData.append('status', newMaterial.status);
+      
+      if (newMaterial.amountPending !== "") formData.append('amount_pending', parseFloat(newMaterial.amountPending));
+      if (newMaterial.wasteQuantity !== "") formData.append('waste_quantity', parseFloat(newMaterial.wasteQuantity));
+      if (newMaterial.totalWasteCost !== "") formData.append('total_waste_cost', parseFloat(newMaterial.totalWasteCost));
+      if (newMaterial.supplierId) formData.append('supplier_id', newMaterial.supplierId);
+      
+      // Add payment method fields
+      if (newMaterial.paymentMethod) formData.append('payment_method', newMaterial.paymentMethod);
+      if (newMaterial.paymentMethodNote) formData.append('payment_method_note', newMaterial.paymentMethodNote);
+      
+      // Add image if selected
+      if (newMaterial.image) formData.append('image', newMaterial.image);
+
       const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000/api'}/core/raw-material`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
           'Accept': 'application/json',
         },
-        body: JSON.stringify((() => {
-          const amount = parseFloat(newMaterial.amountPerUnit);
-          const unitCost = newUnitPurchaseCost !== "" ? parseFloat(newUnitPurchaseCost) : undefined;
-          const computedTotal = (typeof unitCost === 'number' && isFinite(unitCost) && isFinite(amount)) ? amount * unitCost : undefined;
-          const providedTotal = newMaterial.totalPurchaseCost !== "" ? parseFloat(newMaterial.totalPurchaseCost) : undefined;
-          return {
-            material_name: newMaterial.name,
-            amount_per_unit: amount,
-            ...(typeof unitCost === 'number' ? { unit_purchase_cost: unitCost } : {}),
-            ...(typeof providedTotal === 'number' ? { purchase_cost: providedTotal } : (typeof computedTotal === 'number' ? { purchase_cost: computedTotal } : {})),
-            status: newMaterial.status,
-            amount_pending: newMaterial.amountPending ? parseFloat(newMaterial.amountPending) : null,
-            ...(newMaterial.wasteQuantity ? { waste_quantity: parseFloat(newMaterial.wasteQuantity) } : {}),
-            ...(newMaterial.totalWasteCost ? { total_waste_cost: parseFloat(newMaterial.totalWasteCost) } : {}),
-            supplier_id: newMaterial.supplierId ?? null,
-          };
-        })()),
+        body: formData
       });
 
       const data = await response.json();
@@ -189,7 +232,7 @@ const RawMaterialTable = ({ title, captions }) => {
         // Show success message
         toast({
           title: "Raw Material Added Successfully",
-          description: `Raw material "${data.material_name}" has been added to the system.`,
+          description: `Raw material "${data.material_name}" has been added to the system${data.bill_number ? ` with bill number ${data.bill_number}` : ''}.`,
           status: "success",
           duration: 3000,
           isClosable: true,
@@ -205,6 +248,9 @@ const RawMaterialTable = ({ title, captions }) => {
           wasteQuantity: "",
           totalWasteCost: "",
           supplierId: undefined,
+          paymentMethod: "",
+          paymentMethodNote: "",
+          image: null
         });
         setNewUnitPurchaseCost("");
         
@@ -240,7 +286,7 @@ const RawMaterialTable = ({ title, captions }) => {
 
   const handleEditMaterial = (material) => {
     setEditingMaterial({
-      materialId: material.materialId,
+      id: material.materialId,
       name: material.name,
       amountPerUnit: material.amountPerUnitRaw.toString(),
       totalPurchaseCost: material.purchaseCostRaw.toString(),
@@ -250,6 +296,10 @@ const RawMaterialTable = ({ title, captions }) => {
       totalWasteCost: (material.totalWasteCostRaw !== undefined ? material.totalWasteCostRaw : "").toString(),
       unitCostExisting: material.unitCostRaw ? material.unitCostRaw.toString() : "",
       supplierId: material.supplierIdRaw || undefined,
+      paymentMethod: material.paymentMethod || "",
+      paymentMethodNote: material.paymentMethodNote || "",
+      image: null, // New image file (for upload)
+      currentImage: material.image // Current image URL/path (for display)
     });
     setEditUnitPurchaseCost("");
     onEditOpen();
@@ -260,30 +310,46 @@ const RawMaterialTable = ({ title, captions }) => {
     
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000/api'}/core/raw-material/${editingMaterial.materialId}`, {
+      // Create FormData for multipart upload
+      const formData = new FormData();
+      
+      const amount = parseFloat(editingMaterial.amountPerUnit);
+      const unitCost = editUnitPurchaseCost !== "" ? parseFloat(editUnitPurchaseCost) : undefined;
+      const providedTotal = editingMaterial.totalPurchaseCost !== "" ? parseFloat(editingMaterial.totalPurchaseCost) : undefined;
+      const computedTotal = (typeof unitCost === 'number' && isFinite(unitCost) && isFinite(amount)) ? amount * unitCost : undefined;
+      
+      // Add all form fields
+      formData.append('material_name', editingMaterial.name);
+      formData.append('amount_per_unit', amount);
+      formData.append('status', editingMaterial.status);
+      
+      if (editingMaterial.amountPending !== "") formData.append('amount_pending', parseFloat(editingMaterial.amountPending));
+      if (unitCost !== undefined) formData.append('unit_purchase_cost', unitCost);
+      if (providedTotal !== undefined) formData.append('purchase_cost', providedTotal);
+      else if (computedTotal !== undefined) formData.append('purchase_cost', computedTotal);
+      
+      if (editingMaterial.wasteQuantity !== undefined && editingMaterial.wasteQuantity !== "") {
+        formData.append('waste_quantity', parseFloat(editingMaterial.wasteQuantity));
+      }
+      if (editingMaterial.totalWasteCost !== undefined && editingMaterial.totalWasteCost !== "") {
+        formData.append('total_waste_cost', parseFloat(editingMaterial.totalWasteCost));
+      }
+      if (editingMaterial.supplierId) formData.append('supplier_id', editingMaterial.supplierId);
+      
+      // Add payment method fields
+      if (editingMaterial.paymentMethod) formData.append('payment_method', editingMaterial.paymentMethod);
+      if (editingMaterial.paymentMethodNote) formData.append('payment_method_note', editingMaterial.paymentMethodNote);
+      
+      // Add image if new one is selected
+      if (editingMaterial.image) formData.append('image', editingMaterial.image);
+
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000/api'}/core/raw-material/${editingMaterial.id}`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
           'Accept': 'application/json',
         },
-        body: JSON.stringify((() => {
-          const amount = parseFloat(editingMaterial.amountPerUnit);
-          const unitCost = editUnitPurchaseCost !== "" ? parseFloat(editUnitPurchaseCost) : undefined;
-          const providedTotal = editingMaterial.totalPurchaseCost !== "" ? parseFloat(editingMaterial.totalPurchaseCost) : undefined;
-          const computedTotal = (typeof unitCost === 'number' && isFinite(unitCost) && isFinite(amount)) ? amount * unitCost : undefined;
-          return {
-            material_name: editingMaterial.name,
-            amount_per_unit: amount,
-            status: editingMaterial.status,
-            amount_pending: editingMaterial.amountPending ? parseFloat(editingMaterial.amountPending) : null,
-            ...(typeof unitCost === 'number' ? { unit_purchase_cost: unitCost } : {}),
-            ...(typeof providedTotal === 'number' ? { purchase_cost: providedTotal } : (typeof computedTotal === 'number' ? { purchase_cost: computedTotal } : {})),
-            ...(editingMaterial.wasteQuantity !== undefined && editingMaterial.wasteQuantity !== "" ? { waste_quantity: parseFloat(editingMaterial.wasteQuantity) } : {}),
-            ...(editingMaterial.totalWasteCost !== undefined && editingMaterial.totalWasteCost !== "" ? { total_waste_cost: parseFloat(editingMaterial.totalWasteCost) } : {}),
-            supplier_id: (editingMaterial.supplierId ?? null),
-          };
-        })()),
+        body: formData
       });
 
       const data = await response.json();
@@ -456,6 +522,75 @@ const RawMaterialTable = ({ title, captions }) => {
     alert("Export CSV functionality would be implemented here.");
   };
 
+  const handleDownloadInvoice = async (materialId, materialName, billNumber) => {
+    try {
+      setIsLoading(true);
+      const token = localStorage.getItem('token');
+      
+      console.log('📄 Downloading invoice for material ID:', materialId, 'Bill Number:', billNumber);
+      
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000/api'}/core/raw-material/${materialId}/invoice`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      console.log('📥 Invoice response status:', response.status);
+
+      if (response.ok) {
+        // Get the blob data
+        const blob = await response.blob();
+        
+        // Create download link with bill number in filename
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        
+        // Use bill number in filename if available, otherwise fallback to material name and ID
+        const fileName = billNumber && billNumber !== 'N/A' 
+          ? `invoice-${billNumber}.pdf`
+          : `invoice-${materialName.replace(/\s+/g, '-')}-${materialId}.pdf`;
+          
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+        
+        toast({
+          title: "Invoice Downloaded",
+          description: `Invoice for "${materialName}"${billNumber && billNumber !== 'N/A' ? ` (${billNumber})` : ''} has been downloaded successfully.`,
+          status: "success",
+          duration: 3000,
+          isClosable: true,
+        });
+      } else {
+        const errorText = await response.text();
+        console.error('Invoice download failed:', response.status, errorText);
+        
+        toast({
+          title: "Download Failed",
+          description: `Failed to download invoice. Server returned status ${response.status}.`,
+          status: "error",
+          duration: 5000,
+          isClosable: true,
+        });
+      }
+    } catch (error) {
+      console.error('Invoice download error:', error);
+      toast({
+        title: "Download Failed",
+        description: error.message || "Unable to download invoice. Please try again.",
+        status: "error",
+        duration: 5000,
+        isClosable: true,
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <Card overflowX={{ sm: "scroll", xl: "hidden" }}>
       <CardHeader p='6px 0px 22px 0px'>
@@ -578,9 +713,15 @@ const RawMaterialTable = ({ title, captions }) => {
                     invoiceLink={row.invoiceLink}
                     status={row.status}
                     amountPending={row.amountPending}
+                    materialId={row.materialId}
+                    billNumber={row.billNumber}
+                    paymentMethod={row.paymentMethod}
+                    paymentMethodNote={row.paymentMethodNote}
+                    image={row.image}
                     onEdit={() => handleEditMaterial(row)}
                     onDelete={() => handleDeleteMaterial(row)}
                     onWaste={() => handleOpenWaste(row)}
+                    onDownloadInvoice={() => handleDownloadInvoice(row.materialId, row.name, row.billNumber)}
                   />
                 );
               })}
@@ -674,6 +815,44 @@ const RawMaterialTable = ({ title, captions }) => {
                   value={newMaterial.amountPending}
                   onChange={(e) => setNewMaterial({...newMaterial, amountPending: e.target.value})}
                 />
+              </FormControl>
+
+              <FormControl>
+                <FormLabel color={textColor}>Payment Method</FormLabel>
+                <Select
+                  placeholder='Select payment method'
+                  value={newMaterial.paymentMethod}
+                  onChange={(e) => setNewMaterial({...newMaterial, paymentMethod: e.target.value})}>
+                  <option value='cash'>Cash</option>
+                  <option value='card'>Card</option>
+                  <option value='bank_transfer'>Bank Transfer</option>
+                  <option value='other'>Other</option>
+                </Select>
+              </FormControl>
+
+              {newMaterial.paymentMethod === 'other' && (
+                <FormControl>
+                  <FormLabel color={textColor}>Payment Method Note</FormLabel>
+                  <Input
+                    placeholder='Specify payment method'
+                    value={newMaterial.paymentMethodNote}
+                    onChange={(e) => setNewMaterial({...newMaterial, paymentMethodNote: e.target.value})}
+                  />
+                </FormControl>
+              )}
+
+              <FormControl>
+                <FormLabel color={textColor}>Material Image</FormLabel>
+                <Input
+                  type='file'
+                  accept='image/*'
+                  onChange={(e) => setNewMaterial({...newMaterial, image: e.target.files[0]})}
+                />
+                {newMaterial.image && (
+                  <Box mt="2">
+                    <Text fontSize="sm" color="green.500">Image selected: {newMaterial.image.name}</Text>
+                  </Box>
+                )}
               </FormControl>
 
               {/* Waste fields are intentionally hidden on create */}
@@ -813,6 +992,49 @@ const RawMaterialTable = ({ title, captions }) => {
                     value={editingMaterial.totalWasteCost}
                     onChange={(e) => setEditingMaterial({...editingMaterial, totalWasteCost: e.target.value})}
                   />
+                </FormControl>
+
+                <FormControl>
+                  <FormLabel color={textColor}>Payment Method</FormLabel>
+                  <Select
+                    placeholder='Select payment method'
+                    value={editingMaterial.paymentMethod}
+                    onChange={(e) => setEditingMaterial({...editingMaterial, paymentMethod: e.target.value})}>
+                    <option value='cash'>Cash</option>
+                    <option value='card'>Card</option>
+                    <option value='bank_transfer'>Bank Transfer</option>
+                    <option value='other'>Other</option>
+                  </Select>
+                </FormControl>
+
+                {editingMaterial.paymentMethod === 'other' && (
+                  <FormControl>
+                    <FormLabel color={textColor}>Payment Method Note</FormLabel>
+                    <Input
+                      placeholder='Specify payment method'
+                      value={editingMaterial.paymentMethodNote}
+                      onChange={(e) => setEditingMaterial({...editingMaterial, paymentMethodNote: e.target.value})}
+                    />
+                  </FormControl>
+                )}
+
+                <FormControl>
+                  <FormLabel color={textColor}>Material Image</FormLabel>
+                  <Input
+                    type='file'
+                    accept='image/*'
+                    onChange={(e) => setEditingMaterial({...editingMaterial, image: e.target.files[0]})}
+                  />
+                  {editingMaterial.image && (
+                    <Box mt="2">
+                      <Text fontSize="sm" color="green.500">New image selected: {editingMaterial.image.name}</Text>
+                    </Box>
+                  )}
+                  {editingMaterial.currentImage && !editingMaterial.image && (
+                    <Box mt="2">
+                      <Text fontSize="sm" color="gray.500">Current image: {editingMaterial.currentImage}</Text>
+                    </Box>
+                  )}
                 </FormControl>
                 
                 <Button

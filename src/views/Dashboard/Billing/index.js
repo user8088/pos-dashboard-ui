@@ -36,7 +36,6 @@ import React from "react";
 import { FaPaypal, FaWallet, FaEdit, FaTrash, FaExchangeAlt, FaChartLine, FaPlus } from "react-icons/fa";
 import { RiMastercardFill } from "react-icons/ri";
 import {
-  billingData,
   invoicesData,
   newestTransactions,
   olderTransactions,
@@ -485,7 +484,7 @@ function Billing() {
         <Invoices title={"Invoices"} data={invoicesData} />
       </Grid>
       <Grid templateColumns={{ sm: "1fr", lg: "1.6fr 1.2fr" }}>
-        <BillingInformation title={"Bills & Rents"} data={billingData} />
+        <BillingInformation title={"Bills & Rents"} data={[]} />
         <Transactions
           title={"Your Transactions"}
           date={"23 - 30 March"}

@@ -512,6 +512,79 @@ Authorization: Bearer {token}
 
 ---
 
+## Bills & Rents (Payables)
+
+Simple module to track bills and rents you have to pay. Each entry creates a notification automatically. You can mark as paid to remove it from attention lists.
+
+### 82. List Payables
+**GET** `/core/payables`
+
+**Headers:**
+```
+Authorization: Bearer {token}
+```
+
+**Response (200):** Array of payables.
+
+---
+
+### 83. Add Payable (Bill or Rent)
+**POST** `/core/payables`
+
+**Headers:**
+```
+Authorization: Bearer {token}
+Content-Type: application/json
+```
+
+**Request Body:**
+```json
+{
+  "type": "bill",
+  "name": "Electricity Bill",
+  "description": "September",
+  "amount": 1200,
+  "due_date": "2025-10-15"
+}
+```
+
+Rules:
+- `type`: required, enum `bill|rent`
+- `name`: required, string
+- `description`: optional
+- `amount`: required, number > 0
+- `due_date`: optional ISO date
+
+Behavior:
+- Creates a notification `bill_rent_created` visible to admins.
+
+**Response (201):** Payable object
+
+---
+
+### 84. Update Payable
+**PUT** `/core/payables/{id}`
+
+Fields: `type`, `name`, `description`, `amount`, `status`, `due_date` (all optional)
+
+---
+
+### 85. Mark Payable as Paid
+**POST** `/core/payables/{id}/mark-paid`
+
+Behavior:
+- Sets `status=paid`, `paid_at=now` and marks related notifications as read.
+
+**Response (200):** `{ "message": "Marked as paid", "data": { ... } }`
+
+---
+
+### 86. Delete Payable
+**DELETE** `/core/payables/{id}`
+
+**Response (200):** `{ "message": "Deleted" }`
+
+---
 ### 72. Get Unread Notifications
 **GET** `/core/notifications/unread`
 
@@ -1151,9 +1224,13 @@ Content-Type: application/json
 
 **Editable Fields & Rules:**
 - material_name (required, string, max:255)
+- bill_number (auto-generated, string, format: RM-YYYYMMDD-XXXXXX)
 - amount_per_unit (required, number, min:0)
 - unit_purchase_cost (optional, number, min:0)
 - purchase_cost (required without unit_purchase_cost, number, min:0)
+- payment_method (optional, enum: cash|card|bank_transfer|other)
+- payment_method_note (optional, string; used only when payment_method=other)
+- image (optional, file; image/* up to 4 MB)
 - status (optional, enum: delivered|pending, default: pending)
 - amount_pending (optional, number, min:0)
 - waste_quantity (optional, number, min:0, default: 0)
@@ -1165,18 +1242,22 @@ Computation behavior:
 - If both unit_purchase_cost and purchase_cost are provided, purchase_cost is respected as-is.
 
 **Request Body (example):**
-```json
-{
-  "material_name": "Sugar",
-  "amount_per_unit": 5.00,
-  "purchase_cost": 12.50,
-  "unit_purchase_cost": 2.50,
-  "status": "pending",
-  "amount_pending": 2.50,
-  "waste_quantity": 0,
-  "total_waste_cost": 0,
-  "supplier_id": 1
-}
+Multipart form-data (for image upload):
+```
+Content-Type: multipart/form-data
+Fields:
+  material_name: Sugar
+  amount_per_unit: 5.00
+  purchase_cost: 12.50
+  unit_purchase_cost: 2.50
+  payment_method: bank_transfer
+  payment_method_note: HBL 1234
+  status: pending
+  amount_pending: 2.50
+  waste_quantity: 0
+  total_waste_cost: 0
+  supplier_id: 1
+  image: <file>
 ```
 Notes:
 - **unit_purchase_cost (optional)**: If provided, the API will compute `purchase_cost = unit_purchase_cost × amount_per_unit` and persist both values.
@@ -1184,12 +1265,42 @@ Notes:
 
 **Response (201):** Raw material JSON with supplier relationship.
 
+Notes:
+- On creation, the API auto-generates `bill_number` as `RM-YYYYMMDD-XXXXXX` and persists it. This number is printed on the raw material invoice PDF.
+- For image uploads, files are stored on the `public` disk under `raw_materials/` and two fields are returned:
+  - `image_path`: relative path, e.g. `raw_materials/9d3f72b1.jpg`
+  - `image_url`: absolute URL, e.g. `http://localhost:8000/storage/raw_materials/9d3f72b1.jpg`
+  - Make sure `php artisan storage:link` has been run on the server so `/storage` serves files.
+
+**Sample Response (201):**
+```json
+{
+  "item_id": 7,
+  "material_name": "Sugar",
+  "bill_number": "RM-20251007-63910A",
+  "amount_per_unit": "5.00",
+  "unit_purchase_cost": "2.50",
+  "purchase_cost": "12.50",
+  "payment_method": "bank_transfer",
+  "payment_method_note": "HBL 1234",
+  "image_path": "raw_materials/9d3f72b1.jpg",
+  "image_url": "http://localhost:8000/storage/raw_materials/9d3f72b1.jpg",
+  "status": "pending",
+  "amount_pending": "2.50",
+  "waste_quantity": "0.00",
+  "total_waste_cost": "0.00",
+  "supplier_id": 1,
+  "created_at": "2025-10-07T11:12:00.000000Z",
+  "updated_at": "2025-10-07T11:12:00.000000Z"
+}
+```
+
 **Note:** When `supplier_id` is provided, the supplier's order statistics are automatically updated with the purchase cost and order count.
 
 #### 11.2 Get Raw Materials
 **GET** `/core/raw-material`
 
-Retrieve all raw materials.
+Retrieve all raw materials. Each material includes `image_path` and `image_url` (if an image was uploaded).
 
 **Headers:**
 ```
@@ -1206,6 +1317,9 @@ Editable Fields & Rules:
 - amount_per_unit (number, min:0)
 - unit_purchase_cost (number|null, min:0)
 - purchase_cost (number, min:0)
+- payment_method (enum: cash|card|bank_transfer|other|null)
+- payment_method_note (string|null)
+- image (file image/* up to 4 MB)
 - status (enum: delivered|pending)
 - amount_pending (number, min:0)
 - waste_quantity (number, min:0)
@@ -1217,10 +1331,10 @@ Computation behavior:
 - If purchase_cost is provided, it is respected as-is (no auto-compute).
 
 **Headers:**
-```
-Authorization: Bearer {token}
-Content-Type: application/json
-```
+For updates with image: `Content-Type: multipart/form-data`.
+Otherwise: `application/json`.
+
+Response includes updated `image_path` and `image_url` when a file is uploaded.
 
 **Request Body (example):**
 ```json
@@ -1246,6 +1360,22 @@ Delete a raw material.
 ```
 Authorization: Bearer {token}
 ```
+
+#### 11.7 Download Raw Material Invoice (PDF)
+**GET** `/core/raw-material/{id}/invoice`
+
+Generate and download a PDF invoice for the specified raw material. The invoice includes material details, unit and total costs, status, supplier information (when available), and the material's `bill_number`.
+
+**Headers:**
+```
+Authorization: Bearer {token}
+```
+
+**Response:** PDF file download.
+
+Notes:
+- Requires `barryvdh/laravel-dompdf` (already included)
+- Uses `resources/views/raw_material_invoice.blade.php`
 
 #### 11.5 Get Suppliers for Raw Material Dropdown
 **GET** `/core/raw-material/suppliers`
