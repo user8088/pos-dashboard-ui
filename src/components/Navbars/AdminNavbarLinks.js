@@ -40,12 +40,14 @@ import React, { useState, useEffect } from "react";
 import { NavLink, useHistory } from "react-router-dom";
 import routes from "routes.js";
 import authService from "services/authService";
+import { useSearch } from "contexts/SearchContext";
 import notificationService from "services/notificationService";
 
 export default function HeaderLinks(props) {
   const { variant, children, fixed, secondary, onOpen, ...rest } = props;
   const history = useHistory();
   const toast = useToast();
+  const { updateSearch, clearSearch, searchTerm } = useSearch();
   
   // Get user from localStorage and memoize it
   const [user, setUser] = useState(() => {
@@ -267,8 +269,15 @@ export default function HeaderLinks(props) {
           fontSize="xs"
           py="11px"
           color={mainText}
-          placeholder="Type here..."
+          placeholder="Search tables..."
           borderRadius="inherit"
+          value={searchTerm}
+          onChange={(e) => updateSearch(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') {
+              clearSearch();
+            }
+          }}
         />
       </InputGroup>
       

@@ -36,6 +36,7 @@ import TransactionRow from "components/Tables/TransactionRow";
 import React from "react";
 import { FaRegCalendarAlt, FaPlus } from "react-icons/fa";
 import { FiSearch } from "react-icons/fi";
+import { useSearch } from "contexts/SearchContext";
 
 const Transactions = ({
   title,
@@ -48,6 +49,7 @@ const Transactions = ({
   const { isOpen: isAddOpen, onOpen: onAddOpen, onClose: onAddClose } = useDisclosure();
   const toast = useToast();
   const [query, setQuery] = React.useState("");
+  const { filterData, isSearchActive } = useSearch();
   const [startDate, setStartDate] = React.useState("");
   const [endDate, setEndDate] = React.useState("");
   const [isLoading, setIsLoading] = React.useState(false);
@@ -313,7 +315,7 @@ const Transactions = ({
                 </Flex>
               </Flex>
             ) : (
-              filteredTransactions.map((row) => (
+              filterData(filteredTransactions, ['title', 'account', 'transacted_at', 'amount']).map((row) => (
                 <TransactionRow
                   key={row.id}
                   name={`${row.title}${row.account ? ` • ${row.account}` : ''}`}
@@ -351,7 +353,7 @@ const Transactions = ({
               />
             </InputGroup>
             <Flex direction='column' w='100%'>
-              {filteredTransactions.map((row) => (
+              {filterData(filteredTransactions, ['title', 'account', 'transacted_at', 'amount']).map((row) => (
                 <TransactionRow
                   key={`modal-${row.id}`}
                   name={`${row.title}${row.account ? ` • ${row.account}` : ''}`}

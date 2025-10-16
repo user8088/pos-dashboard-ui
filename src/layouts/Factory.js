@@ -21,6 +21,7 @@ import "@fontsource/roboto/400.css";
 import "@fontsource/roboto/500.css";
 import "@fontsource/roboto/700.css";
 import theme from "theme/theme.js";
+import { SearchProvider } from "../contexts/SearchContext";
 
 export default function FactoryDashboard(props) {
 	const { ...rest } = props;
@@ -95,54 +96,56 @@ export default function FactoryDashboard(props) {
 	// Chakra Color Mode
 	return (
 		<ChakraProvider theme={theme} resetCss={false}>
-			<Sidebar
-				routes={routes}
-				logoText={'MUGHAL FACTORY'}
-				display='none'
-				sidebarVariant={sidebarVariant}
-				{...rest}
-			/>
-			<MainPanel
-				w={{
-					base: '100%',
-					xl: 'calc(100% - 275px)'
-				}}>
-				<Portal>
-					<AdminNavbar
-						onOpen={onOpen}
-						logoText={'MUGHAL FACTORY'}
-						brandText={getActiveRoute(routes)}
-						secondary={getActiveNavbar(routes)}
-						fixed={fixed}
-						{...rest}
-					/>
-				</Portal>
-				{getRoute() ? (
-					<PanelContent>
-						<PanelContainer>
-							<Switch>
-								{getRoutes(routes)}
-								<Redirect from='/factory' to='/factory/dashboard' />
-							</Switch>
-						</PanelContainer>
-					</PanelContent>
-				) : null}
-				<Footer />
-				<Portal>
-					<FixedPlugin secondary={getActiveNavbar(routes)} fixed={fixed} onOpen={onOpen} />
-				</Portal>
-				<Configurator
-					secondary={getActiveNavbar(routes)}
-					isOpen={isOpen}
-					onClose={onClose}
-					isChecked={fixed}
-					onSwitch={(value) => {
-						setFixed(value);
-					}}
-					onOpaque={() => setSidebarVariant('opaque')}
-					onTransparent={() => setSidebarVariant('transparent')}
+			<SearchProvider>
+				<Sidebar
+					routes={routes}
+					logoText={'MUGHAL FACTORY'}
+					display='none'
+					sidebarVariant={sidebarVariant}
+					{...rest}
 				/>
-			</MainPanel>
+				<MainPanel
+					w={{
+						base: '100%',
+						xl: 'calc(100% - 275px)'
+					}}>
+					<Portal>
+						<AdminNavbar
+							onOpen={onOpen}
+							logoText={'MUGHAL FACTORY'}
+							brandText={getActiveRoute(routes)}
+							secondary={getActiveNavbar(routes)}
+							fixed={fixed}
+							{...rest}
+						/>
+					</Portal>
+					{getRoute() ? (
+						<PanelContent>
+							<PanelContainer>
+								<Switch>
+									{getRoutes(routes)}
+									<Redirect from='/factory' to='/factory/dashboard' />
+								</Switch>
+							</PanelContainer>
+						</PanelContent>
+					) : null}
+					<Footer />
+					<Portal>
+						<FixedPlugin secondary={getActiveNavbar(routes)} fixed={fixed} onOpen={onOpen} />
+					</Portal>
+					<Configurator
+						secondary={getActiveNavbar(routes)}
+						isOpen={isOpen}
+						onClose={onClose}
+						isChecked={fixed}
+						onSwitch={(value) => {
+							setFixed(value);
+						}}
+						onOpaque={() => setSidebarVariant('opaque')}
+						onTransparent={() => setSidebarVariant('transparent')}
+					/>
+				</MainPanel>
+			</SearchProvider>
 		</ChakraProvider>
 	);
 }

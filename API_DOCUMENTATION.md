@@ -205,6 +205,11 @@ Authorization: Bearer {admin_token}
             "name": "John Doe",
             "email": "john@example.com",
             "user_role": "admin",
+            "base_salary": 0,
+            "allowances": 0,
+            "deductions": 0,
+            "salary_currency": "PKR",
+            "salary_effective_from": null,
             "created_at": "2025-09-14T10:00:00.000000Z",
             "updated_at": "2025-09-14T10:00:00.000000Z"
         },
@@ -213,6 +218,11 @@ Authorization: Bearer {admin_token}
             "name": "Jane Smith",
             "email": "jane@example.com",
             "user_role": "staff",
+            "base_salary": 65000,
+            "allowances": 5000,
+            "deductions": 2000,
+            "salary_currency": "PKR",
+            "salary_effective_from": "2025-10-01",
             "created_at": "2025-09-15T14:30:00.000000Z",
             "updated_at": "2025-09-15T14:30:00.000000Z"
         }
@@ -241,6 +251,11 @@ Authorization: Bearer {admin_token}
         "name": "John Doe",
         "email": "john@example.com",
         "user_role": "admin",
+        "base_salary": 0,
+        "allowances": 0,
+        "deductions": 0,
+        "salary_currency": "PKR",
+        "salary_effective_from": null,
         "email_verified_at": null,
         "created_at": "2025-09-14T10:00:00.000000Z",
         "updated_at": "2025-09-14T10:00:00.000000Z"
@@ -274,7 +289,12 @@ Content-Type: application/json
     "name": "Jane Smith",
     "email": "jane@example.com",
     "password": "securepassword123",
-    "user_role": "staff"
+    "user_role": "staff",
+    "base_salary": 65000,
+    "allowances": 5000,
+    "deductions": 2000,
+    "salary_currency": "PKR",
+    "salary_effective_from": "2025-10-01"
 }
 ```
 
@@ -294,6 +314,11 @@ Content-Type: application/json
         "name": "Jane Smith",
         "email": "jane@example.com",
         "user_role": "staff",
+        "base_salary": 65000,
+        "allowances": 5000,
+        "deductions": 2000,
+        "salary_currency": "PKR",
+        "salary_effective_from": "2025-10-01",
         "created_at": "2025-09-16T09:15:00.000000Z",
         "updated_at": "2025-09-16T09:15:00.000000Z"
     }
@@ -330,7 +355,12 @@ Content-Type: application/json
     "name": "Jane Smith Updated",
     "email": "jane.updated@example.com",
     "password": "newpassword123",
-    "user_role": "admin"
+    "user_role": "admin",
+    "base_salary": 70000,
+    "allowances": 6000,
+    "deductions": 1500,
+    "salary_currency": "PKR",
+    "salary_effective_from": "2025-11-01"
 }
 ```
 
@@ -351,6 +381,11 @@ Content-Type: application/json
         "name": "Jane Smith Updated",
         "email": "jane.updated@example.com",
         "user_role": "admin",
+        "base_salary": 70000,
+        "allowances": 6000,
+        "deductions": 1500,
+        "salary_currency": "PKR",
+        "salary_effective_from": "2025-11-01",
         "created_at": "2025-09-16T09:15:00.000000Z",
         "updated_at": "2025-09-16T10:30:00.000000Z"
     }
@@ -425,6 +460,53 @@ Authorization: Bearer {admin_token}
     }
 }
 ```
+
+---
+
+## Staff Attendance (Admin Only)
+
+### 96. Mark Attendance
+**POST** `/core/attendance/mark`
+
+Record or update a staff member’s attendance for a specific date.
+
+**Headers:**
+```
+Authorization: Bearer {admin_token}
+Content-Type: application/json
+```
+
+**Request Body:**
+```json
+{
+  "user_id": 12,
+  "date": "2025-10-16",
+  "status": "present",
+  "check_in": "09:15",
+  "check_out": "18:05",
+  "notes": "Late due to traffic"
+}
+```
+
+Rules:
+- `status`: one of `present|absent|leave`
+- Upserts by `user_id + date`
+
+**Response (200):** `{ "message": "Attendance saved", "data": { /* attendance */ } }`
+
+---
+
+### 97. List Attendance
+**GET** `/core/attendance/list?from=2025-10-01&to=2025-10-31`
+
+Returns attendance entries with user details. If `from`/`to` omitted, returns all.
+
+**Headers:**
+```
+Authorization: Bearer {admin_token}
+```
+
+**Response (200):** Array of attendance entries with `user` relation.
 
 ---
 
@@ -525,6 +607,177 @@ Authorization: Bearer {token}
 ```
 
 **Response (200):** Array of payables.
+
+---
+
+## Transport Management Endpoints
+
+Manage delivery vehicles, dynamic costs (fuel, driver, tolls, etc.), items delivered per run, and compare total costs vs estimated profit to see profit/loss per run. All endpoints require authentication.
+
+### 87. Create Vehicle
+**POST** `/core/transport/vehicles`
+
+Headers:
+```
+Authorization: Bearer {token}
+Content-Type: application/json
+```
+
+Body:
+```json
+{
+  "name": "Suzuki Pickup",
+  "plate_number": "ABC-123",
+  "type": "truck",
+  "fuel_efficiency": 12.5,
+  "active": true
+}
+```
+
+Response (201): Vehicle object
+
+---
+
+### 88. List Vehicles
+**GET** `/core/transport/vehicles`
+
+Headers: `Authorization: Bearer {token}`
+
+Response (200): Array of vehicles
+
+---
+
+### 89. Update Vehicle
+**PUT** `/core/transport/vehicles/{id}`
+
+Body (any field optional): `name`, `plate_number`, `type`, `fuel_efficiency`, `active`
+
+Response (200): Updated vehicle
+
+---
+
+### 90. Delete Vehicle
+**DELETE** `/core/transport/vehicles/{id}`
+
+Response (200): `{ "message": "Vehicle deleted" }`
+
+---
+
+### 91. Create Transport Run
+**POST** `/core/transport/runs`
+
+Create a delivery run for a vehicle with optional items and dynamic costs. The API computes `estimated_profit`, `total_cost`, and `net_profit`.
+
+Headers:
+```
+Authorization: Bearer {token}
+Content-Type: application/json
+```
+
+Body:
+```json
+{
+  "vehicle_id": 1,
+  "driver_name": "Ali",
+  "start_time": "2025-10-16T09:00:00Z",
+  "end_time": "2025-10-16T14:30:00Z",
+  "distance_km": 85.5,
+  "items": [
+    { "stock_id": 10, "quantity": 5, "unit_profit": 2.50 },
+    { "stock_id": 12, "quantity": 3 } // unit_profit defaults to stock.item_price if omitted
+  ],
+  "costs": [
+    { "type": "fuel", "label": "PSO Station", "amount": 3500 },
+    { "type": "driver", "label": "Daily wage", "amount": 2000 },
+    { "type": "toll", "amount": 300 }
+  ]
+}
+```
+
+Rules:
+- `vehicle_id`: required, exists in `vehicles.id`
+- `items[]`: optional array; each requires `stock_id`, `quantity`; `unit_profit` optional
+- `costs[]`: optional array; each requires `type`, `amount`; `label` optional
+
+Response (201):
+```json
+{
+  "message": "Transport run created",
+  "data": { /* run with vehicle, items, costs */ },
+  "summary": {
+    "estimated_profit": 27.5,
+    "total_cost": 5800,
+    "net_profit": -5772.5,
+    "profit_status": "loss"
+  }
+}
+```
+
+Notes:
+- `estimated_profit` = Σ(`items[].unit_profit × quantity`). Use your margin or expected profit per unit.
+- `total_cost` = Σ(`costs[].amount`). Add any dynamic cost (fuel, driver, tolls, maintenance, other).
+- `net_profit` = `estimated_profit − total_cost`. `profit_status` is `profit` if ≥ 0 else `loss`.
+
+---
+
+### 92. Update Transport Run
+**PUT** `/core/transport/runs/{id}`
+
+Body (any optional): `driver_name`, `start_time`, `end_time` (>= start), `distance_km`, `status` (`planned|in_progress|completed|cancelled`)
+
+Response (200): Updated run
+
+---
+
+### 93. Recalculate Run Summary
+**POST** `/core/transport/runs/{id}/recalc`
+
+Recompute `estimated_profit`, `total_cost`, `net_profit` from current items and costs.
+
+Response (200):
+```json
+{
+  "message": "Run recalculated",
+  "data": { /* run */ },
+  "summary": {
+    "estimated_profit": 1000,
+    "total_cost": 750,
+    "net_profit": 250,
+    "profit_status": "profit"
+  }
+}
+```
+
+---
+
+### 94. List Transport Runs
+**GET** `/core/transport/runs`
+
+Returns runs with `vehicle`, `items.stock`, and `costs`, including stored `estimated_profit`, `total_cost`, and `net_profit`.
+
+Headers: `Authorization: Bearer {token}`
+
+Response (200): Array of runs
+
+---
+
+### 95. Delete Transport Run
+**DELETE** `/core/transport/runs/{id}`
+
+Deletes a transport run. Associated `transport_items` and `transport_costs` are removed automatically via cascade.
+
+**Headers:**
+```
+Authorization: Bearer {token}
+```
+
+**Response (200):**
+```json
+{ "message": "Transport run deleted" }
+```
+
+**Errors:**
+- 404 when the run does not exist
 
 ---
 
@@ -1008,7 +1261,8 @@ Content-Type: application/json
 **Request Body:**
 ```json
 {
-    "category_name": "Food Items"
+    "category_name": "Food Items",
+    "serial_alias": "FOOD"
 }
 ```
 
@@ -1017,6 +1271,7 @@ Content-Type: application/json
 {
     "category_id": 1,
     "category_name": "Food Items",
+    "serial_alias": "FOOD",
     "created_at": "2025-09-14T10:00:00.000000Z",
     "updated_at": "2025-09-14T10:00:00.000000Z"
 }
@@ -1050,16 +1305,75 @@ Authorization: Bearer {token}
     {
         "category_id": 1,
         "category_name": "Food Items",
+        "serial_alias": "FOOD",
         "created_at": "2025-09-14T10:00:00.000000Z",
         "updated_at": "2025-09-14T10:00:00.000000Z"
     },
     {
         "category_id": 2,
         "category_name": "Beverages",
+        "serial_alias": null,
         "created_at": "2025-09-14T10:05:00.000000Z",
         "updated_at": "2025-09-14T10:05:00.000000Z"
     }
 ]
+```
+
+---
+
+### 7.1 Update Category
+**PUT** `/core/category/{id}`
+
+Update a category's name and/or serial alias.
+
+**Headers:**
+```
+Authorization: Bearer {token}
+Content-Type: application/json
+```
+
+**Request Body (any field optional):**
+```json
+{
+  "category_name": "Food & Staples",
+  "serial_alias": "FOOD"
+}
+```
+
+**Response (200):**
+```json
+{
+  "message": "Category updated successfully",
+  "data": {
+    "category_id": 1,
+    "category_name": "Food & Staples",
+    "serial_alias": "FOOD",
+    "created_at": "2025-09-14T10:00:00.000000Z",
+    "updated_at": "2025-10-15T10:00:00.000000Z"
+  }
+}
+```
+
+---
+
+### 7.2 Delete Category
+**DELETE** `/core/category/{id}`
+
+Delete a category.
+
+**Headers:**
+```
+Authorization: Bearer {token}
+```
+
+**Response (200):**
+```json
+{ "message": "Category deleted successfully" }
+```
+
+**Error (404):**
+```json
+{ "message": "No query results for model [App\\Models\\Category] {id}" }
 ```
 
 ---
@@ -1079,12 +1393,14 @@ Content-Type: application/json
 
 **Editable Fields & Rules:**
 - item_name (required, string, max:255)
+- serial_number (optional, string; autogenerated if omitted)
 - unit_id (required, exists: units.unit_id)
 - category_id (optional, exists: categories.category_id)
 - quantity_per_unit (required, number, min:0)
 - item_price (optional, number, min:0)
 - stock_value (optional, number, min:0). If omitted but item_price provided, computed as item_price × quantity_per_unit.
 - stock_status (optional, enum: in_stock|out_of_stock|pending)
+- can_be_component (optional, boolean; default false). If true, this product can be used as a component of another product.
 
 **Request Body:**
 ```json
@@ -1106,6 +1422,7 @@ Content-Type: application/json
 {
     "item_id": 1,
     "item_name": "Rice",
+    "serial_number": "A1B2C3D4-20251015",
     "unit_id": 1,
     "quantity_per_unit": "50.00",
     "category_id": 1,
@@ -1116,6 +1433,7 @@ Content-Type: application/json
     "category": {
         "category_id": 1,
         "category_name": "Food Items",
+        "serial_alias": "FOOD",
         "created_at": "2025-09-14T10:00:00.000000Z",
         "updated_at": "2025-09-14T10:00:00.000000Z"
     },
@@ -1533,6 +1851,66 @@ Replaces all mappings for the stock item with the provided list.
 
 ---
 
+### 12A. Stock ⇄ Product Components Mapping
+
+Manage which products (and quantities) are required to produce another product. Uses pivot `stock_components` with `quantity` (quantity of component per 1 unit of parent product).
+
+All endpoints require:
+```
+Authorization: Bearer {token}
+Content-Type: application/json (for write operations)
+```
+
+#### 12A.1 List Components for a Product
+**GET** `/core/stock/{id}/components`
+
+**Response (200):**
+```json
+{
+  "stock_id": 10,
+  "item_name": "Power Bank",
+  "components": [
+    { "component_stock_id": 2, "item_name": "Battery Pack", "quantity": 2 },
+    { "component_stock_id": 3, "item_name": "Case", "quantity": 1 }
+  ]
+}
+```
+
+#### 12A.2 Attach or Update Components (non‑destructive)
+**POST** `/core/stock/{id}/components`
+
+**Request Body:**
+```json
+{
+  "items": [
+    { "component_stock_id": 2, "quantity": 2 },
+    { "component_stock_id": 3, "quantity": 1 }
+  ]
+}
+```
+
+**Response (200):** `{ "message": "Components attached/updated", "data": [...] }`
+
+#### 12A.3 Replace Full Set of Components (destructive)
+**PUT** `/core/stock/{id}/components`
+
+Same body as 12A.2
+
+**Response (200):** `{ "message": "Components set", "data": [...] }`
+
+#### 12A.4 Update Quantity for a Specific Component
+**PATCH** `/core/stock/{id}/components/{componentStockId}`
+
+**Request Body:** `{ "quantity": 3 }`
+
+**Response (200):** `{ "message": "Component quantity updated" }`
+
+#### 12A.5 Detach a Component from a Product
+**DELETE** `/core/stock/{id}/components/{componentStockId}`
+
+**Response (200):** `{ "message": "Component detached" }`
+
+---
 ### 13. Produce Stock (Consume Raw Materials)
 
 Produce a specified quantity of a stock item by consuming its mapped raw materials. The operation is atomic and will fail if any raw material is insufficient.
@@ -1551,7 +1929,8 @@ Content-Type: application/json
 ```
 
 Behavior:
-- **Consumes** each mapped raw material by `pivot.quantity × requested quantity`.
+- **Consumes raw materials** by `pivot.quantity × requested quantity` when mapped.
+- **Consumes component products** by `pivot.quantity × requested quantity` when mapped.
 - **Increments** the stock's `quantity_per_unit` by the requested `quantity`.
 - Entire action is within a transaction; partial updates do not occur.
 
@@ -1562,16 +1941,19 @@ Behavior:
   "produced": 50,
   "stock_id": 1,
   "item_name": "Blade",
-  "consumed": [
+  "consumed_raw_materials": [
     { "raw_material_id": 3, "material_name": "Plastic", "quantity": 150 },
     { "raw_material_id": 5, "material_name": "Steel",   "quantity": 200 }
+  ],
+  "consumed_components": [
+    { "component_stock_id": 2, "item_name": "Battery Pack", "quantity": 25 }
   ]
 }
 ```
 
 **Validation/Error (422) - No mapping:**
 ```json
-{ "message": "No raw materials mapped to this stock item" }
+{ "message": "No raw materials or component products mapped to this stock item" }
 ```
 
 **Validation/Error (422) - Insufficient materials:**
@@ -1607,7 +1989,8 @@ Auto-calculation:
     "quantity_per_unit": 75.00,
     "item_price": 3.50,
     "stock_value": 200.00,
-    "stock_status": "in_stock"
+    "stock_status": "in_stock",
+    "can_be_component": true
 }
 ```
 
@@ -2252,7 +2635,9 @@ Content-Type: application/json
 {
   "customer_name": "Jane Doe",
   "customer_phone_no": "+1-555-0100",
-  "bill_paid": 20,
+  "discount_amount": 5,
+  "paid_cash": 10,
+  "paid_online": 5,
   "items": [
     { "stock_id": 1, "quantity": 2, "unit_price": 12.5 },
     { "stock_id": 3, "quantity": 1 }
@@ -2267,7 +2652,8 @@ Rules:
 - **items[].stock_id**: required, must exist in `stock_management.item_id`
 - **items[].quantity**: required, number > 0, must not exceed available `quantity_per_unit`
 - **items[].unit_price**: optional number; if omitted, falls back to the stock's `item_price`
-- **bill_paid**: optional number ≥ 0; `bill_due` is computed as `total_bill - bill_paid`
+- **discount_amount**: optional number ≥ 0; subtracted from total before payment
+- **paid_cash** / **paid_online**: optional numbers ≥ 0; if either present, their sum is used as paid amount; otherwise `bill_paid` (legacy) is used
 
 Behavior:
 - For each item: `line_total = unit_price × quantity`
@@ -2277,8 +2663,9 @@ Behavior:
   - `total_profit += line_total`
   - If `item_price` exists, `stock_value = item_price × remaining quantity`
 - Customer totals:
-  - `total_bill = Σ line_total`
-  - `bill_due = max(0, total_bill - bill_paid)`
+  - `total_bill = max(0, Σ line_total − discount_amount)`
+  - `bill_paid = (paid_cash + paid_online)` if either provided, else `bill_paid`
+  - `bill_due = max(0, total_bill − bill_paid)`
 
 **Success (201):**
 ```json
@@ -2289,8 +2676,11 @@ Behavior:
       "id": 10,
       "customer_name": "Jane Doe",
       "customer_phone_no": "+1-555-0100",
-      "total_bill": 37.5,
-      "bill_paid": 20,
+      "total_bill": 32.5,
+      "discount_amount": 5,
+      "paid_cash": 10,
+      "paid_online": 5,
+      "bill_paid": 15,
       "bill_due": 17.5,
       "created_at": "2025-09-16T10:00:00.000000Z",
       "updated_at": "2025-09-16T10:00:00.000000Z"
@@ -2313,6 +2703,85 @@ Behavior:
 ```
 
 **Validation/Error (422):**
+```json
+{ "message": "Purchase quantity exceeds available stock for item_id 3" }
+```
+
+---
+
+### 15.1 Add Purchase for Existing Customer
+POST `/core/customer/{id}/purchase`
+
+Creates a new purchase for an existing customer and updates inventory and the customer's running totals. The purchase is persisted in `customer_purchases` with line items in `purchase_items`.
+
+Headers:
+```
+Authorization: Bearer {token}
+Content-Type: application/json
+```
+
+Request Body:
+```json
+{
+  "items": [
+    { "stock_id": 1, "quantity": 2, "unit_price": 12.5 },
+    { "stock_id": 3, "quantity": 1 }
+  ],
+  "discount_amount": 5,
+  "paid_cash": 10,
+  "paid_online": 5
+}
+```
+
+Rules:
+- `items`: required array with at least one item
+- `items[].stock_id`: required; exists in `stock_management.item_id`
+- `items[].quantity`: required; number > 0; must not exceed available stock
+- `items[].unit_price`: optional; falls back to stock `item_price` if omitted
+- `discount_amount`: optional number ≥ 0
+- `paid_cash`, `paid_online`: optional numbers ≥ 0
+
+Behavior:
+- For each item: `line_total = unit_price × quantity`
+- Inventory updates per item:
+  - `quantity_per_unit -= quantity`
+  - `total_sold += quantity`
+  - `total_profit += line_total`
+  - Recomputes `stock_value = item_price × remaining quantity` when `item_price` exists
+- Customer totals updated atomically:
+  - `total_bill += max(0, Σ line_total − discount_amount)`
+  - `bill_paid += (paid_cash + paid_online)`
+  - `bill_due += max(0, sub_total − (paid_cash + paid_online))`
+  - Accumulates `discount_amount`, `paid_cash`, `paid_online`
+- Purchase history persisted with a generated `purchase_code` like `PUR-ABC123-1016`
+
+Success (201):
+```json
+{
+  "message": "Purchase recorded",
+  "data": {
+    "customer": { /* updated customer totals */ },
+    "purchase": {
+      "id": 55,
+      "customer_id": 10,
+      "purchase_code": "PUR-9F21B3-1016",
+      "total_amount": 37.5,
+      "discount_amount": 5,
+      "paid_cash": 10,
+      "paid_online": 5,
+      "paid_total": 15,
+      "due_amount": 22.5,
+      "purchased_at": "2025-10-16T10:00:00.000000Z",
+      "items": [
+        { "stock_id": 1, "quantity": 2, "unit_price": 12.5, "line_total": 25 },
+        { "stock_id": 3, "quantity": 1, "unit_price": 12.5, "line_total": 12.5 }
+      ]
+    }
+  }
+}
+```
+
+Validation/Error (422):
 ```json
 { "message": "Purchase quantity exceeds available stock for item_id 3" }
 ```
@@ -2447,13 +2916,14 @@ Authorization: Bearer {token}
 ### 16. Get Customers
 **GET** `/core/customer`
 
-Returns all customers with summary of purchased items. Each customer includes a `purchased_items` array with `{ item_id, item_name, quantity, unit_price, line_total }`.
+Returns all customers with summary of purchased items. Each customer includes a `customer_code` for quick lookup and a `purchased_items` array with `{ item_id, item_name, quantity, unit_price, line_total }`.
 
 **Response (200) example:**
 ```json
 [
   {
     "id": 10,
+    "customer_code": "C74A9F-1015",
     "customer_name": "Jane Doe",
     "customer_phone_no": "+1-555-0100",
     "total_bill": 37.5,
@@ -2475,6 +2945,20 @@ Authorization: Bearer {token}
 ```
 
 **Response (200):** Array of customers with purchased items.
+
+---
+
+### 16.1 Search Customers
+**GET** `/core/customer/search?q={text}`
+
+Search customers by `customer_code`, name, or phone. Returns up to 25 results.
+
+**Headers:**
+```
+Authorization: Bearer {token}
+```
+
+**Response (200):** Array of customers with basic fields.
 
 ---
 
@@ -2527,6 +3011,97 @@ Authorization: Bearer {token}
 ```
 
 **Response (200):** Array of invoice objects.
+
+---
+
+### 19.1 List Customer Purchases
+**GET** `/core/customer/{id}/purchases`
+
+Return all purchases from `customer_purchases` for the specified customer with line items.
+
+**Headers:**
+```
+Authorization: Bearer {token}
+```
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "data": {
+    "customer": {
+      "id": 10,
+      "customer_code": "C74A9F-1015",
+      "customer_name": "Jane Doe",
+      "customer_phone_no": "+1-555-0100"
+    },
+    "purchases": [
+      {
+        "id": 55,
+        "purchase_code": "PUR-9F21B3-1016",
+        "total_amount": 37.5,
+        "discount_amount": 5,
+        "paid_cash": 10,
+        "paid_online": 5,
+        "paid_total": 15,
+        "due_amount": 22.5,
+        "purchased_at": "2025-10-16T10:00:00.000000Z",
+        "items": [
+          { "stock_id": 1, "item_name": "Rice",  "quantity": 2, "unit_price": 12.5, "line_total": 25 },
+          { "stock_id": 3, "item_name": "Sugar", "quantity": 1, "unit_price": 12.5, "line_total": 12.5 }
+        ]
+      }
+    ]
+  }
+}
+```
+
+**Notes:**
+- Results are ordered by `purchased_at` desc, then `id` desc.
+- Each item includes the `stock.item_name` for convenience.
+
+---
+
+### 19.2 Attach Invoice to a Purchase
+**POST** `/core/customer/purchases/{purchaseId}/attach-invoice`
+
+Attach an existing invoice to a customer purchase.
+
+**Headers:**
+```
+Authorization: Bearer {token}
+Content-Type: application/json
+```
+
+**Request Body:**
+```json
+{ "invoice_id": 101 }
+```
+
+**Response (200):**
+```json
+{
+  "message": "Invoice attached to purchase",
+  "data": {
+    "id": 55,
+    "customer_id": 10,
+    "invoice_id": 101,
+    "invoice": {
+      "id": 101,
+      "invoice_number": "INV-20250101-101",
+      "total_amount": 37.5,
+      "paid_amount": 20,
+      "due_amount": 17.5,
+      "status": "partial",
+      "issued_at": "2025-01-01T10:00:00.000000Z"
+    }
+  }
+}
+```
+
+**Notes:**
+- `invoice_id` must exist in `invoices.id`.
+- Purchases listing (`19.1`) now includes `invoice` when attached.
 
 ---
 

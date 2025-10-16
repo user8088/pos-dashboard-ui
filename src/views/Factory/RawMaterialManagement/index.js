@@ -5,10 +5,15 @@ import RawMaterialTable from "./components/RawMaterialTable";
 
 function RawMaterialManagement() {
   return (
-    <Flex direction='column' pt={{ base: "120px", md: "75px" }}>
+    <Flex 
+      direction='column' 
+      pt={{ base: "120px", md: "75px" }}
+      w="100%"
+      maxW="100%"
+    >
       <RawMaterialTable
         title={"Raw Material Management"}
-        captions={["Raw Materials", "AMOUNT PER UNIT", "COST PER UNIT", "TOTAL PURCHASE COST", "BILL NUMBER", "PAYMENT METHOD", "SUPPLIER", "STATUS", "WASTE QTY", "LOSS COST", "AMOUNT PENDING", ""]}
+        captions={["Raw Materials", "QUANTITY", "COST PER UNIT", "TOTAL PURCHASE COST", "BILL NUMBER", "PAYMENT METHOD", "SUPPLIER", "STATUS", "WASTE QTY", "LOSS COST", "AMOUNT PENDING", ""]}
       />
     </Flex>
   );

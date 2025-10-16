@@ -38,6 +38,7 @@ import {
   NumberDecrementStepper,
   Menu,
   MenuButton,
+  Switch,
   MenuList,
   MenuItem,
 } from "@chakra-ui/react";
@@ -51,14 +52,17 @@ import React from "react";
 import logo from "assets/img/avatars/placeholder.png";
 import { FaPlus, FaFileCsv, FaRuler, FaTags, FaTrash, FaCog } from "react-icons/fa";
 import { EditIcon, DeleteIcon, HamburgerIcon } from "@chakra-ui/icons";
+import { useSearch } from "contexts/SearchContext";
 
 const Authors = ({ title, captions, data }) => {
   const textColor = useColorModeValue("gray.700", "white");
   const toast = useToast();
   const { isOpen, onOpen, onClose } = useDisclosure();
   const { isOpen: isEditOpen, onOpen: onEditOpen, onClose: onEditClose } = useDisclosure();
+  const { filterData, isSearchActive } = useSearch();
   const { isOpen: isUnitOpen, onOpen: onUnitOpen, onClose: onUnitClose } = useDisclosure();
   const { isOpen: isCategoryOpen, onOpen: onCategoryOpen, onClose: onCategoryClose } = useDisclosure();
+  const { isOpen: isCategoryManageOpen, onOpen: onCategoryManageOpen, onClose: onCategoryManageClose } = useDisclosure();
   const { isOpen: isEditProductionOpen, onOpen: onEditProductionOpen, onClose: onEditProductionClose } = useDisclosure();
   const [newStock, setNewStock] = React.useState({
     name: "",
@@ -78,12 +82,16 @@ const Authors = ({ title, captions, data }) => {
     customMetric: ""
   });
   const [customUnits, setCustomUnits] = React.useState([]);
+  const [units, setUnits] = React.useState([]);
   const [categories, setCategories] = React.useState([]);
   const [rawMaterials, setRawMaterials] = React.useState([]);
   const [selectedRawMaterials, setSelectedRawMaterials] = React.useState([]);
+  const [selectedComponents, setSelectedComponents] = React.useState([]);
   const [newCategory, setNewCategory] = React.useState({
-    categoryName: ""
+    categoryName: "",
+    serialAlias: ""
   });
+  const [editingCategory, setEditingCategory] = React.useState(null);
   const [stockData, setStockData] = React.useState([]);
   const [isLoading, setIsLoading] = React.useState(false);
   const [shouldProduceImmediately, setShouldProduceImmediately] = React.useState(false);
@@ -96,10 +104,12 @@ const Authors = ({ title, captions, data }) => {
   const [editingStockProduction, setEditingStockProduction] = React.useState(null);
   const [editProductionQuantity, setEditProductionQuantity] = React.useState("");
   const [editSelectedRawMaterials, setEditSelectedRawMaterials] = React.useState([]);
+  const [editSelectedComponents, setEditSelectedComponents] = React.useState([]);
   const [editProductionValidation, setEditProductionValidation] = React.useState({
     isValid: true,
     errors: [],
-    insufficientMaterials: []
+    insufficientMaterials: [],
+    insufficientComponents: []
   });
   
   // Auto-calc helpers for stock value
@@ -141,13 +151,14 @@ const Authors = ({ title, captions, data }) => {
       });
 
       if (response.ok) {
-        const units = await response.json();
-        const formattedUnits = units.map(unit => ({
+        const unitsData = await response.json();
+        const formattedUnits = unitsData.map(unit => ({
           unitName: unit.unit_name,
           unitMetric: unit.metric,
           unitId: unit.unit_id
         }));
         setCustomUnits(formattedUnits);
+        setUnits(unitsData); // Store raw units data for predefined unit lookup
       } else {
         console.error('Failed to fetch units');
       }
@@ -171,7 +182,8 @@ const Authors = ({ title, captions, data }) => {
         const categoriesData = await response.json();
         const formattedCategories = categoriesData.map(category => ({
           categoryId: category.category_id,
-          categoryName: category.category_name
+          categoryName: category.category_name,
+          serialAlias: category.serial_alias || null
         }));
         setCategories(formattedCategories);
       } else {
@@ -214,28 +226,33 @@ const Authors = ({ title, captions, data }) => {
     setIsLoading(true);
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000/api'}/core/stock`, {
+      // Add timestamp to prevent caching issues
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000/api'}/core/stock?t=${Date.now()}`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${token}`,
           'Accept': 'application/json',
+          'Cache-Control': 'no-cache'
         },
       });
 
       if (response.ok) {
         const stockItems = await response.json();
+        console.log('Raw stock items from API:', stockItems);
         const formattedStock = stockItems.map(item => ({
-      logo: logo,
+          logo: logo,
           name: item.item_name,
-          quantity: `${item.quantity_per_unit} ${item.unit?.unit_name || 'Units'}`,
-          itemPrice: item.item_price ? `PKR.${item.item_price}` : 'PKR.0',
+          serialNumber: item.serial_number || '-',
+          quantity: `${item.quantity_per_unit || 0} ${item.unit?.unit_name || 'Units'}`,
+          itemPrice: item.item_price && !isNaN(parseFloat(item.item_price)) ? `PKR.${parseFloat(item.item_price).toFixed(2)}` : 'PKR.0.00',
           category: item.category?.category_name || 'Uncategorized',
           status: item.stock_status === 'in_stock' ? 'In Stock' : 
                   item.stock_status === 'out_of_stock' ? 'Out of Stock' : 
                   item.stock_status === 'pending' ? 'Pending' : 'In Stock',
-          stockValue: item.stock_value ? `PKR.${item.stock_value}` : 'PKR.0',
-          totalSold: item.total_sold ? `${item.total_sold}` : '0',
-          totalProfit: item.total_profit ? `PKR.${item.total_profit}` : 'PKR.0',
+          stockValue: item.stock_value && !isNaN(parseFloat(item.stock_value)) ? `PKR.${parseFloat(item.stock_value).toFixed(2)}` : 'PKR.0.00',
+          totalSold: item.total_sold && !isNaN(parseFloat(item.total_sold)) ? `${parseFloat(item.total_sold).toFixed(0)}` : '0',
+          totalProfit: item.total_profit && !isNaN(parseFloat(item.total_profit)) ? `PKR.${parseFloat(item.total_profit).toFixed(2)}` : 'PKR.0.00',
+          canBeComponent: item.can_be_component || false,
           itemId: item.item_id,
           unitId: item.unit_id,
           categoryId: item.category_id,
@@ -246,6 +263,7 @@ const Authors = ({ title, captions, data }) => {
           totalSoldRaw: item.total_sold || 0,
           totalProfitRaw: item.total_profit || 0
         }));
+        console.log('Formatted stock data:', formattedStock);
         setStockData(formattedStock);
       } else {
         console.error('Failed to fetch stock');
@@ -261,10 +279,10 @@ const Authors = ({ title, captions, data }) => {
 
   const handleRawMaterialToggle = (materialId, isChecked) => {
     if (isChecked) {
-      // Add material with default quantity of 1
+      // Add material with empty quantity
       setSelectedRawMaterials([
         ...selectedRawMaterials,
-        { materialId: materialId, quantity: 1 }
+        { materialId: materialId, quantity: '' }
       ]);
     } else {
       // Remove material
@@ -275,7 +293,7 @@ const Authors = ({ title, captions, data }) => {
   const handleRawMaterialQuantityChange = (materialId, quantity) => {
     setSelectedRawMaterials(selectedRawMaterials.map(item => 
       item.materialId === materialId 
-        ? { ...item, quantity: parseFloat(quantity) || 1 }
+        ? { ...item, quantity: quantity }
         : item
     ));
     
@@ -285,26 +303,75 @@ const Authors = ({ title, captions, data }) => {
     }
   };
 
+  // Components selection for Add Stock modal
+  const handleComponentToggle = (componentId, isChecked) => {
+    if (isChecked) {
+      setSelectedComponents([
+        ...selectedComponents,
+        { componentId, quantity: '' }
+      ]);
+    } else {
+      setSelectedComponents(selectedComponents.filter(c => c.componentId !== componentId));
+    }
+    
+    // Re-validate if production is enabled
+    if (shouldProduceImmediately && immediateProductionQuantity) {
+      setTimeout(() => validateProductionRequirements(parseFloat(immediateProductionQuantity) || 0), 0);
+    }
+  };
+
+  const handleComponentQuantityChange = (componentId, quantity) => {
+    setSelectedComponents(selectedComponents.map(c =>
+      c.componentId === componentId ? { ...c, quantity } : c
+    ));
+    
+    // Re-validate if production is enabled
+    if (shouldProduceImmediately && immediateProductionQuantity) {
+      validateProductionRequirements(parseFloat(immediateProductionQuantity) || 0);
+    }
+  };
+
   const validateProductionRequirements = (productionQty) => {
-    if (!productionQty || productionQty <= 0 || selectedRawMaterials.length === 0) {
+    if (!productionQty || productionQty <= 0 || (selectedRawMaterials.length === 0 && selectedComponents.length === 0)) {
       setProductionValidation({ isValid: true, errors: [], insufficientMaterials: [] });
       return true;
     }
 
     const insufficientMaterials = [];
     
+    // Check raw materials
     selectedRawMaterials.forEach(selectedMaterial => {
       const rawMaterial = rawMaterials.find(rm => rm.materialId === selectedMaterial.materialId);
-      if (rawMaterial) {
-        const requiredQuantity = selectedMaterial.quantity * productionQty;
-        const availableQuantity = rawMaterial.amountPerUnit;
+      if (rawMaterial && selectedMaterial.quantity) {
+        const requiredQuantity = parseFloat(selectedMaterial.quantity) * productionQty;
+        const availableQuantity = parseFloat(rawMaterial.amountPerUnit || 0);
         
         if (requiredQuantity > availableQuantity) {
           insufficientMaterials.push({
             materialName: rawMaterial.materialName,
             required: requiredQuantity,
             available: availableQuantity,
-            deficit: requiredQuantity - availableQuantity
+            deficit: requiredQuantity - availableQuantity,
+            type: 'raw_material'
+          });
+        }
+      }
+    });
+
+    // Check components
+    selectedComponents.forEach(selectedComponent => {
+      const component = stockData.find(s => s.itemId === selectedComponent.componentId);
+      if (component && selectedComponent.quantity) {
+        const requiredQuantity = parseFloat(selectedComponent.quantity) * productionQty;
+        const availableQuantity = parseFloat(component.quantity || 0);
+        
+        if (requiredQuantity > availableQuantity) {
+          insufficientMaterials.push({
+            materialName: component.name,
+            required: requiredQuantity,
+            available: availableQuantity,
+            deficit: requiredQuantity - availableQuantity,
+            type: 'component'
           });
         }
       }
@@ -313,7 +380,7 @@ const Authors = ({ title, captions, data }) => {
     const isValid = insufficientMaterials.length === 0;
     setProductionValidation({
       isValid,
-      errors: isValid ? [] : ['Insufficient raw materials for production'],
+      errors: isValid ? [] : ['Insufficient raw materials or components for production'],
       insufficientMaterials
     });
 
@@ -343,14 +410,90 @@ const Authors = ({ title, captions, data }) => {
     }
   };
 
+  const handleViewComponents = async (stockItem) => {
+    try {
+      const components = await fetchStockComponents(stockItem.itemId);
+      
+      if (components.length === 0) {
+        toast({
+          title: "No Components",
+          description: `${stockItem.name} has no components defined.`,
+          status: "info",
+          duration: 3000,
+          isClosable: true,
+        });
+        return;
+      }
+
+      // Create a formatted message showing all components
+      const componentsList = components.map(comp => 
+        `• ${comp.item_name}: ${comp.quantity} units`
+      ).join('\n');
+
+      toast({
+        title: `Components for ${stockItem.name}`,
+        description: componentsList,
+        status: "info",
+        duration: 5000,
+        isClosable: true,
+      });
+    } catch (error) {
+      console.error('Error viewing components:', error);
+      toast({
+        title: "Error",
+        description: "Failed to fetch components.",
+        status: "error",
+        duration: 3000,
+        isClosable: true,
+      });
+    }
+  };
+
   const openEditProductionModal = async (stockItem) => {
     setEditingStockProduction(stockItem);
     setEditProductionQuantity("");
+    setEditSelectedRawMaterials([]);
+    setEditSelectedComponents([]);
     
     // Fetch current raw material mappings for this stock item
     await fetchStockRawMaterials(stockItem.itemId);
     
+    // Fetch current component mappings for this stock item
+    const components = await fetchStockComponents(stockItem.itemId);
+    if (components && components.length > 0) {
+      const formattedComponents = components.map(comp => ({
+        componentId: comp.component_stock_id,
+        componentName: comp.item_name,
+        quantity: comp.quantity ? parseFloat(comp.quantity) : ''
+      }));
+      setEditSelectedComponents(formattedComponents);
+    }
+    
     onEditProductionOpen();
+  };
+
+  const fetchStockComponents = async (stockId) => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000/api'}/core/stock/${stockId}/components`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json',
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        return data.components || [];
+      } else {
+        console.error('Failed to fetch stock components');
+        return [];
+      }
+    } catch (error) {
+      console.error('Error fetching stock components:', error);
+      return [];
+    }
   };
 
   const fetchStockRawMaterials = async (stockId) => {
@@ -368,7 +511,7 @@ const Authors = ({ title, captions, data }) => {
         const data = await response.json();
         const mappedMaterials = data.raw_materials.map(material => ({
           materialId: material.raw_material_id,
-          quantity: parseFloat(material.quantity)
+          quantity: material.quantity ? parseFloat(material.quantity) : ''
         }));
         setEditSelectedRawMaterials(mappedMaterials);
       } else {
@@ -383,10 +526,10 @@ const Authors = ({ title, captions, data }) => {
 
   const handleEditRawMaterialToggle = (materialId, isChecked) => {
     if (isChecked) {
-      // Add material with default quantity of 1
+      // Add material with empty quantity
       setEditSelectedRawMaterials([
         ...editSelectedRawMaterials,
-        { materialId: materialId, quantity: 1 }
+        { materialId: materialId, quantity: '' }
       ]);
     } else {
       // Remove material
@@ -402,7 +545,38 @@ const Authors = ({ title, captions, data }) => {
   const handleEditRawMaterialQuantityChange = (materialId, quantity) => {
     setEditSelectedRawMaterials(editSelectedRawMaterials.map(item => 
       item.materialId === materialId 
-        ? { ...item, quantity: parseFloat(quantity) || 1 }
+        ? { ...item, quantity: quantity }
+        : item
+    ));
+    
+    // Re-validate if production quantity is set
+    if (editProductionQuantity) {
+      validateEditProductionRequirements(parseFloat(editProductionQuantity) || 0);
+    }
+  };
+
+  const handleEditComponentToggle = (componentId, componentName, isChecked) => {
+    if (isChecked) {
+      // Add component with empty quantity
+      setEditSelectedComponents([
+        ...editSelectedComponents,
+        { componentId: componentId, componentName: componentName, quantity: '' }
+      ]);
+    } else {
+      // Remove component
+      setEditSelectedComponents(editSelectedComponents.filter(item => item.componentId !== componentId));
+    }
+    
+    // Re-validate if production quantity is set
+    if (editProductionQuantity) {
+      validateEditProductionRequirements(parseFloat(editProductionQuantity) || 0);
+    }
+  };
+
+  const handleEditComponentQuantityChange = (componentId, quantity) => {
+    setEditSelectedComponents(editSelectedComponents.map(item => 
+      item.componentId === componentId 
+        ? { ...item, quantity: quantity }
         : item
     ));
     
@@ -413,13 +587,15 @@ const Authors = ({ title, captions, data }) => {
   };
 
   const validateEditProductionRequirements = (productionQty) => {
-    if (!productionQty || productionQty <= 0 || editSelectedRawMaterials.length === 0) {
-      setEditProductionValidation({ isValid: true, errors: [], insufficientMaterials: [] });
+    if (!productionQty || productionQty <= 0 || (editSelectedRawMaterials.length === 0 && editSelectedComponents.length === 0)) {
+      setEditProductionValidation({ isValid: true, errors: [], insufficientMaterials: [], insufficientComponents: [] });
       return true;
     }
 
     const insufficientMaterials = [];
+    const insufficientComponents = [];
     
+    // Validate raw materials
     editSelectedRawMaterials.forEach(selectedMaterial => {
       const rawMaterial = rawMaterials.find(rm => rm.materialId === selectedMaterial.materialId);
       if (rawMaterial) {
@@ -437,11 +613,31 @@ const Authors = ({ title, captions, data }) => {
       }
     });
 
-    const isValid = insufficientMaterials.length === 0;
+    // Validate components
+    editSelectedComponents.forEach(selectedComponent => {
+      const component = stockData.find(c => c.itemId === selectedComponent.componentId);
+      if (component) {
+        const required = selectedComponent.quantity * productionQty;
+        const available = parseFloat(component.quantity.split(' ')[0]) || 0; // Extract number from "40 Piece" format
+        const deficit = Math.max(0, required - available);
+        
+        if (deficit > 0) {
+          insufficientComponents.push({
+            componentName: component.name,
+            required: required.toFixed(2),
+            available: available.toFixed(2),
+            deficit: deficit.toFixed(2)
+          });
+        }
+      }
+    });
+
+    const isValid = insufficientMaterials.length === 0 && insufficientComponents.length === 0;
     setEditProductionValidation({
       isValid,
-      errors: isValid ? [] : ['Insufficient raw materials for production'],
-      insufficientMaterials
+      errors: isValid ? [] : ['Insufficient materials or components for production'],
+      insufficientMaterials,
+      insufficientComponents
     });
 
     return isValid;
@@ -467,7 +663,7 @@ const Authors = ({ title, captions, data }) => {
     if (!editProductionValidation.isValid) {
       toast({
         title: "Cannot Produce",
-        description: "Insufficient raw materials for production.",
+        description: "Insufficient materials or components for production.",
         status: "error",
         duration: 5000,
         isClosable: true,
@@ -481,6 +677,29 @@ const Authors = ({ title, captions, data }) => {
         await updateStockRawMaterials(editingStockProduction.itemId, editSelectedRawMaterials);
       }
 
+      // Update component mappings if they changed
+      if (editSelectedComponents.length > 0) {
+        const token = localStorage.getItem('token');
+        const componentsResponse = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000/api'}/core/stock/${editingStockProduction.itemId}/components`, {
+          method: 'PUT',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+          },
+          body: JSON.stringify({
+            items: editSelectedComponents.map(comp => ({
+              component_stock_id: comp.componentId,
+              quantity: comp.quantity
+            }))
+          }),
+        });
+
+        if (!componentsResponse.ok) {
+          console.error('Failed to update components');
+        }
+      }
+
       // Then produce the stock
       await produceStockFromEdit(editingStockProduction.itemId, editingStockProduction.name, parseFloat(editProductionQuantity));
 
@@ -488,7 +707,8 @@ const Authors = ({ title, captions, data }) => {
       setEditingStockProduction(null);
       setEditProductionQuantity("");
       setEditSelectedRawMaterials([]);
-      setEditProductionValidation({ isValid: true, errors: [], insufficientMaterials: [] });
+      setEditSelectedComponents([]);
+      setEditProductionValidation({ isValid: true, errors: [], insufficientMaterials: [], insufficientComponents: [] });
       onEditProductionClose();
       fetchStock();
 
@@ -639,18 +859,22 @@ const Authors = ({ title, captions, data }) => {
   };
 
   // Stock management captions
-  const stockCaptions = ["Products", "QUANTITY PER UNIT", "ITEM PRICE", "CATEGORY", "STATUS", "Stock Value", "TOTAL SOLD", "TOTAL PROFIT", ""];
+  const stockCaptions = ["Products", "SERIAL", "QUANTITY PER UNIT", "ITEM PRICE", "CATEGORY", "STATUS", "Stock Value", "TOTAL SOLD", "TOTAL PROFIT", "TYPE", ""];
 
   const handleAddStock = async () => {
     if (!newStock.name || !newStock.unit || !newStock.category) return;
     
     // Validate production requirements if production is enabled
     if (shouldProduceImmediately && !productionValidation.isValid) {
+      const insufficientItems = productionValidation.insufficientMaterials.map(m => 
+        `${m.materialName} (${m.type === 'component' ? 'Component' : 'Raw Material'}): need ${parseFloat(m.required || 0).toFixed(2)}, have ${parseFloat(m.available || 0).toFixed(2)}`
+      ).join(', ');
+      
       toast({
         title: "Cannot Create Stock",
-        description: "Insufficient raw materials for production. Please adjust quantities or disable immediate production.",
+        description: `Insufficient materials/components for production: ${insufficientItems}. Please adjust quantities or disable immediate production.`,
         status: "error",
-        duration: 5000,
+        duration: 7000,
         isClosable: true,
       });
       return;
@@ -683,9 +907,10 @@ const Authors = ({ title, captions, data }) => {
         setNewStock(prev => ({ ...prev, unit: unitData.unit_name }));
       }
       
-      // Find the selected category ID
+      // Find the selected category ID and alias
       const selectedCategory = categories.find(cat => cat.categoryName === newStock.category);
       const categoryId = selectedCategory ? selectedCategory.categoryId : null;
+      const categoryAlias = selectedCategory ? (selectedCategory.serialAlias || null) : null;
       
       if (!unitId) {
         toast({
@@ -712,7 +937,9 @@ const Authors = ({ title, captions, data }) => {
           quantity_per_unit: newStock.quantity ? parseFloat(newStock.quantity) : 0,
           item_price: newStock.itemPrice ? parseFloat(newStock.itemPrice) : null,
           stock_value: newStock.stockValue ? parseFloat(newStock.stockValue) : null,
-          stock_status: newStock.status
+          stock_status: newStock.status,
+          // Persist serial with alias when alias exists
+          ...(categoryAlias ? { serial_number: `${categoryAlias}-${(Math.random().toString(36).slice(2,10)).toUpperCase()}-${new Date().toISOString().slice(0,10).replace(/-/g,'')}` } : {})
         }),
       });
 
@@ -728,15 +955,17 @@ const Authors = ({ title, captions, data }) => {
           isClosable: true,
         });
         
-         // If raw materials are selected, map them to the stock item
-         if (selectedRawMaterials.length > 0) {
-           await mapRawMaterialsToStock(data.item_id, selectedRawMaterials);
-           
-           // If user wants to produce immediately after creating stock
-           if (shouldProduceImmediately && immediateProductionQuantity && parseFloat(immediateProductionQuantity) > 0) {
-             await produceStockImmediately(data.item_id, data.item_name, parseFloat(immediateProductionQuantity));
-           }
-         }
+        // Map raw materials and components to the stock item before optional production
+        if (selectedRawMaterials.length > 0) {
+          await mapRawMaterialsToStock(data.item_id, selectedRawMaterials);
+        }
+        if (selectedComponents.length > 0) {
+          await mapComponentsToStock(data.item_id, selectedComponents);
+        }
+        // If user wants to produce immediately after creating stock
+        if (shouldProduceImmediately && immediateProductionQuantity && parseFloat(immediateProductionQuantity) > 0) {
+          await produceStockImmediately(data.item_id, data.item_name, parseFloat(immediateProductionQuantity));
+        }
          
          // Reset form
     setNewStock({
@@ -752,6 +981,7 @@ const Authors = ({ title, captions, data }) => {
          
          // Reset selected raw materials and production settings
          setSelectedRawMaterials([]);
+         setSelectedComponents([]);
          setShouldProduceImmediately(false);
          setImmediateProductionQuantity("");
          setProductionValidation({ isValid: true, errors: [], insufficientMaterials: [] });
@@ -786,7 +1016,7 @@ const Authors = ({ title, captions, data }) => {
     }
   };
 
-  const handleEditStock = (stock, index) => {
+  const handleEditStock = async (stock, index) => {
     // Parse the quantity to separate number and unit
     const quantityMatch = stock.quantity.match(/^(\d+\.?\d*)\s+(.+)$/);
     const quantity = quantityMatch ? quantityMatch[1] : "";
@@ -799,6 +1029,9 @@ const Authors = ({ title, captions, data }) => {
     const predefinedUnits = ["Units", "Kilograms", "Grams", "Liters", "Milliliters", "Meters", "Centimeters", "Pieces"];
     const isCustomUnit = !predefinedUnits.includes(unit);
     
+    // Fetch components for this stock item
+    const components = await fetchStockComponents(stock.itemId);
+    
     setEditingStock({
       name: stock.name,
       quantity: quantity,
@@ -808,7 +1041,12 @@ const Authors = ({ title, captions, data }) => {
       status: stock.stockStatusRaw,
       stockValue: stockValue,
       itemId: stock.itemId,
-      itemPrice: stock.itemPriceRaw // Add itemPriceRaw to editingStock
+      itemPrice: stock.itemPriceRaw,
+      canBeComponent: stock.canBeComponent || false,
+      components: components || [],
+      selectedComponent: "",
+      selectedComponentName: "",
+      newComponentQuantity: ""
     });
     setEditIndex(index);
     onEditOpen();
@@ -818,9 +1056,50 @@ const Authors = ({ title, captions, data }) => {
     if (!editingStock.name || !editingStock.quantity || !editingStock.category) return;
     
     try {
-      // Find the selected unit ID
-      const selectedUnit = customUnits.find(unit => unit.unitName === editingStock.unit);
-      const unitId = selectedUnit ? selectedUnit.unitId : null;
+      let unitId = null;
+      
+      // Handle predefined units
+      const predefinedUnits = ["Units", "Kilograms", "Grams", "Liters", "Milliliters", "Meters", "Centimeters", "Pieces"];
+      if (predefinedUnits.includes(editingStock.unit)) {
+        // For predefined units, we need to find them in the units array
+        const predefinedUnit = units.find(unit => unit.unit_name === editingStock.unit);
+        unitId = predefinedUnit ? predefinedUnit.unit_id : null;
+      } else if (editingStock.unit === "Custom") {
+        // For custom units, use the custom unit name
+        const customUnit = customUnits.find(unit => unit.unitName === editingStock.customUnit);
+        unitId = customUnit ? customUnit.unitId : null;
+        
+        // If custom unit doesn't exist, create it first
+        if (!unitId && editingStock.customUnit) {
+          try {
+            const createUnitResponse = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000/api'}/core/unit`, {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${localStorage.getItem('token')}`,
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+              },
+              body: JSON.stringify({
+                unit_name: editingStock.customUnit,
+                unit_metric: 'Custom'
+              }),
+            });
+            
+            if (createUnitResponse.ok) {
+              const newUnit = await createUnitResponse.json();
+              unitId = newUnit.unit_id;
+              // Refresh units list
+              fetchUnits();
+            }
+          } catch (error) {
+            console.error('Error creating custom unit:', error);
+          }
+        }
+      } else {
+        // For other units (existing custom units)
+        const existingUnit = customUnits.find(unit => unit.unitName === editingStock.unit);
+        unitId = existingUnit ? existingUnit.unitId : null;
+      }
       
       // Find the selected category ID
       const selectedCategory = categories.find(cat => cat.categoryName === editingStock.category);
@@ -852,13 +1131,40 @@ const Authors = ({ title, captions, data }) => {
           quantity_per_unit: parseFloat(editingStock.quantity),
           item_price: editingStock.itemPrice ? parseFloat(editingStock.itemPrice) : undefined,
           stock_value: editingStock.stockValue ? parseFloat(editingStock.stockValue) : null,
-          stock_status: editingStock.status
+          stock_status: editingStock.status,
+          can_be_component: editingStock.canBeComponent || false
         }),
       });
 
       const data = await response.json();
 
       if (response.ok) {
+        // Update components if any
+        if (editingStock.components && editingStock.components.length > 0) {
+          try {
+            const componentsResponse = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000/api'}/core/stock/${editingStock.itemId}/components`, {
+              method: 'PUT',
+              headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+              },
+              body: JSON.stringify({
+                items: editingStock.components.map(comp => ({
+                  component_stock_id: comp.component_stock_id,
+                  quantity: comp.quantity
+                }))
+              }),
+            });
+
+            if (!componentsResponse.ok) {
+              console.error('Failed to update components');
+            }
+          } catch (error) {
+            console.error('Error updating components:', error);
+          }
+        }
+
         // Show success message
         toast({
           title: "Stock Item Updated Successfully",
@@ -1008,7 +1314,8 @@ const Authors = ({ title, captions, data }) => {
           'Accept': 'application/json',
         },
         body: JSON.stringify({
-          category_name: newCategory.categoryName
+          category_name: newCategory.categoryName,
+          serial_alias: newCategory.serialAlias || undefined
         }),
       });
 
@@ -1018,7 +1325,8 @@ const Authors = ({ title, captions, data }) => {
         // Add to categories list with API response data
         const categoryData = {
           categoryId: data.category_id,
-          categoryName: data.category_name
+          categoryName: data.category_name,
+          serialAlias: data.serial_alias || null
         };
         
         setCategories([...categories, categoryData]);
@@ -1034,7 +1342,8 @@ const Authors = ({ title, captions, data }) => {
         
         // Reset form
         setNewCategory({
-          categoryName: ""
+          categoryName: "",
+          serialAlias: ""
         });
         
         onCategoryClose();
@@ -1055,6 +1364,118 @@ const Authors = ({ title, captions, data }) => {
       }
     } catch (error) {
       console.error('Failed to add category:', error);
+      toast({
+        title: "Network Error",
+        description: "Unable to connect to the server. Please try again.",
+        status: "error",
+        duration: 5000,
+        isClosable: true,
+      });
+    }
+  };
+
+  const handleUpdateCategory = async () => {
+    if (!editingCategory || !editingCategory.categoryName) return;
+    
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000/api'}/core/category/${editingCategory.categoryId}`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify({
+          category_name: editingCategory.categoryName,
+          serial_alias: editingCategory.serialAlias || null
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        // Update categories list
+        setCategories(categories.map(cat => 
+          cat.categoryId === editingCategory.categoryId 
+            ? {
+                categoryId: data.data.category_id,
+                categoryName: data.data.category_name,
+                serialAlias: data.data.serial_alias || null
+              }
+            : cat
+        ));
+        
+        toast({
+          title: "Category Updated Successfully",
+          description: `Category "${data.data.category_name}" has been updated.`,
+          status: "success",
+          duration: 3000,
+          isClosable: true,
+        });
+        
+        setEditingCategory(null);
+      } else {
+        const errorMessage = data.message || 'Failed to update category';
+        toast({
+          title: "Failed to Update Category",
+          description: errorMessage,
+          status: "error",
+          duration: 5000,
+          isClosable: true,
+        });
+      }
+    } catch (error) {
+      console.error('Failed to update category:', error);
+      toast({
+        title: "Network Error",
+        description: "Unable to connect to the server. Please try again.",
+        status: "error",
+        duration: 5000,
+        isClosable: true,
+      });
+    }
+  };
+
+  const handleDeleteCategory = async (categoryId, categoryName) => {
+    if (!window.confirm(`Are you sure you want to delete "${categoryName}"? This action cannot be undone.`)) {
+      return;
+    }
+    
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000/api'}/core/category/${categoryId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json',
+        },
+      });
+
+      if (response.ok) {
+        // Remove from categories list
+        setCategories(categories.filter(cat => cat.categoryId !== categoryId));
+        
+        toast({
+          title: "Category Deleted Successfully",
+          description: `Category "${categoryName}" has been removed.`,
+          status: "success",
+          duration: 3000,
+          isClosable: true,
+        });
+      } else {
+        const data = await response.json();
+        const errorMessage = data.message || 'Failed to delete category';
+        toast({
+          title: "Failed to Delete Category",
+          description: errorMessage,
+          status: "error",
+          duration: 5000,
+          isClosable: true,
+        });
+      }
+    } catch (error) {
+      console.error('Failed to delete category:', error);
       toast({
         title: "Network Error",
         description: "Unable to connect to the server. Please try again.",
@@ -1090,6 +1511,28 @@ const Authors = ({ title, captions, data }) => {
       }
     } catch (error) {
       console.error('Error mapping raw materials:', error);
+    }
+  };
+
+  const mapComponentsToStock = async (stockId, componentMappings) => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000/api'}/core/stock/${stockId}/components`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify({
+          items: componentMappings.map(m => ({ component_stock_id: m.componentId, quantity: m.quantity }))
+        })
+      });
+      if (!response.ok) {
+        console.error('Failed to map components to stock');
+      }
+    } catch (e) {
+      console.error('Error mapping components:', e);
     }
   };
 
@@ -1172,8 +1615,8 @@ const Authors = ({ title, captions, data }) => {
                 variant='outline'
                 fontSize='xs'
                 p='8px 24px'
-                onClick={onCategoryOpen}>
-                ADD CATEGORY
+                onClick={onCategoryManageOpen}>
+                MANAGE CATEGORIES
               </Button>
               <Button
                 leftIcon={<FaRuler />}
@@ -1209,8 +1652,8 @@ const Authors = ({ title, captions, data }) => {
                   <MenuItem icon={<FaPlus />} onClick={onOpen}>
                     Add New Stock
                   </MenuItem>
-                  <MenuItem icon={<FaTags />} onClick={onCategoryOpen}>
-                    Add Category
+                  <MenuItem icon={<FaTags />} onClick={onCategoryManageOpen}>
+                    Manage Categories
                   </MenuItem>
                   <MenuItem icon={<FaRuler />} onClick={onUnitOpen}>
                     Add Unit
@@ -1275,7 +1718,7 @@ const Authors = ({ title, captions, data }) => {
         ) : (
         <ResponsiveTable
           captions={stockCaptions}
-          data={stockData}
+          data={filterData(stockData, ['name', 'quantity', 'itemPrice', 'category', 'status', 'stockValue', 'totalSold', 'totalProfit'])}
           isLoading={isLoading}
           actionButtons={[
             {
@@ -1296,11 +1739,12 @@ const Authors = ({ title, captions, data }) => {
             },
           ]}
         >
-          {stockData.map((row, index) => (
+          {filterData(stockData, ['name', 'quantity', 'itemPrice', 'category', 'status', 'stockValue', 'totalSold', 'totalProfit']).map((row, index) => (
             <StockTableRow
               key={`${row.name}-${index}`}
               logo={row.logo}
               name={row.name}
+              serialNumber={row.serialNumber}
               quantity={row.quantity}
               itemPrice={row.itemPrice}
               category={row.category}
@@ -1308,9 +1752,12 @@ const Authors = ({ title, captions, data }) => {
               stockValue={row.stockValue}
               totalSold={row.totalSold}
               totalProfit={row.totalProfit}
+              canBeComponent={row.canBeComponent}
               onEdit={() => handleEditStock(row, index)}
               onDelete={() => handleDeleteStock(row)}
               onEditProduction={() => openEditProductionModal(row)}
+              onViewComponents={() => handleViewComponents(row)}
+              onProduce={() => openEditProductionModal(row)}
             />
           ))}
         </ResponsiveTable>
@@ -1472,19 +1919,15 @@ const Authors = ({ title, captions, data }) => {
                            {isSelected && (
                              <FormControl size="sm">
                                <FormLabel fontSize="xs" color={textColor}>Quantity Needed</FormLabel>
-                               <NumberInput
-                                 size="sm"
-                                 min={0.01}
-                                 step={0.01}
-                                 value={selectedMaterial?.quantity || 1}
-                                 onChange={(valueString) => handleRawMaterialQuantityChange(material.materialId, valueString)}
-                               >
-                                 <NumberInputField />
-                                 <NumberInputStepper>
-                                   <NumberIncrementStepper />
-                                   <NumberDecrementStepper />
-                                 </NumberInputStepper>
-                               </NumberInput>
+                                  <Input
+                                    size="sm"
+                                    type="number"
+                                    step="0.01"
+                                    min="0"
+                                    inputMode="decimal"
+                                    value={selectedMaterial?.quantity}
+                                    onChange={(e) => handleRawMaterialQuantityChange(material.materialId, e.target.value)}
+                                  />
                              </FormControl>
                            )}
                          </VStack>
@@ -1498,79 +1941,119 @@ const Authors = ({ title, captions, data }) => {
                  )}
                </FormControl>
 
-               {/* Immediate Production Section */}
-               {selectedRawMaterials.length > 0 && (
-                 <>
-                   <Divider />
-                   <FormControl>
-                     <Checkbox
-                       colorScheme="orange"
-                       isChecked={shouldProduceImmediately}
-                       onChange={(e) => handleProductionCheckboxChange(e.target.checked)}
-                       size="md"
-                     >
-                       <Text fontSize="md" fontWeight="bold" color={textColor}>
-                         🏭 Produce immediately after creating stock item
-                       </Text>
-                     </Checkbox>
-                     
-                     <Text color="gray.500" fontSize="sm" mt="8px" ml="24px">
-                       This will consume the selected raw materials and add the produced quantity to your initial stock.
-                     </Text>
-                   </FormControl>
-
-                   {shouldProduceImmediately && (
-                     <FormControl>
-                       <FormLabel color={textColor} fontSize="sm">Production Quantity</FormLabel>
-                       <NumberInput
-                         size="md"
-                         min={0.01}
-                         step={0.01}
-                         value={immediateProductionQuantity}
-                         onChange={handleProductionQuantityChange}
-                       >
-                         <NumberInputField placeholder="Enter quantity to produce" />
-                         <NumberInputStepper>
-                           <NumberIncrementStepper />
-                           <NumberDecrementStepper />
-                         </NumberInputStepper>
-                       </NumberInput>
-                       
-                       {/* Validation Errors */}
-                       {!productionValidation.isValid && (
-                         <VStack spacing="8px" mt="12px" align="stretch">
-                           <Text fontSize="sm" color="red.500" fontWeight="bold">
-                             ❌ Insufficient Raw Materials:
-                           </Text>
-                           {productionValidation.insufficientMaterials.map((material, index) => (
-                             <Text key={index} fontSize="xs" color="red.600" ml="16px">
-                               • {material.materialName}: Need {material.required}, have {material.available} 
-                               (deficit: {material.deficit})
-                             </Text>
-                           ))}
-                         </VStack>
-                       )}
-                       
-                       {productionValidation.isValid && immediateProductionQuantity && (
-                         <Text fontSize="xs" color="green.600" mt="8px" fontStyle="italic">
-                           ✅ Sufficient raw materials available for production
-                         </Text>
-                       )}
-                     </FormControl>
-                   )}
-                 </>
+             {/* Components Selection */}
+             <Divider />
+             <FormControl>
+               <FormLabel color={textColor} fontSize="md" fontWeight="bold" mb="16px">
+                 Components Required (Optional)
+               </FormLabel>
+               <Text color="gray.500" fontSize="sm" mb="16px">
+                 Select existing products used as components and specify quantities per 1 unit of this product:
+               </Text>
+               {(() => {
+                 const availableComponents = stockData.filter(item => item.canBeComponent);
+                 return availableComponents.length > 0;
+               })() ? (
+                 <SimpleGrid columns={{ base: 1, md: 2 }} spacing="16px" maxH="300px" overflowY="auto">
+                   {stockData.filter(item => item.canBeComponent).map((component) => {
+                     const isSelected = selectedComponents.some(c => c.componentId === component.itemId);
+                     const selected = selectedComponents.find(c => c.componentId === component.itemId);
+                     return (
+                       <VStack key={component.itemId} align="stretch" spacing="8px" p="12px" border="1px solid" borderColor={isSelected ? "#4CAF50" : "gray.200"} borderRadius="8px" bg={isSelected ? "green.50" : "transparent"} transition="all 0.2s">
+                         <Checkbox colorScheme="green" isChecked={isSelected} onChange={(e) => handleComponentToggle(component.itemId, e.target.checked)}>
+                           <Text fontSize="sm" fontWeight="bold" color={textColor}>{component.name}</Text>
+                         </Checkbox>
+                         <Text fontSize="xs" color="gray.500">Available: {component.quantity} | Price: {component.itemPrice}</Text>
+                         {isSelected && (
+                           <FormControl size="sm">
+                             <FormLabel fontSize="xs" color={textColor}>Quantity Needed</FormLabel>
+                             <Input size="sm" type="number" step="0.01" min="0" inputMode="decimal" value={selected?.quantity || ''} onChange={(e) => handleComponentQuantityChange(component.itemId, e.target.value)} />
+                           </FormControl>
+                         )}
+                       </VStack>
+                     );
+                   })}
+                 </SimpleGrid>
+               ) : (
+                 <Text color="gray.400" fontSize="sm" textAlign="center" py="20px">
+                   No eligible components. Mark products as "Can be used as component" first.
+                 </Text>
                )}
-              
-              <Button
-                colorScheme='teal'
-                 bg={productionValidation.isValid ? '#FF8D28' : 'gray.400'}
-                color='white'
-                 _hover={{ bg: productionValidation.isValid ? '#E67E22' : 'gray.400' }}
-                w='100%'
-                 isDisabled={shouldProduceImmediately && !productionValidation.isValid}
-                onClick={handleAddStock}>
-                 {shouldProduceImmediately && selectedRawMaterials.length > 0 ? 'CREATE STOCK & PRODUCE' : 'ADD STOCK ITEM'}
-              </Button>
+             </FormControl>
+
+              {/* Immediate Production Section - at the bottom */}
+              {(selectedRawMaterials.length > 0 || selectedComponents.length > 0) && (
+                <>
+                  <Divider />
+                  <FormControl>
+                    <Checkbox
+                      colorScheme="orange"
+                      isChecked={shouldProduceImmediately}
+                      onChange={(e) => handleProductionCheckboxChange(e.target.checked)}
+                      size="md"
+                    >
+                      <Text fontSize="md" fontWeight="bold" color={textColor}>
+                        🏭 Produce immediately after creating stock item
+                      </Text>
+                    </Checkbox>
+                    
+                    <Text color="gray.500" fontSize="sm" mt="8px" ml="24px">
+                      This will consume the selected raw materials and components and add the produced quantity to your initial stock.
+                    </Text>
+                  </FormControl>
+
+                  {shouldProduceImmediately && (
+                    <FormControl>
+                      <FormLabel color={textColor} fontSize="sm">Production Quantity</FormLabel>
+                      <NumberInput
+                        size="md"
+                        min={0.01}
+                        step={0.01}
+                        value={immediateProductionQuantity}
+                        onChange={handleProductionQuantityChange}
+                      >
+                        <NumberInputField placeholder="Enter quantity to produce" />
+                        <NumberInputStepper>
+                          <NumberIncrementStepper />
+                          <NumberDecrementStepper />
+                        </NumberInputStepper>
+                      </NumberInput>
+                      
+                      {/* Validation Errors */}
+                      {!productionValidation.isValid && (
+                        <VStack spacing="8px" mt="12px" align="stretch">
+                          <Text fontSize="sm" color="red.500" fontWeight="bold">
+                            ❌ Insufficient Materials/Components:
+                          </Text>
+                          {productionValidation.insufficientMaterials.map((material, index) => (
+                            <Text key={index} fontSize="xs" color="red.600" ml="16px">
+                              • [{material.type === 'component' ? 'Component' : 'Raw Material'}] {material.materialName}: Need {parseFloat(material.required || 0).toFixed(2)}, have {parseFloat(material.available || 0).toFixed(2)} 
+                              (deficit: {parseFloat(material.deficit || 0).toFixed(2)})
+                            </Text>
+                          ))}
+                        </VStack>
+                      )}
+                      
+                      {productionValidation.isValid && immediateProductionQuantity && (
+                        <Text fontSize="xs" color="green.600" mt="8px" fontStyle="italic">
+                          ✅ Sufficient materials and components available for production
+                        </Text>
+                      )}
+                    </FormControl>
+                  )}
+                </>
+              )}
+
+             <Button
+               colorScheme='teal'
+               bg='#FF8D28'
+               color='white'
+               _hover={{ bg: '#E67E22' }}
+               w='100%'
+               isDisabled={shouldProduceImmediately && !productionValidation.isValid}
+               onClick={handleAddStock}>
+                {shouldProduceImmediately ? 'CREATE STOCK & PRODUCE' : 'ADD STOCK ITEM'}
+             </Button>
             </VStack>
           </ModalBody>
                  </ModalContent>
@@ -1690,8 +2173,20 @@ const Authors = ({ title, captions, data }) => {
                      </Text>
                    ) : null}
                  </FormControl>
-                 
-                 <Button
+
+                 {/* Can be used as component toggle */}
+                 <FormControl>
+                   <Flex justify="space-between" align="center">
+                     <FormLabel color={textColor} mb="0">Can be used as component</FormLabel>
+                     <Switch
+                       isChecked={editingStock.canBeComponent || false}
+                       onChange={(e) => setEditingStock({...editingStock, canBeComponent: e.target.checked})}
+                       colorScheme="blue"
+                     />
+                   </Flex>
+                </FormControl>
+                
+                <Button
                    colorScheme='teal'
                    bg='#FF8D28'
                    color='white'
@@ -1771,32 +2266,155 @@ const Authors = ({ title, captions, data }) => {
          </ModalContent>
        </Modal>
 
-       {/* Add Category Modal */}
-       <Modal isOpen={isCategoryOpen} onClose={onCategoryClose} size='md' motionPreset='slideInBottom'>
+       {/* Manage Categories Modal */}
+      <Modal isOpen={isCategoryManageOpen} onClose={onCategoryManageClose} size='2xl' motionPreset='slideInBottom'>
          <ModalOverlay bg='rgba(0,0,0,0.4)' backdropFilter='blur(6px)' />
-         <ModalContent>
-           <ModalHeader color={textColor}>Add New Category</ModalHeader>
+         <ModalContent maxH="90vh">
+           <ModalHeader color={textColor}>Manage Categories</ModalHeader>
            <ModalCloseButton />
-           <ModalBody pb='24px'>
-             <VStack spacing='16px'>
-               <FormControl isRequired>
-                 <FormLabel color={textColor}>Category Name</FormLabel>
-                 <Input
-                   placeholder='Enter category name (e.g., Electronics, Food, etc.)'
-                   value={newCategory.categoryName}
-                   onChange={(e) => setNewCategory({...newCategory, categoryName: e.target.value})}
-                 />
-               </FormControl>
-               
-               <Button
-                 colorScheme='teal'
-                 bg='#FF8D28'
-                 color='white'
-                 _hover={{ bg: '#E67E22' }}
-                 w='100%'
-                 onClick={handleAddCategory}>
-                 ADD CATEGORY
-               </Button>
+           <ModalBody pb='24px' overflowY="auto">
+             <VStack spacing='24px' align="stretch">
+              {/* Add New Category Section */}
+              <Box p="20px" borderWidth="1px" borderRadius="lg" borderColor="gray.200" bg="gray.50">
+                <Text fontSize="md" fontWeight="bold" color={textColor} mb="16px">
+                  Add New Category
+                </Text>
+                <VStack spacing='12px'>
+                  <FormControl isRequired>
+                    <FormLabel color={textColor} fontSize="sm">Category Name</FormLabel>
+                    <Input
+                      bg="white"
+                      placeholder='Enter category name (e.g., Electronics, Food, etc.)'
+                      value={newCategory.categoryName}
+                      onChange={(e) => setNewCategory({...newCategory, categoryName: e.target.value})}
+                    />
+                  </FormControl>
+                  <FormControl>
+                    <FormLabel color={textColor} fontSize="sm">Serial Alias (optional)</FormLabel>
+                    <Input
+                      bg="white"
+                      placeholder='e.g., FOOD, ELEC'
+                      value={newCategory.serialAlias}
+                      onChange={(e) => setNewCategory({...newCategory, serialAlias: e.target.value})}
+                    />
+                  </FormControl>
+                  
+                  <Button
+                    colorScheme='teal'
+                    bg='#FF8D28'
+                    color='white'
+                    _hover={{ bg: '#E67E22' }}
+                    w='100%'
+                    size="sm"
+                    onClick={handleAddCategory}>
+                    ADD CATEGORY
+                  </Button>
+                </VStack>
+              </Box>
+
+              {/* Existing Categories List */}
+              <Box>
+                <Text fontSize="md" fontWeight="bold" color={textColor} mb="16px">
+                  Existing Categories ({categories.length})
+                </Text>
+                {categories.length === 0 ? (
+                  <Text color="gray.500" fontSize="sm" textAlign="center" py="20px">
+                    No categories yet. Add your first category above.
+                  </Text>
+                ) : (
+                  <VStack spacing='12px' align="stretch">
+                    {categories.map((category) => (
+                      <Box
+                        key={category.categoryId}
+                        p="16px"
+                        borderWidth="1px"
+                        borderRadius="md"
+                        borderColor="gray.200"
+                        bg={editingCategory?.categoryId === category.categoryId ? "blue.50" : "white"}
+                        transition="all 0.2s"
+                      >
+                        {editingCategory?.categoryId === category.categoryId ? (
+                          // Edit Mode
+                          <VStack spacing='12px' align="stretch">
+                            <FormControl isRequired>
+                              <FormLabel color={textColor} fontSize="sm">Category Name</FormLabel>
+                              <Input
+                                size="sm"
+                                value={editingCategory.categoryName}
+                                onChange={(e) => setEditingCategory({...editingCategory, categoryName: e.target.value})}
+                              />
+                            </FormControl>
+                            <FormControl>
+                              <FormLabel color={textColor} fontSize="sm">Serial Alias</FormLabel>
+                              <Input
+                                size="sm"
+                                value={editingCategory.serialAlias || ''}
+                                onChange={(e) => setEditingCategory({...editingCategory, serialAlias: e.target.value})}
+                              />
+                            </FormControl>
+                            <HStack spacing='8px'>
+                              <Button
+                                size="sm"
+                                colorScheme="green"
+                                flex="1"
+                                onClick={handleUpdateCategory}
+                              >
+                                Save
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                flex="1"
+                                onClick={() => setEditingCategory(null)}
+                              >
+                                Cancel
+                              </Button>
+                            </HStack>
+                          </VStack>
+                        ) : (
+                          // View Mode
+                          <Flex justify="space-between" align="center">
+                            <Box flex="1">
+                              <Text fontSize="md" fontWeight="bold" color={textColor}>
+                                {category.categoryName}
+                              </Text>
+                              {category.serialAlias && (
+                                <Text fontSize="xs" color="gray.500" mt="4px">
+                                  Alias: {category.serialAlias}
+                                </Text>
+                              )}
+                            </Box>
+                            <HStack spacing='8px'>
+                              <Button
+                                size="sm"
+                                leftIcon={<EditIcon />}
+                                colorScheme="blue"
+                                variant="ghost"
+                                onClick={() => setEditingCategory({
+                                  categoryId: category.categoryId,
+                                  categoryName: category.categoryName,
+                                  serialAlias: category.serialAlias || ''
+                                })}
+                              >
+                                Edit
+                              </Button>
+                              <Button
+                                size="sm"
+                                leftIcon={<DeleteIcon />}
+                                colorScheme="red"
+                                variant="ghost"
+                                onClick={() => handleDeleteCategory(category.categoryId, category.categoryName)}
+                              >
+                                Delete
+                              </Button>
+                            </HStack>
+                          </Flex>
+                        )}
+                      </Box>
+                    ))}
+                  </VStack>
+                )}
+              </Box>
              </VStack>
            </ModalBody>
           </ModalContent>
@@ -1863,19 +2481,15 @@ const Authors = ({ title, captions, data }) => {
                               {isSelected && (
                                 <FormControl size="sm">
                                   <FormLabel fontSize="xs" color={textColor}>Quantity Needed</FormLabel>
-                                  <NumberInput
+                                  <Input
                                     size="sm"
-                                    min={0.01}
-                                    step={0.01}
-                                    value={selectedMaterial?.quantity || 1}
-                                    onChange={(valueString) => handleEditRawMaterialQuantityChange(material.materialId, valueString)}
-                                  >
-                                    <NumberInputField />
-                                    <NumberInputStepper>
-                                      <NumberIncrementStepper />
-                                      <NumberDecrementStepper />
-                                    </NumberInputStepper>
-                                  </NumberInput>
+                                    type="number"
+                                    step="0.01"
+                                    min="0"
+                                    inputMode="decimal"
+                                    value={selectedMaterial?.quantity || ''}
+                                    onChange={(e) => handleEditRawMaterialQuantityChange(material.materialId, e.target.value)}
+                                  />
                                 </FormControl>
                               )}
                             </VStack>
@@ -1889,8 +2503,79 @@ const Authors = ({ title, captions, data }) => {
                     )}
                   </FormControl>
 
+                  {/* Components Selection */}
+                  <FormControl>
+                    <FormLabel color={textColor} fontSize="md" fontWeight="bold" mb="16px">
+                      Components Required
+                    </FormLabel>
+                    <Text color="gray.500" fontSize="sm" mb="16px">
+                      Select and adjust the components (other products) needed to produce this item:
+                    </Text>
+                    
+                    {(() => {
+                      const availableComponents = stockData.filter(item => item.canBeComponent && item.itemId !== editingStockProduction.itemId);
+                      console.log('Available components:', availableComponents);
+                      console.log('All stock data:', stockData.map(item => ({ name: item.name, canBeComponent: item.canBeComponent, itemId: item.itemId })));
+                      return availableComponents.length > 0;
+                    })() ? (
+                      <SimpleGrid columns={{ base: 1, md: 2 }} spacing="16px" maxH="300px" overflowY="auto">
+                        {stockData.filter(item => item.canBeComponent && item.itemId !== editingStockProduction.itemId).map((component) => {
+                          const isSelected = editSelectedComponents.some(item => item.componentId === component.itemId);
+                          const selectedComponent = editSelectedComponents.find(item => item.componentId === component.itemId);
+                          
+                          return (
+                            <VStack 
+                              key={component.itemId} 
+                              align="stretch" 
+                              spacing="8px"
+                              p="12px"
+                              border="1px solid"
+                              borderColor={isSelected ? "#4CAF50" : "gray.200"}
+                              borderRadius="8px"
+                              bg={isSelected ? "green.50" : "transparent"}
+                              transition="all 0.2s"
+                            >
+                              <Checkbox
+                                colorScheme="green"
+                                isChecked={isSelected}
+                                onChange={(e) => handleEditComponentToggle(component.itemId, component.name, e.target.checked)}
+                              >
+                                <Text fontSize="sm" fontWeight="bold" color={textColor}>
+                                  {component.name}
+                                </Text>
+                              </Checkbox>
+                              
+                              <Text fontSize="xs" color="gray.500">
+                                Available: {component.quantity} | Price: {component.itemPrice}
+                              </Text>
+                              
+                              {isSelected && (
+                                <FormControl size="sm">
+                                  <FormLabel fontSize="xs" color={textColor}>Quantity Needed</FormLabel>
+                                  <Input
+                                    size="sm"
+                                    type="number"
+                                    step="0.01"
+                                    min="0"
+                                    inputMode="decimal"
+                                    value={selectedComponent?.quantity || ''}
+                                    onChange={(e) => handleEditComponentQuantityChange(component.itemId, e.target.value)}
+                                  />
+                                </FormControl>
+                              )}
+                            </VStack>
+                          );
+                        })}
+                      </SimpleGrid>
+                    ) : (
+                      <Text color="gray.400" fontSize="sm" textAlign="center" py="20px">
+                        No components available. Create products and mark them as "Can be used as component" first.
+                      </Text>
+                    )}
+                  </FormControl>
+
                   {/* Production Quantity */}
-                  {editSelectedRawMaterials.length > 0 && (
+                  {(editSelectedRawMaterials.length > 0 || editSelectedComponents.length > 0) && (
                     <>
                       <Divider />
                       <FormControl>
@@ -1911,21 +2596,38 @@ const Authors = ({ title, captions, data }) => {
                         {/* Validation Errors */}
                         {!editProductionValidation.isValid && (
                           <VStack spacing="8px" mt="12px" align="stretch">
-                            <Text fontSize="sm" color="red.500" fontWeight="bold">
-                              ❌ Insufficient Raw Materials:
-                            </Text>
-                            {editProductionValidation.insufficientMaterials.map((material, index) => (
-                              <Text key={index} fontSize="xs" color="red.600" ml="16px">
-                                • {material.materialName}: Need {material.required}, have {material.available} 
-                                (deficit: {material.deficit})
-                              </Text>
-                            ))}
+                            {editProductionValidation.insufficientMaterials.length > 0 && (
+                              <>
+                                <Text fontSize="sm" color="red.500" fontWeight="bold">
+                                  ❌ Insufficient Raw Materials:
+                                </Text>
+                                {editProductionValidation.insufficientMaterials.map((material, index) => (
+                                  <Text key={index} fontSize="xs" color="red.600" ml="16px">
+                                    • {material.materialName}: Need {material.required}, have {material.available} 
+                                    (deficit: {material.deficit})
+                                  </Text>
+                                ))}
+                              </>
+                            )}
+                            {editProductionValidation.insufficientComponents.length > 0 && (
+                              <>
+                                <Text fontSize="sm" color="red.500" fontWeight="bold">
+                                  ❌ Insufficient Components:
+                                </Text>
+                                {editProductionValidation.insufficientComponents.map((component, index) => (
+                                  <Text key={index} fontSize="xs" color="red.600" ml="16px">
+                                    • {component.componentName}: Need {component.required}, have {component.available} 
+                                    (deficit: {component.deficit})
+                                  </Text>
+                                ))}
+                              </>
+                            )}
                           </VStack>
                         )}
                         
                         {editProductionValidation.isValid && editProductionQuantity && (
                           <Text fontSize="xs" color="green.600" mt="8px" fontStyle="italic">
-                            ✅ Sufficient raw materials available for production
+                            ✅ Sufficient materials and components available for production
                           </Text>
                         )}
                       </FormControl>

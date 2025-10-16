@@ -18,6 +18,8 @@ import FixedPlugin from '../components/FixedPlugin/FixedPlugin';
 // Custom components
 import MainPanel from '../components/Layout/MainPanel';
 import PanelContainer from '../components/Layout/PanelContainer';
+// Search context
+import { SearchProvider } from '../contexts/SearchContext';
 import PanelContent from '../components/Layout/PanelContent';
 export default function Dashboard(props) {
 	const { ...rest } = props;
@@ -96,56 +98,58 @@ export default function Dashboard(props) {
 	// Chakra Color Mode
 	return (
 		<ChakraProvider theme={theme} resetCss={false}>
-			<Sidebar
-				routes={routes}
-				logoText={'POS MUGHAL SUPPLIERS'}
-				display='none'
-				sidebarVariant={sidebarVariant}
-				{...rest}
-			/>
-			<MainPanel
-				w={{
-					base: '100%',
-					sm: '100%',
-					md: '100%',
-					xl: 'calc(100% - 275px)'
-				}}>
-				<Portal>
-					<AdminNavbar
-						onOpen={onOpen}
-						logoText={'POS MUGHAL SUPPLIERS'}
-						brandText={getActiveRoute(routes)}
-						secondary={getActiveNavbar(routes)}
-						fixed={fixed}
-						{...rest}
-					/>
-				</Portal>
-				{getRoute() ? (
-					<PanelContent>
-						<PanelContainer>
-							<Switch>
-								{getRoutes(routes)}
-								<Redirect from='/admin' to='/admin/dashboard' />
-							</Switch>
-						</PanelContainer>
-					</PanelContent>
-				) : null}
-				<Footer />
-				<Portal>
-					<FixedPlugin secondary={getActiveNavbar(routes)} fixed={fixed} onOpen={onOpen} />
-				</Portal>
-				<Configurator
-					secondary={getActiveNavbar(routes)}
-					isOpen={isOpen}
-					onClose={onClose}
-					isChecked={fixed}
-					onSwitch={(value) => {
-						setFixed(value);
-					}}
-					onOpaque={() => setSidebarVariant('opaque')}
-					onTransparent={() => setSidebarVariant('transparent')}
+			<SearchProvider>
+				<Sidebar
+					routes={routes}
+					logoText={'POS MUGHAL SUPPLIERS'}
+					display='none'
+					sidebarVariant={sidebarVariant}
+					{...rest}
 				/>
-			</MainPanel>
+				<MainPanel
+					w={{
+						base: '100%',
+						sm: '100%',
+						md: '100%',
+						xl: 'calc(100% - 275px)'
+					}}>
+					<Portal>
+						<AdminNavbar
+							onOpen={onOpen}
+							logoText={'POS MUGHAL SUPPLIERS'}
+							brandText={getActiveRoute(routes)}
+							secondary={getActiveNavbar(routes)}
+							fixed={fixed}
+							{...rest}
+						/>
+					</Portal>
+					{getRoute() ? (
+						<PanelContent>
+							<PanelContainer>
+								<Switch>
+									{getRoutes(routes)}
+									<Redirect from='/admin' to='/admin/dashboard' />
+								</Switch>
+							</PanelContainer>
+						</PanelContent>
+					) : null}
+					<Footer />
+					<Portal>
+						<FixedPlugin secondary={getActiveNavbar(routes)} fixed={fixed} onOpen={onOpen} />
+					</Portal>
+					<Configurator
+						secondary={getActiveNavbar(routes)}
+						isOpen={isOpen}
+						onClose={onClose}
+						isChecked={fixed}
+						onSwitch={(value) => {
+							setFixed(value);
+						}}
+						onOpaque={() => setSidebarVariant('opaque')}
+						onTransparent={() => setSidebarVariant('transparent')}
+					/>
+				</MainPanel>
+			</SearchProvider>
 		</ChakraProvider>
 	);
 }

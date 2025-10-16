@@ -27,6 +27,7 @@ import {
   Box,
   Image,
   Textarea,
+  useBreakpointValue,
 } from "@chakra-ui/react";
 // Custom components
 import Card from "components/Card/Card.js";
@@ -36,6 +37,7 @@ import RawMaterialTableRow from "components/Tables/RawMaterialTableRow";
 import React from "react";
 import logo from "assets/img/avatars/placeholder.png";
 import { FaPlus, FaFileCsv } from "react-icons/fa";
+import { useSearch } from "contexts/SearchContext";
 
 const RawMaterialTable = ({ title, captions }) => {
   const textColor = useColorModeValue("gray.700", "white");
@@ -43,6 +45,7 @@ const RawMaterialTable = ({ title, captions }) => {
   const { isOpen, onOpen, onClose } = useDisclosure();
   const { isOpen: isEditOpen, onOpen: onEditOpen, onClose: onEditClose } = useDisclosure();
   const { isOpen: isWasteOpen, onOpen: onWasteOpen, onClose: onWasteClose } = useDisclosure();
+  const { filterData, isSearchActive } = useSearch();
   const [newMaterial, setNewMaterial] = React.useState({
     name: "",
     amountPerUnit: "",
@@ -591,22 +594,38 @@ const RawMaterialTable = ({ title, captions }) => {
     }
   };
 
+  const buttonSize = useBreakpointValue({ base: 'sm', md: 'md' });
+  const headerFontSize = useBreakpointValue({ base: 'lg', md: 'xl' });
+  const tableSize = useBreakpointValue({ base: 'sm', md: 'md' });
+  const columnSpacing = useBreakpointValue({ base: '4px', md: '8px', lg: '12px' });
+
   return (
-    <Card overflowX={{ sm: "scroll", xl: "hidden" }}>
-      <CardHeader p='6px 0px 22px 0px'>
-        <Flex justify='space-between' align='center' w='100%'>
-          <Text fontSize='xl' color={textColor} fontWeight='bold'>
+    <Card w="100%" maxW="100%" overflowX="auto">
+      <CardHeader p={{ base: '12px', md: '6px 0px 22px 0px' }}>
+        <Flex 
+          justify='space-between' 
+          align={{ base: 'flex-start', md: 'center' }} 
+          w='100%'
+          direction={{ base: 'column', md: 'row' }}
+          gap={{ base: '16px', md: '0' }}
+        >
+          <Text fontSize={headerFontSize} color={textColor} fontWeight='bold'>
             Raw Material Management
           </Text>
-          <HStack spacing='12px'>
+          <HStack 
+            spacing={{ base: '8px', md: '12px' }}
+            wrap={{ base: 'wrap', md: 'nowrap' }}
+            justify={{ base: 'center', md: 'flex-end' }}
+          >
             <Button
               leftIcon={<FaFileCsv />}
               colorScheme='teal'
               borderColor='#FF8D28'
               color='#FF8D28'
               variant='outline'
-              fontSize='xs'
-              p='8px 24px'
+              fontSize={{ base: 'xs', md: 'sm' }}
+              p={{ base: '6px 16px', md: '8px 24px' }}
+              size={buttonSize}
               onClick={handleImportCSV}>
               Import CSV
             </Button>
@@ -616,8 +635,9 @@ const RawMaterialTable = ({ title, captions }) => {
               borderColor='#FF8D28'
               color='#FF8D28'
               variant='outline'
-              fontSize='xs'
-              p='8px 24px'
+              fontSize={{ base: 'xs', md: 'sm' }}
+              p={{ base: '6px 16px', md: '8px 24px' }}
+              size={buttonSize}
               onClick={handleExportCSV}>
               Export as CSV
             </Button>
@@ -627,8 +647,9 @@ const RawMaterialTable = ({ title, captions }) => {
               borderColor='#FF8D28'
               color='#FF8D28'
               variant='outline'
-              fontSize='xs'
-              p='8px 24px'
+              fontSize={{ base: 'xs', md: 'sm' }}
+              p={{ base: '6px 16px', md: '8px 24px' }}
+              size={buttonSize}
               onClick={onOpen}>
               Add New Raw Material
             </Button>
@@ -685,48 +706,104 @@ const RawMaterialTable = ({ title, captions }) => {
             </VStack>
           </Flex>
         ) : (
-          <Table variant='simple' color={textColor}>
-            <Thead>
-              <Tr my='.8rem' pl='0px' color='gray.400'>
-                {captions.map((caption, idx) => {
+          <Box w="100%" overflowX="auto" css={{
+            '&::-webkit-scrollbar': {
+              height: '8px',
+            },
+            '&::-webkit-scrollbar-track': {
+              background: useColorModeValue('#f1f1f1', '#2d3748'),
+              borderRadius: '4px',
+            },
+            '&::-webkit-scrollbar-thumb': {
+              background: '#FF8D28',
+              borderRadius: '4px',
+            },
+            '&::-webkit-scrollbar-thumb:hover': {
+              background: '#E67E22',
+            },
+          }}>
+            <Table 
+              variant='simple' 
+              color={textColor}
+              size={tableSize}
+              w="100%"
+              minW="1280px"
+            >
+              <Thead>
+                <Tr my='.8rem' pl='0px' color='gray.400'>
+                  {captions.map((caption, idx) => {
+                    return (
+                      <Th 
+                        color='gray.400' 
+                        key={idx} 
+                        ps={idx === 0 ? "0px" : null}
+                        fontSize={{ base: "xs", md: "sm" }}
+                        py={{ base: "8px", md: "12px" }}
+                        whiteSpace="nowrap"
+                        textAlign={
+                          idx === 1 ? "center" : 
+                          idx === 2 ? "center" : 
+                          idx === 3 ? "center" : 
+                          idx === 5 ? "center" : 
+                          idx === 7 ? "center" : 
+                          idx === 8 ? "center" : 
+                          idx === 9 ? "center" : 
+                          idx === 10 ? "center" : 
+                          idx === 11 ? "right" : 
+                          "left"
+                        }
+                        w={
+                          idx === 0 ? "200px" : 
+                          idx === 1 ? "100px" : 
+                          idx === 2 ? "120px" : 
+                          idx === 3 ? "180px" : 
+                          idx === 4 ? "180px" : 
+                          idx === 5 ? "140px" : 
+                          idx === 6 ? "160px" : 
+                          idx === 7 ? "100px" : 
+                          idx === 8 ? "100px" : 
+                          idx === 9 ? "120px" : 
+                          idx === 10 ? "140px" : 
+                          "80px"
+                        }
+                      >
+                        {caption}
+                      </Th>
+                    );
+                  })}
+                </Tr>
+              </Thead>
+              <Tbody>
+                {filterData(rawMaterialData, ['name', 'amountPerUnit', 'unitCost', 'totalPurchaseCost', 'supplierName', 'status', 'billNumber', 'paymentMethod', 'amountPending']).map((row, index) => {
                   return (
-                    <Th color='gray.400' key={idx} ps={idx === 0 ? "0px" : null}>
-                      {caption}
-                    </Th>
+                    <RawMaterialTableRow
+                      key={`${row.name}-${index}`}
+                      logo={row.logo}
+                      name={row.name}
+                      amountPerUnit={row.amountPerUnit}
+                      unitCost={row.unitCost}
+                      totalPurchaseCost={row.totalPurchaseCost}
+                      supplierName={row.supplierName}
+                      wasteQuantity={row.wasteQuantity}
+                      lossCost={row.lossCost}
+                      invoiceLink={row.invoiceLink}
+                      status={row.status}
+                      amountPending={row.amountPending}
+                      materialId={row.materialId}
+                      billNumber={row.billNumber}
+                      paymentMethod={row.paymentMethod}
+                      paymentMethodNote={row.paymentMethodNote}
+                      image={row.image}
+                      onEdit={() => handleEditMaterial(row)}
+                      onDelete={() => handleDeleteMaterial(row)}
+                      onWaste={() => handleOpenWaste(row)}
+                      onDownloadInvoice={() => handleDownloadInvoice(row.materialId, row.name, row.billNumber)}
+                    />
                   );
                 })}
-              </Tr>
-            </Thead>
-            <Tbody>
-              {rawMaterialData.map((row, index) => {
-                return (
-                  <RawMaterialTableRow
-                    key={`${row.name}-${index}`}
-                    logo={row.logo}
-                    name={row.name}
-                    amountPerUnit={row.amountPerUnit}
-                    unitCost={row.unitCost}
-                    totalPurchaseCost={row.totalPurchaseCost}
-                    supplierName={row.supplierName}
-                    wasteQuantity={row.wasteQuantity}
-                    lossCost={row.lossCost}
-                    invoiceLink={row.invoiceLink}
-                    status={row.status}
-                    amountPending={row.amountPending}
-                    materialId={row.materialId}
-                    billNumber={row.billNumber}
-                    paymentMethod={row.paymentMethod}
-                    paymentMethodNote={row.paymentMethodNote}
-                    image={row.image}
-                    onEdit={() => handleEditMaterial(row)}
-                    onDelete={() => handleDeleteMaterial(row)}
-                    onWaste={() => handleOpenWaste(row)}
-                    onDownloadInvoice={() => handleDownloadInvoice(row.materialId, row.name, row.billNumber)}
-                  />
-                );
-              })}
-            </Tbody>
-          </Table>
+              </Tbody>
+            </Table>
+          </Box>
         )}
       </CardBody>
 

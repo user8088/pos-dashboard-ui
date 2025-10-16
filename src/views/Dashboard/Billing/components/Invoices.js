@@ -27,6 +27,7 @@ import CardHeader from "components/Card/CardHeader.js";
 import InvoicesRow from "components/Tables/InvoicesRow";
 import React from "react";
 import { FiSearch } from "react-icons/fi";
+import { useSearch } from "contexts/SearchContext";
 
 const Invoices = ({ title, data }) => {
   const textColor = useColorModeValue("gray.700", "white");
@@ -34,6 +35,7 @@ const Invoices = ({ title, data }) => {
   const { isOpen, onOpen, onClose } = useDisclosure();
   const { isOpen: isAddOpen, onOpen: onAddOpen, onClose: onAddClose } = useDisclosure();
   const [query, setQuery] = React.useState("");
+  const { filterData, isSearchActive } = useSearch();
   const [newInvoice, setNewInvoice] = React.useState({
     date: "",
     code: "",
@@ -54,45 +56,77 @@ const Invoices = ({ title, data }) => {
     try {
       setIsLoading(true);
       const token = localStorage.getItem('token');
-      // Prefer dedicated invoices endpoint
-      const invRes = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000/api'}/core/invoices`, {
+      const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:8000/api';
+      
+      // Fetch all customers
+      const customersRes = await fetch(`${apiUrl}/core/customer`, {
         headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' }
       });
-      if (invRes.ok) {
-        const list = await invRes.json();
-        const mapped = (Array.isArray(list) ? list : []).map((inv) => ({
-          date: new Date(inv.issued_at || inv.created_at || Date.now()).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: '2-digit' }),
-          code: inv.invoice_number ? `#${inv.invoice_number}` : `#INV-${inv.id}`,
-          price: `PKR. ${inv.total_amount ?? inv.amount ?? 0}`,
-          logo: () => null,
-          format: 'PDF',
-          _invoiceId: inv.id,
-          _customerId: inv.customer_id || inv.customer?.id || null
-        }));
-        setInvoices(mapped);
-      } else {
-        // Fallback: group customer purchases into one invoice per customer
-        const res = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000/api'}/core/customer`, {
-          headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' }
-        });
-        if (!res.ok) { setInvoices([]); setIsLoading(false); return; }
-        const customers = await res.json();
-        const rows = [];
-        customers.forEach((c) => {
-          const list = Array.isArray(c.purchased_items) ? c.purchased_items : [];
-          const total = list.reduce((sum, it) => sum + (it.line_total !== undefined ? it.line_total : (it.unit_price || 0) * (it.quantity || 0)), 0);
-          rows.push({
-            date: new Date(c.created_at || Date.now()).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: '2-digit' }),
-            code: `#CUST-${c.id}`,
-            price: `PKR. ${total}`,
-            logo: () => null,
-            format: 'PDF'
-          });
-        });
-        setInvoices(rows);
+      
+      if (!customersRes.ok) { 
+        setInvoices([]); 
+        setIsLoading(false); 
+        return; 
       }
+      
+      const customers = await customersRes.json();
+      const allInvoices = [];
+      
+      // For each customer, get their initial purchase and all subsequent purchases
+      for (const customer of customers) {
+        const customerName = customer.customer_name || 'Unknown Customer';
+        
+        // Add initial purchase invoice
+        if (customer.total_bill && parseFloat(customer.total_bill) > 0) {
+          allInvoices.push({
+            date: new Date(customer.created_at || Date.now()).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: '2-digit' }),
+            code: customer.customer_code ? `#${customer.customer_code}` : `#CUST-${customer.id}`,
+            price: `PKR. ${parseFloat(customer.total_bill || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}`,
+            logo: () => null,
+            format: 'PDF',
+            customerName: customerName,
+            _customerId: customer.id,
+            _sortDate: new Date(customer.created_at || Date.now())
+          });
+        }
+        
+        // Fetch and add all subsequent purchases for this customer
+        try {
+          const purchasesRes = await fetch(`${apiUrl}/core/customer/${customer.id}/purchases`, {
+            headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' }
+          });
+          
+          if (purchasesRes.ok) {
+            const purchasesData = await purchasesRes.json();
+            if (purchasesData.success && purchasesData.data && purchasesData.data.purchases) {
+              purchasesData.data.purchases.forEach(purchase => {
+                allInvoices.push({
+                  date: new Date(purchase.purchased_at || purchase.created_at || Date.now()).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: '2-digit' }),
+                  code: `#${purchase.purchase_code}`,
+                  price: `PKR. ${parseFloat(purchase.total_amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}`,
+                  logo: () => null,
+                  format: 'PDF',
+                  customerName: customerName,
+                  _invoiceId: purchase.invoice_id,
+                  _purchaseId: purchase.id,
+                  _customerId: customer.id,
+                  _sortDate: new Date(purchase.purchased_at || purchase.created_at || Date.now())
+                });
+              });
+            }
+          }
+        } catch (e) {
+          // Continue with other customers if one fails
+        }
+      }
+      
+      // Sort by date descending (newest first)
+      allInvoices.sort((a, b) => b._sortDate - a._sortDate);
+      
+      setInvoices(allInvoices);
     } catch (e) {
-      // ignore
+      console.error('Error fetching invoices:', e);
+      setInvoices([]);
     } finally {
       setIsLoading(false);
     }
@@ -230,7 +264,7 @@ const Invoices = ({ title, data }) => {
                 </Flex>
               </Flex>
             ) : (
-              invoices.map((row) => (
+              filterData(invoices, ['date', 'code', 'price', 'format', 'customerName']).slice(0, 6).map((row) => (
                 <InvoicesRow
                   key={`${row.code}-${row.date}`}
                   date={row.date}
@@ -238,6 +272,7 @@ const Invoices = ({ title, data }) => {
                   price={row.price}
                   logo={row.logo}
                   format={row.format}
+                  customerName={row.customerName}
                   onDownload={row._invoiceId ? () => downloadInvoiceById(row._invoiceId) : (row._customerId ? () => downloadCustomerPdf(row._customerId) : undefined)}
                 />
               ))
@@ -262,13 +297,13 @@ const Invoices = ({ title, data }) => {
                 <FiSearch color={useColorModeValue("#718096", "#A0AEC0")} />
               </InputLeftElement>
               <Input
-                placeholder='Search invoices by date, code or amount'
+                placeholder='Search invoices by date, code, amount or customer'
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
               />
             </InputGroup>
             <Flex direction='column' w='100%'>
-              {filtered.map((row) => (
+              {filterData(filtered, ['date', 'code', 'price', 'format', 'customerName']).map((row) => (
                 <InvoicesRow
                   key={`${row.code}-${row.date}`}
                   date={row.date}
@@ -276,6 +311,7 @@ const Invoices = ({ title, data }) => {
                   price={row.price}
                   logo={row.logo}
                   format={row.format}
+                  customerName={row.customerName}
                   onDownload={row._invoiceId ? () => downloadInvoiceById(row._invoiceId) : (row._customerId ? () => downloadCustomerPdf(row._customerId) : undefined)}
                 />
               ))}

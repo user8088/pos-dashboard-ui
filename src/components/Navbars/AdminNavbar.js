@@ -88,7 +88,6 @@ export default function AdminNavbar(props) {
       minH="75px"
       justifyContent={{ xl: "center" }}
       lineHeight="25.6px"
-      mx="auto"
       mt={secondaryMargin}
       pb="8px"
       left={{ sm: "50%", md: "260px" }}
@@ -117,41 +116,7 @@ export default function AdminNavbar(props) {
         justifyContent={{ base: "space-between", md: "flex-start" }}
         gap={{ base: "8px", sm: "12px", md: "0px" }}
       >
-        <Box mb={{ base: "4px", sm: "8px", md: "0px" }} w={{ base: "auto", md: "auto" }}>
-          <Breadcrumb fontSize={{ base: "xs", sm: "sm", md: "md" }} spacing={{ base: "4px", md: "8px" }}>
-            <BreadcrumbItem color={mainText}>
-              <BreadcrumbLink href="#" color={secondaryText}>
-                Pages
-              </BreadcrumbLink>
-            </BreadcrumbItem>
-
-            <BreadcrumbItem color={mainText}>
-              <BreadcrumbLink href="#" color={mainText}>
-                {brandText}
-              </BreadcrumbLink>
-            </BreadcrumbItem>
-          </Breadcrumb>
-          {/* Here we create navbar brand, based on route name */}
-          <Link
-            color={mainText}
-            href="#"
-            bg="inherit"
-            borderRadius="inherit"
-            fontWeight="bold"
-            fontSize={{ base: "md", sm: "lg", md: "xl" }}
-            _hover={{ color: { mainText } }}
-            _active={{
-              bg: "inherit",
-              transform: "none",
-              borderColor: "transparent",
-            }}
-            _focus={{
-              boxShadow: "none",
-            }}
-          >
-            {brandText}
-          </Link>
-        </Box>
+        {/* Breadcrumb removed */}
         <Box ms="auto" w={{ base: "auto", sm: "auto", md: "unset" }}>
           <AdminNavbarLinks
             onOpen={props.onOpen}

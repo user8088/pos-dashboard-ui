@@ -28,13 +28,22 @@ import {
   Input,
   Spinner,
   useToast,
+  useBreakpointValue,
+  useMediaQuery,
+  IconButton,
+  Menu,
+  MenuButton,
+  MenuList,
+  MenuItem,
+  MenuDivider,
 } from "@chakra-ui/react";
 // Custom components
 import Card from "components/Card/Card.js";
 import CardBody from "components/Card/CardBody.js";
 import React, { useEffect, useMemo, useState } from "react";
-import { FaPlus, FaList } from "react-icons/fa";
+import { FaPlus, FaList, FaEllipsisV, FaEye, FaEdit, FaTrash } from "react-icons/fa";
 import logo from "assets/img/avatars/placeholder.png";
+import { useSearch } from "contexts/SearchContext";
 
 // Supplier Table Row Component
 const SupplierTableRow = ({ supplier, onViewTransactions }) => {
@@ -53,38 +62,118 @@ const SupplierTableRow = ({ supplier, onViewTransactions }) => {
     }
   };
 
+  const fontSize = useBreakpointValue({ base: "xs", sm: "sm", md: "md" });
+  const imageSize = useBreakpointValue({ base: "20px", sm: "24px", md: "30px" });
+  const isMobile = useBreakpointValue({ base: true, sm: false });
+
   return (
     <Tr>
-      <Td minWidth={{ sm: "250px" }} pl="0px">
-        <Flex align="center" py=".8rem" minWidth="100%" flexWrap="nowrap">
-          <Image src={supplier.avatar} w="30px" h="30px" me="18px" objectFit="cover" />
-          <Flex direction="column">
-            <Text fontSize="md" color={textColor} fontWeight="bold" minWidth="100%">
+      <Td w="250px" pl="0px">
+        <Flex align="center" py={{ base: ".4rem", md: ".8rem" }} minWidth="100%" flexWrap="nowrap">
+          <Image 
+            src={supplier.avatar} 
+            w={imageSize} 
+            h={imageSize} 
+            me={{ base: "8px", sm: "12px", md: "18px" }} 
+            objectFit="cover" 
+            borderRadius="md"
+          />
+          <Flex direction="column" minW="0" flex="1">
+            <Text 
+              fontSize={fontSize} 
+              color={textColor} 
+              fontWeight="bold" 
+              minWidth="100%"
+            >
               {supplier.name}
             </Text>
-            <Text fontSize="sm" color="gray.400" fontWeight="medium">
+            <Text 
+              fontSize={{ base: "xs", sm: "sm" }} 
+              color="gray.400" 
+              fontWeight="medium"
+              noOfLines={isMobile ? 1 : undefined}
+            >
               {supplier.email}
             </Text>
           </Flex>
         </Flex>
       </Td>
 
-      <Td>
-        <Text fontSize="md" color={textColor} fontWeight="bold">
+      <Td w="150px">
+        <Text fontSize={fontSize} color={textColor} fontWeight="bold" textAlign="center">
           {supplier.phone}
         </Text>
       </Td>
 
-      <Td>
-        <Badge colorScheme={getStatusColor(supplier.status)} fontSize="14px" p="3px 10px" borderRadius="20px">
-          {typeof supplier.status === "string" ? supplier.status.replace(/_/g, " ") : supplier.status}
-        </Badge>
+      <Td w="120px">
+        <Flex justify="center">
+          <Badge 
+            colorScheme={getStatusColor(supplier.status)} 
+            fontSize={{ base: "10px", sm: "12px", md: "14px" }} 
+            p={{ base: "1px 6px", sm: "2px 8px", md: "3px 10px" }} 
+            borderRadius="20px"
+          >
+            {typeof supplier.status === "string" ? supplier.status.replace(/_/g, " ") : supplier.status}
+          </Badge>
+        </Flex>
       </Td>
 
-      <Td>
-        <Button size="sm" leftIcon={<FaList />} onClick={() => onViewTransactions(supplier)}>
-          View Transactions
-        </Button>
+      <Td w="120px">
+        <Flex justify="center">
+          <Menu>
+            <MenuButton
+              as={IconButton}
+              icon={<FaEllipsisV />}
+              variant="ghost"
+              size={{ base: "xs", sm: "sm", md: "md" }}
+              color="gray.500"
+              _hover={{ 
+                color: "#FF8D28", 
+                bg: useColorModeValue("orange.50", "orange.900") 
+              }}
+              _active={{ 
+                color: "#FF8D28", 
+                bg: useColorModeValue("orange.100", "orange.800") 
+              }}
+            />
+            <MenuList 
+              minW="160px" 
+              boxShadow="lg" 
+              border="1px solid"
+              borderColor={useColorModeValue("gray.200", "gray.600")}
+            >
+              <MenuItem 
+                icon={<FaList />} 
+                onClick={() => onViewTransactions(supplier)}
+                _hover={{ bg: useColorModeValue("blue.50", "blue.900") }}
+                fontSize="sm"
+              >
+                View Transactions
+              </MenuItem>
+              <MenuItem 
+                icon={<FaEdit />} 
+                onClick={() => {}}
+                _hover={{ bg: useColorModeValue("gray.50", "gray.700") }}
+                fontSize="sm"
+              >
+                Edit Supplier
+              </MenuItem>
+              <MenuDivider />
+              <MenuItem 
+                icon={<FaTrash />} 
+                onClick={() => {}}
+                color="red.500"
+                _hover={{ 
+                  bg: useColorModeValue("red.50", "red.900"),
+                  color: "red.600" 
+                }}
+                fontSize="sm"
+              >
+                Delete Supplier
+              </MenuItem>
+            </MenuList>
+          </Menu>
+        </Flex>
       </Td>
     </Tr>
   );
@@ -97,6 +186,7 @@ function SupplierManagement() {
 
   const { isOpen: isAddOpen, onOpen: onAddOpen, onClose: onAddClose } = useDisclosure();
   const { isOpen: isTxnOpen, onOpen: onTxnOpen, onClose: onTxnClose } = useDisclosure();
+  const { filterData, isSearchActive } = useSearch();
 
   const [suppliers, setSuppliers] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -204,8 +294,19 @@ function SupplierManagement() {
     }
   };
 
+  const buttonSize = useBreakpointValue({ base: 'sm', md: 'md' });
+  const headerFontSize = useBreakpointValue({ base: 'lg', md: 'xl' });
+  const tableSize = useBreakpointValue({ base: 'sm', md: 'md' });
+  const [isMobile] = useMediaQuery('(max-width: 768px)');
+  const [isTablet] = useMediaQuery('(max-width: 1024px)');
+
   return (
-    <Flex direction='column' pt={{ base: "120px", md: "75px" }}>
+    <Flex 
+      direction='column' 
+      pt={{ base: "120px", md: "75px" }}
+      w="100%"
+      maxW="100%"
+    >
       <Box mb='24px'>
         <Flex direction='column' w='100%'>
           <Text fontSize='2xl' color={textColor} fontWeight='bold' mb='8px'>
@@ -225,8 +326,10 @@ function SupplierManagement() {
               color='white'
               _hover={{ bg: '#E67E22' }}
               onClick={onAddOpen}
-              size='md'>
-              Add New Supplier
+              size={buttonSize}
+              fontSize={{ base: 'xs', md: 'sm' }}
+              p={{ base: '6px 16px', md: '8px 24px' }}>
+              {isMobile ? 'Add Supplier' : 'Add New Supplier'}
             </Button>
           </Flex>
         </Flex>
@@ -282,21 +385,76 @@ function SupplierManagement() {
               </VStack>
             </Flex>
           ) : (
-          <Table variant='simple' color={textColor}>
-            <Thead>
-              <Tr>
-                <Th color='gray.400' fontSize='sm' fontWeight='semibold'>Suppliers</Th>
-                <Th color='gray.400' fontSize='sm' fontWeight='semibold'>PHONE</Th>
-                <Th color='gray.400' fontSize='sm' fontWeight='semibold'>STATUS</Th>
-                <Th color='gray.400' fontSize='sm' fontWeight='semibold'>ACTIONS</Th>
-              </Tr>
-            </Thead>
-            <Tbody>
-              {suppliers.map((supplier) => (
-                <SupplierTableRow key={supplier.id} supplier={supplier} onViewTransactions={handleViewTransactions} />
-              ))}
-            </Tbody>
-          </Table>
+          <Box w="100%" overflowX="auto" css={{
+            '&::-webkit-scrollbar': {
+              height: '8px',
+            },
+            '&::-webkit-scrollbar-track': {
+              background: useColorModeValue('#f1f1f1', '#2d3748'),
+              borderRadius: '4px',
+            },
+            '&::-webkit-scrollbar-thumb': {
+              background: '#FF8D28',
+              borderRadius: '4px',
+            },
+            '&::-webkit-scrollbar-thumb:hover': {
+              background: '#E67E22',
+            },
+          }}>
+            <Table 
+              variant='simple' 
+              color={textColor}
+              size={tableSize}
+              w="100%"
+              minW="640px"
+            >
+              <Thead>
+                <Tr>
+                  <Th 
+                    color='gray.400' 
+                    fontSize={{ base: "xs", md: "sm" }} 
+                    fontWeight='semibold'
+                    textAlign="left"
+                    w="250px"
+                  >
+                    Suppliers
+                  </Th>
+                  <Th 
+                    color='gray.400' 
+                    fontSize={{ base: "xs", md: "sm" }} 
+                    fontWeight='semibold'
+                    textAlign="center"
+                    w="150px"
+                  >
+                    PHONE
+                  </Th>
+                  <Th 
+                    color='gray.400' 
+                    fontSize={{ base: "xs", md: "sm" }} 
+                    fontWeight='semibold'
+                    textAlign="center"
+                    w="120px"
+                  >
+                    STATUS
+                  </Th>
+                  <Th 
+                    color='gray.400' 
+                    fontSize={{ base: "xs", md: "sm" }} 
+                    fontWeight='semibold'
+                    textAlign="center"
+                    w="120px"
+                  >
+                    ACTIONS
+                  </Th>
+                </Tr>
+              </Thead>
+              <Tbody>
+                {filterData(suppliers, ['name', 'email', 'phone', 'status']).map((supplier) => (
+                  <SupplierTableRow key={supplier.id} supplier={supplier} onViewTransactions={handleViewTransactions} />
+                ))}
+              </Tbody>
+            </Table>
+          </Box>
           )}
         </CardBody>
       </Card>

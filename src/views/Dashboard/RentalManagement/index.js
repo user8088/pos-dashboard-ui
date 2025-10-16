@@ -44,11 +44,13 @@ import { EditIcon, DeleteIcon, RepeatIcon, HamburgerIcon } from "@chakra-ui/icon
 import RentalTableRow from "components/Tables/RentalTableRow";
 import ResponsiveTable from "components/Tables/ResponsiveTable";
 import logo from "assets/img/avatars/placeholder.png";
+import { useSearch } from "contexts/SearchContext";
 
 function RentalManagement() {
   const textColor = useColorModeValue("gray.700", "white");
   const toast = useToast();
   const { isOpen, onOpen, onClose } = useDisclosure();
+  const { filterData, isSearchActive } = useSearch();
   const { isOpen: isEditOpen, onOpen: onEditOpen, onClose: onEditClose } = useDisclosure();
   const { isOpen: isRentOpen, onOpen: onRentOpen, onClose: onRentClose } = useDisclosure();
   const { isOpen: isEndRentalOpen, onOpen: onEndRentalOpen, onClose: onEndRentalClose } = useDisclosure();
@@ -428,7 +430,7 @@ function RentalManagement() {
         ) : (
           <ResponsiveTable
             captions={captions}
-            data={rentalData}
+            data={filterData(rentalData, ['name', 'quantity', 'category', 'status', 'stockValue', 'totalRented', 'currentRent', 'totalProfit', 'rentedOn', 'rentedTill', 'dailyRate'])}
             isLoading={isLoading}
             actionButtons={[
               {
@@ -450,7 +452,7 @@ function RentalManagement() {
             ]}
             minW="1600px"
           >
-            {rentalData.map((row, index) => (
+            {filterData(rentalData, ['name', 'quantity', 'category', 'status', 'stockValue', 'totalRented', 'currentRent', 'totalProfit', 'rentedOn', 'rentedTill', 'dailyRate']).map((row, index) => (
               <RentalTableRow
                 key={`${row.name}-${index}`}
                 logo={logo}

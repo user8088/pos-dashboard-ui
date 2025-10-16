@@ -9,9 +9,15 @@ import {
   useColorModeValue,
   HStack,
   VStack,
+  useBreakpointValue,
+  Menu,
+  MenuButton,
+  MenuList,
+  MenuItem,
+  IconButton,
 } from "@chakra-ui/react";
 import React from "react";
-import { FaTrash, FaCog, FaUndo } from "react-icons/fa";
+import { FaTrash, FaCog, FaUndo, FaEllipsisV, FaEye, FaEdit } from "react-icons/fa";
 
 function RentalTableRow(props) {
   const {
@@ -35,6 +41,11 @@ function RentalTableRow(props) {
     onEndRental,
   } = props;
   const textColor = useColorModeValue("gray.700", "white");
+  
+  // Responsive values
+  const fontSize = useBreakpointValue({ base: "xs", md: "sm" });
+  const imageSize = useBreakpointValue({ base: "20px", md: "30px" });
+  const buttonSize = useBreakpointValue({ base: "xs", md: "sm" });
 
   const getStatusColor = (status) => {
     switch (status) {
@@ -63,89 +74,115 @@ function RentalTableRow(props) {
 
   return (
     <Tr>
-      <Td minWidth="200px" maxWidth="250px" pl="0px">
+      <Td w="200px" pl="0px">
         <Flex align="center" py=".8rem" minWidth="100%" flexWrap="nowrap">
-          <Image src={logo} w="30px" h="30px" me="12px" objectFit="cover" flexShrink={0} />
+          <Image src={logo} w={imageSize} h={imageSize} me="12px" objectFit="cover" flexShrink={0} />
           <Flex direction="column" minWidth="0" flex="1">
-            <Text fontSize="sm" color={textColor} fontWeight="bold" isTruncated>
+            <Text fontSize={fontSize} color={textColor} fontWeight="bold">
               {name}
             </Text>
           </Flex>
         </Flex>
       </Td>
 
-      <Td minWidth="100px" maxWidth="120px">
-        <Text fontSize="sm" color={textColor} fontWeight="bold" isTruncated>{quantity}</Text>
+      <Td w="120px">
+        <Text fontSize={fontSize} color={textColor} fontWeight="bold" textAlign="center">
+          {quantity}
+        </Text>
       </Td>
 
-      <Td minWidth="150px" maxWidth="180px">
-        <VStack spacing="1px" align="start">
-          <Text fontSize="xs" color={textColor} fontWeight="bold" isTruncated>
+      <Td w="150px">
+        <VStack spacing="1px" align="center">
+          <Text fontSize={fontSize} color={textColor} fontWeight="bold" textAlign="center">
             {rentalDurationDays ? `${rentalDurationDays}d` : "—"}
           </Text>
-          <Text fontSize="xs" color={textColor} fontWeight="bold" isTruncated>
+          <Text fontSize={fontSize} color={textColor} fontWeight="bold" textAlign="center">
             {dailyRate ? `PKR.${dailyRate}/d` : "—"}
           </Text>
         </VStack>
       </Td>
 
-      <Td minWidth="120px" maxWidth="150px">
-        <Text fontSize="sm" color={textColor} fontWeight="bold" isTruncated>{category}</Text>
+      <Td w="130px">
+        <Text fontSize={fontSize} color={textColor} fontWeight="bold" textAlign="center">
+          {category}
+        </Text>
       </Td>
 
-      <Td minWidth="120px" maxWidth="150px">
-        <Text fontSize="sm" color={textColor} fontWeight="bold" isTruncated>{formatCurrency(stockValue)}</Text>
+      <Td w="140px">
+        <Text fontSize={fontSize} color={textColor} fontWeight="bold" textAlign="center">
+          {formatCurrency(stockValue)}
+        </Text>
       </Td>
 
-      <Td minWidth="120px" maxWidth="150px">
-        <Text fontSize="sm" color={textColor} fontWeight="bold" isTruncated>{totalRented || "0"}</Text>
+      <Td w="140px">
+        <Text fontSize={fontSize} color={textColor} fontWeight="bold" textAlign="center">
+          {totalRented || "0"}
+        </Text>
       </Td>
 
-      <Td minWidth="120px" maxWidth="150px">
-        <Text fontSize="sm" color={textColor} fontWeight="bold" isTruncated>{formatCurrency(currentRent)}</Text>
+      <Td w="140px">
+        <Text fontSize={fontSize} color={textColor} fontWeight="bold" textAlign="center">
+          {formatCurrency(currentRent)}
+        </Text>
       </Td>
 
-      <Td minWidth="120px" maxWidth="150px">
-        <Text fontSize="sm" color={textColor} fontWeight="bold" isTruncated>{formatCurrency(totalProfit)}</Text>
+      <Td w="140px">
+        <Text fontSize={fontSize} color={textColor} fontWeight="bold" textAlign="center">
+          {formatCurrency(totalProfit)}
+        </Text>
       </Td>
 
-      <Td minWidth="180px" maxWidth="220px">
-        <VStack spacing="1px" align="start">
-          <Text fontSize="xs" color={textColor} fontWeight="bold" isTruncated>
+      <Td w="180px">
+        <VStack spacing="1px" align="center">
+          <Text fontSize={fontSize} color={textColor} fontWeight="bold" textAlign="center">
             {formatDate(rentedOn)}
           </Text>
-          <Text fontSize="xs" color={textColor} fontWeight="bold" isTruncated>
+          <Text fontSize={fontSize} color={textColor} fontWeight="bold" textAlign="center">
             {formatDate(rentedTill)}
           </Text>
         </VStack>
       </Td>
 
-      <Td minWidth="100px" maxWidth="120px">
-        <Badge colorScheme={getStatusColor(status)} fontSize="12px" p="2px 8px" borderRadius="15px">
-          {status}
-        </Badge>
+      <Td w="120px">
+        <Flex justify="center" align="center">
+          <Badge colorScheme={getStatusColor(status)} fontSize="12px" p="2px 8px" borderRadius="15px">
+            {status}
+          </Badge>
+        </Flex>
       </Td>
 
-      <Td minWidth="120px" maxWidth="150px">
-        <HStack spacing="8px" justify="flex-start">
-          <Button p="0px" bg="transparent" variant="no-hover" onClick={onEdit} size="sm">
-            <Text fontSize="xs" color="gray.400" fontWeight="bold" cursor="pointer" _hover={{ color: "brand.500" }}>
-              Edit
-            </Text>
-          </Button>
-          {status === "rented" ? (
-            <Button p="0px" bg="transparent" variant="no-hover" onClick={onEndRental} title="End Rental" size="sm">
-              <FaUndo color="#FF6B6B" size="14px" style={{ cursor: "pointer" }} />
-            </Button>
-          ) : (
-            <Button p="0px" bg="transparent" variant="no-hover" onClick={onRent} title="Record Rental" size="sm">
-              <FaCog color="#4CAF50" size="14px" style={{ cursor: "pointer" }} />
-            </Button>
-          )}
-          <Button p="0px" bg="transparent" variant="no-hover" onClick={onDelete} size="sm">
-            <FaTrash color="#FF8D28" size="14px" style={{ cursor: "pointer" }} />
-          </Button>
-        </HStack>
+      <Td w="80px">
+        <Flex justify="flex-end" align="center">
+          <Menu>
+            <MenuButton
+              as={IconButton}
+              icon={<FaEllipsisV />}
+              variant="ghost"
+              size={buttonSize}
+              aria-label="Actions"
+            />
+            <MenuList>
+              <MenuItem icon={<FaEye />} onClick={() => { /* View Details logic */ }}>
+                View Details
+              </MenuItem>
+              <MenuItem icon={<FaEdit />} onClick={onEdit}>
+                Edit
+              </MenuItem>
+              {status === "rented" ? (
+                <MenuItem icon={<FaUndo />} onClick={onEndRental} color="red.500">
+                  End Rental
+                </MenuItem>
+              ) : (
+                <MenuItem icon={<FaCog />} onClick={onRent} color="green.500">
+                  Record Rental
+                </MenuItem>
+              )}
+              <MenuItem icon={<FaTrash />} onClick={onDelete} color="red.500">
+                Delete
+              </MenuItem>
+            </MenuList>
+          </Menu>
+        </Flex>
       </Td>
     </Tr>
   );

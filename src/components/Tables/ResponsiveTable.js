@@ -19,6 +19,7 @@ import {
   Image,
   useColorModeValue,
   Button,
+  useBreakpointValue,
 } from "@chakra-ui/react";
 import { HamburgerIcon, EditIcon, DeleteIcon, RepeatIcon } from "@chakra-ui/icons";
 
@@ -184,6 +185,9 @@ function ResponsiveTable({
     );
   }
 
+  const fontSize = useBreakpointValue({ base: "xs", md: "sm" });
+  const tableSize = useBreakpointValue({ base: "sm", md: "md" });
+
   return (
     <>
       {/* Search Bar */}
@@ -191,27 +195,78 @@ function ResponsiveTable({
 
       {/* Desktop Table View (md+) */}
       <Box display={{ base: "none", md: "block" }} w="100%">
-        <Table variant="simple" color={textColor} w="100%" {...props}>
-          <Thead>
-            <Tr my=".8rem" pl="0px" color="gray.400">
-              {captions.map((caption, idx) => (
-                <Th
-                  color="gray.400"
-                  key={idx}
-                  ps={idx === 0 ? "0px" : null}
-                  w={`${100/captions.length}%`}
-                  textAlign="left"
-                  px="16px"
-                >
-                  {caption}
-                </Th>
-              ))}
-            </Tr>
-          </Thead>
-          <Tbody>
-            {children}
-          </Tbody>
-        </Table>
+        <Box 
+          w="100%" 
+          overflowX="auto" 
+          css={{
+            '&::-webkit-scrollbar': {
+              height: '8px',
+            },
+            '&::-webkit-scrollbar-track': {
+              background: useColorModeValue('#f1f1f1', '#2d3748'),
+              borderRadius: '4px',
+            },
+            '&::-webkit-scrollbar-thumb': {
+              background: '#FF8D28',
+              borderRadius: '4px',
+            },
+            '&::-webkit-scrollbar-thumb:hover': {
+              background: '#E67E22',
+            },
+          }}
+        >
+          <Table 
+            variant="simple" 
+            color={textColor} 
+            size={tableSize}
+            w="100%" 
+            minW="800px"
+            {...props}
+          >
+            <Thead>
+              <Tr my=".8rem" pl="0px" color="gray.400">
+                {captions.map((caption, idx) => (
+                  <Th
+                    color="gray.400"
+                    key={idx}
+                    ps={idx === 0 ? "0px" : null}
+                    fontSize={fontSize}
+                    py={{ base: "8px", md: "12px" }}
+                    whiteSpace="nowrap"
+                    textAlign={
+                      idx === 1 ? "center" : 
+                      idx === 2 ? "center" : 
+                      idx === 3 ? "center" : 
+                      idx === 4 ? "center" : 
+                      idx === 5 ? "center" : 
+                      idx === 6 ? "center" : 
+                      idx === 7 ? "center" : 
+                      idx === 8 ? "right" : 
+                      "left"
+                    }
+                    w={
+                      idx === 0 ? "200px" : 
+                      idx === 1 ? "100px" : 
+                      idx === 2 ? "120px" : 
+                      idx === 3 ? "130px" : 
+                      idx === 4 ? "120px" : 
+                      idx === 5 ? "120px" : 
+                      idx === 6 ? "100px" : 
+                      idx === 7 ? "120px" : 
+                      "80px"
+                    }
+                    px="16px"
+                  >
+                    {caption}
+                  </Th>
+                ))}
+              </Tr>
+            </Thead>
+            <Tbody>
+              {children}
+            </Tbody>
+          </Table>
+        </Box>
       </Box>
 
       {/* Mobile Card View (base-md) */}

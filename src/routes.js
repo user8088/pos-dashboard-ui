@@ -7,10 +7,12 @@ import Profile from "views/Dashboard/Profile";
 import InProgress from "views/Dashboard/InProgress";
 import SalesAnalytics from "views/Dashboard/SalesAnalytics";
 import CustomerManagement from "views/Dashboard/CustomerManagement";
+import CustomerProfile from "views/Dashboard/CustomerProfile";
 import UserManagement from "views/Dashboard/UserManagement";
 import SignIn from "views/Auth/SignIn.js";
 import SignUp from "views/Auth/SignUp.js";
 import RentalManagement from "views/Dashboard/RentalManagement";
+import TransportManagement from "views/Dashboard/TransportManagement";
 
 import {
   HomeIcon,
@@ -57,6 +59,14 @@ var dashRoutes = [
     layout: "/admin",
   },
   {
+    path: "/transport-management",
+    name: "Transport Management",
+    rtlName: "إدارة النقل",
+    icon: <RocketIcon color="inherit" />,
+    component: TransportManagement,
+    layout: "/admin",
+  },
+  {
     path: "/customer-management",
     name: "Customer Management",
     rtlName: "لوحة القيادة",
@@ -71,7 +81,6 @@ var dashRoutes = [
     icon: <CreditIcon color="inherit" />,
     component: Billing,
     layout: "/admin",
-    adminOnly: true,
   },
   {
     path: "/user-management",
@@ -84,6 +93,13 @@ var dashRoutes = [
   },
 
   // Hidden routes (not shown in sidebar but still accessible via URL)
+  {
+    path: "/customer-profile/:customerId",
+    name: "Customer Profile",
+    component: CustomerProfile,
+    layout: "/admin",
+    hidden: true,
+  },
   {
     path: "/signin",
     name: "Sign In",

@@ -23,12 +23,14 @@ import CardBody from "components/Card/CardBody.js";
 import CardHeader from "components/Card/CardHeader.js";
 import React from "react";
 import logo from "assets/img/avatars/placeholder.png";
+import { useSearch } from "contexts/SearchContext";
 
 const BestProducedMaterials = ({ timePeriod, customDateRange, data = [] }) => {
   const textColor = useColorModeValue("gray.700", "white");
   const [searchTerm, setSearchTerm] = React.useState("");
   const [stockItems, setStockItems] = React.useState([]);
   const [isLoadingStock, setIsLoadingStock] = React.useState(true);
+  const { filterData, isSearchActive } = useSearch();
 
   // Fetch stock items (produced materials)
   const fetchStockItems = async () => {
@@ -77,15 +79,10 @@ const BestProducedMaterials = ({ timePeriod, customDateRange, data = [] }) => {
 
   const materialsData = getProcessedMaterialsData();
 
-  // Filter materials based on search term
+  // Filter materials based on global search
   const filteredMaterials = React.useMemo(() => {
-    if (!searchTerm) return materialsData;
-    return materialsData.filter(material =>
-      material.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      material.category.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      material.unit.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-  }, [materialsData, searchTerm]);
+    return filterData(materialsData, ['name', 'category', 'unit', 'production']);
+  }, [materialsData, filterData]);
 
   return (
     <Card bg={useColorModeValue("white", "gray.700")} boxShadow={useColorModeValue("0 4px 20px rgba(0,0,0,0.06)", "0 4px 20px rgba(0,0,0,0.3)")}>
