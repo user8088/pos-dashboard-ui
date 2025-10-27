@@ -15,6 +15,7 @@ import {
   MenuList,
   MenuItem,
   MenuDivider,
+  Portal,
 } from "@chakra-ui/react";
 import React from "react";
 import { FaTrash, FaCog, FaEllipsisV, FaEye, FaEdit } from "react-icons/fa";
@@ -184,72 +185,74 @@ function StockTableRow(props) {
                 bg: useColorModeValue("orange.100", "orange.800") 
               }}
             />
-            <MenuList 
-              minW="160px" 
-              boxShadow="lg" 
-              border="1px solid"
-              borderColor={useColorModeValue("gray.200", "gray.600")}
-            >
-              {onViewComponents && (
+            <Portal>
+              <MenuList 
+                minW="160px" 
+                boxShadow="lg" 
+                border="1px solid"
+                borderColor={useColorModeValue("gray.200", "gray.600")}
+              >
+                {onViewComponents && (
+                  <MenuItem 
+                    icon={<FaEye />} 
+                    onClick={onViewComponents}
+                    _hover={{ bg: useColorModeValue("blue.50", "blue.900") }}
+                    fontSize="sm"
+                  >
+                    View Components
+                  </MenuItem>
+                )}
                 <MenuItem 
-                  icon={<FaEye />} 
-                  onClick={onViewComponents}
-                  _hover={{ bg: useColorModeValue("blue.50", "blue.900") }}
+                  icon={<FaEdit />} 
+                  onClick={onEdit}
+                  _hover={{ bg: useColorModeValue("gray.50", "gray.700") }}
                   fontSize="sm"
                 >
-                  View Components
+                  Edit
                 </MenuItem>
-              )}
-              <MenuItem 
-                icon={<FaEdit />} 
-                onClick={onEdit}
-                _hover={{ bg: useColorModeValue("gray.50", "gray.700") }}
-                fontSize="sm"
-              >
-                Edit
-              </MenuItem>
-              {/* {onProduce && (
+                {/* {onProduce && (
+                  <MenuItem 
+                    icon={<FaCog />} 
+                    onClick={onProduce}
+                    color="#4CAF50"
+                    _hover={{ 
+                      bg: useColorModeValue("green.50", "green.900"),
+                      color: "#2E7D32" 
+                    }}
+                    fontSize="sm"
+                  >
+                    Produce Stock
+                  </MenuItem>
+                )} */}
+                {onEditProduction && (
+                  <MenuItem 
+                    icon={<FaCog />} 
+                    onClick={onEditProduction}
+                    color="#4CAF50"
+                    _hover={{ 
+                      bg: useColorModeValue("green.50", "green.900"),
+                      color: "#2E7D32" 
+                    }}
+                    fontSize="sm"
+                  >
+                    Edit Production
+                  </MenuItem>
+                )}
+                <MenuDivider />
                 <MenuItem 
-                  icon={<FaCog />} 
-                  onClick={onProduce}
-                  color="#4CAF50"
+                  icon={<FaTrash />} 
+                  onClick={onDelete}
+                  color="red.500"
                   _hover={{ 
-                    bg: useColorModeValue("green.50", "green.900"),
-                    color: "#2E7D32" 
+                    bg: useColorModeValue("red.50", "red.900"),
+                    color: "red.600" 
                   }}
                   fontSize="sm"
                 >
-                  Produce Stock
+                  Delete
                 </MenuItem>
-              )} */}
-              {onEditProduction && (
-                <MenuItem 
-                  icon={<FaCog />} 
-                  onClick={onEditProduction}
-                  color="#4CAF50"
-                  _hover={{ 
-                    bg: useColorModeValue("green.50", "green.900"),
-                    color: "#2E7D32" 
-                  }}
-                  fontSize="sm"
-                >
-                  Edit Production
-                </MenuItem>
-              )}
-              <MenuDivider />
-              <MenuItem 
-                icon={<FaTrash />} 
-                onClick={onDelete}
-                color="red.500"
-                _hover={{ 
-                  bg: useColorModeValue("red.50", "red.900"),
-                  color: "red.600" 
-                }}
-                fontSize="sm"
-              >
-                Delete
-              </MenuItem>
-            </MenuList>
+              </MenuList>
+            </Portal>
           </Menu>
         </Flex>
       </Td>

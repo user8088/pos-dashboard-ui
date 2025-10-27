@@ -1,18 +1,19 @@
 // import
-import Dashboard from "views/Dashboard/Dashboard";
-import Tables from "views/Dashboard/Tables";
-import Billing from "views/Dashboard/Billing";
+import Dashboard from "views/Store/Dashboard";
+import Tables from "views/Store/StockManagement";
+import Billing from "views/Store/Billing";
 import RTLPage from "views/Dashboard/RTL";
 import Profile from "views/Dashboard/Profile";
 import InProgress from "views/Dashboard/InProgress";
-import SalesAnalytics from "views/Dashboard/SalesAnalytics";
-import CustomerManagement from "views/Dashboard/CustomerManagement";
-import CustomerProfile from "views/Dashboard/CustomerProfile";
+import SalesAnalytics from "views/Store/SalesAnalytics";
+import CustomerManagement from "views/Store/CustomerManagement";
+import CustomerProfile from "views/Store/CustomerProfile";
 import UserManagement from "views/Dashboard/UserManagement";
 import SignIn from "views/Auth/SignIn.js";
 import SignUp from "views/Auth/SignUp.js";
 import RentalManagement from "views/Dashboard/RentalManagement";
-import TransportManagement from "views/Dashboard/TransportManagement";
+import TransportManagement from "views/Store/TransportManagement";
+import UnitConversionManagement from "views/Store/UnitConversionManagement";
 
 import {
   HomeIcon,
@@ -88,6 +89,15 @@ var dashRoutes = [
     rtlName: "إدارة المستخدمين",
     icon: <PersonIcon color="inherit" />,
     component: UserManagement,
+    layout: "/admin",
+    adminOnly: true,
+  },
+  {
+    path: "/unit-conversion-management",
+    name: "Unit Conversion Management",
+    rtlName: "إدارة تحويل الوحدات",
+    icon: <DocumentIcon color="inherit" />,
+    component: UnitConversionManagement,
     layout: "/admin",
     adminOnly: true,
   },

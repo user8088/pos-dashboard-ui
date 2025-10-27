@@ -13,7 +13,7 @@ import CardBody from "components/Card/CardBody.js";
 import React from "react";
 // react icons
 import { BsArrowRight } from "react-icons/bs";
-import { useHistory, useLocation } from "react-router-dom";
+import { useHistory } from "react-router-dom";
 import { useDashboard } from "contexts/DashboardContext";
 
 const BuiltByDevelopers = ({ title, name, description, image }) => {
@@ -21,7 +21,6 @@ const BuiltByDevelopers = ({ title, name, description, image }) => {
   const whiteCardTextColor = useColorModeValue("gray.700", "white");
   const cardBg = useColorModeValue("white", "gray.700");
   const history = useHistory();
-  const location = useLocation();
   const { currentDashboard, setDashboard } = useDashboard();
   
   const isFactoryDashboard = currentDashboard === 'factory';
@@ -151,7 +150,7 @@ const BuiltByDevelopers = ({ title, name, description, image }) => {
                 lineHeight='1.6' 
                 opacity={0.95}
                 transition='color 1.2s cubic-bezier(0.23, 1, 0.32, 1)'>
-                {isFactoryDashboard ? 'Manage cash flow, track raw material usage, manage salaries and store related expenses.' : description}
+                {isFactoryDashboard ? 'Manage cash flow, track inventory, manage customers and store related expenses.' : description}
               </Text>
             </Flex>
             <Button 

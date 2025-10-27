@@ -468,7 +468,7 @@ Authorization: Bearer {admin_token}
 ### 96. Mark Attendance
 **POST** `/core/attendance/mark`
 
-Record or update a staff member’s attendance for a specific date.
+Record or update a staff member's attendance for a specific date.
 
 **Headers:**
 ```
@@ -1375,6 +1375,222 @@ Authorization: Bearer {token}
 ```json
 { "message": "No query results for model [App\\Models\\Category] {id}" }
 ```
+
+---
+
+## Unit Conversion System
+
+### 7.1 Create Unit Conversion
+**POST** `/core/unit-conversions`
+
+Define a conversion relationship between two units (e.g., 1 KG = 1000 grams).
+
+**Headers:**
+```
+Authorization: Bearer {token}
+Content-Type: application/json
+```
+
+**Request Body:**
+```json
+{
+  "primary_unit_id": 1,
+  "secondary_unit_id": 2,
+  "conversion_factor": 1000,
+  "notes": "1 KG = 1000 grams"
+}
+```
+
+**Fields:**
+- `primary_unit_id` (required): ID of the primary unit (e.g., KG)
+- `secondary_unit_id` (required): ID of the secondary unit (e.g., grams), must be different from primary
+- `conversion_factor` (required): How many secondary units in 1 primary unit (must be > 0)
+- `notes` (optional): Description of the conversion
+
+**Response (201):**
+```json
+{
+  "message": "Unit conversion created successfully",
+  "data": {
+    "id": 1,
+    "primary_unit": {
+      "id": 1,
+      "name": "Kilogram"
+    },
+    "secondary_unit": {
+      "id": 2,
+      "name": "Gram"
+    },
+    "conversion_factor": 1000,
+    "notes": "1 KG = 1000 grams"
+  }
+}
+```
+
+---
+
+### 7.2 Get All Unit Conversions
+**GET** `/core/unit-conversions`
+
+Retrieve all defined unit conversions.
+
+**Headers:**
+```
+Authorization: Bearer {token}
+```
+
+**Response (200):**
+```json
+{
+  "data": [
+    {
+      "id": 1,
+      "primary_unit": {
+        "id": 1,
+        "name": "Kilogram",
+        "metric": "weight"
+      },
+      "secondary_unit": {
+        "id": 2,
+        "name": "Gram",
+        "metric": "weight"
+      },
+      "conversion_factor": 1000,
+      "notes": "1 KG = 1000 grams",
+      "created_at": "2025-10-18T10:00:00.000000Z",
+      "updated_at": "2025-10-18T10:00:00.000000Z"
+    }
+  ]
+}
+```
+
+---
+
+### 7.3 Update Unit Conversion
+**PUT** `/core/unit-conversions/{id}`
+
+Update the conversion factor or notes for an existing conversion.
+
+**Headers:**
+```
+Authorization: Bearer {token}
+Content-Type: application/json
+```
+
+**Request Body:**
+```json
+{
+  "conversion_factor": 1000.5,
+  "notes": "Updated conversion factor"
+}
+```
+
+**Response (200):**
+```json
+{
+  "message": "Unit conversion updated successfully",
+  "data": {
+    "id": 1,
+    "primary_unit": {...},
+    "secondary_unit": {...},
+    "conversion_factor": 1000.5,
+    "notes": "Updated conversion factor"
+  }
+}
+```
+
+---
+
+### 7.4 Delete Unit Conversion
+**DELETE** `/core/unit-conversions/{id}`
+
+Remove a unit conversion.
+
+**Headers:**
+```
+Authorization: Bearer {token}
+```
+
+**Response (200):**
+```json
+{
+  "message": "Unit conversion deleted successfully"
+}
+```
+
+---
+
+### 7.5 Get Conversion Factor
+**GET** `/core/unit-conversions/factor`
+
+Query the conversion factor between two specific units.
+
+**Headers:**
+```
+Authorization: Bearer {token}
+```
+
+**Query Parameters:**
+```
+primary_unit_id=1&secondary_unit_id=2
+```
+
+**Response (200):**
+```json
+{
+  "data": {
+    "primary_unit": "Kilogram",
+    "secondary_unit": "Gram",
+    "conversion_factor": 1000,
+    "example": "1 Kilogram = 1000 Gram"
+  }
+}
+```
+
+**Response (404):**
+```json
+{
+  "message": "No conversion found between these units",
+  "data": null
+}
+```
+
+---
+
+### 7.6 Convert Value Between Units
+**POST** `/core/unit-conversions/convert`
+
+Convert a numeric value from one unit to another.
+
+**Headers:**
+```
+Authorization: Bearer {token}
+Content-Type: application/json
+```
+
+**Request Body:**
+```json
+{
+  "value": 5,
+  "from_unit_id": 1,
+  "to_unit_id": 2
+}
+```
+
+**Response (200):**
+```json
+{
+  "data": {
+    "original_value": 5,
+    "converted_value": 5000,
+    "from_unit": "Kilogram",
+    "to_unit": "Gram",
+    "formula": "5 Kilogram = 5000 Gram"
+  }
+}
+```
+
+**Note:** This endpoint works bidirectionally. If a conversion exists from A→B, you can query B→A and it will automatically reverse the calculation.
 
 ---
 
@@ -2916,7 +3132,7 @@ Authorization: Bearer {token}
 ### 16. Get Customers
 **GET** `/core/customer`
 
-Returns all customers with summary of purchased items. Each customer includes a `customer_code` for quick lookup and a `purchased_items` array with `{ item_id, item_name, quantity, unit_price, line_total }`.
+Returns all customers with summary of purchased items. Each customer includes a `customer_code` for quick lookup and a `purchased_items` array with full unit information.
 
 **Response (200) example:**
 ```json
@@ -2932,12 +3148,50 @@ Returns all customers with summary of purchased items. Each customer includes a 
     "created_at": "2025-09-16T10:00:00.000000Z",
     "updated_at": "2025-09-16T10:00:00.000000Z",
     "purchased_items": [
-      { "item_id": 1, "item_name": "Rice",  "quantity": 2, "unit_price": 12.5, "line_total": 25 },
-      { "item_id": 3, "item_name": "Sugar", "quantity": 1, "unit_price": 12.5, "line_total": 12.5 }
+      {
+        "item_id": 1,
+        "item_name": "Rice",
+        "quantity": 500,
+        "unit_price": 0.20,
+        "line_total": 100,
+        "use_secondary_unit": true,
+        "unit_name": "Gram",
+        "unit": {
+          "unit_id": 1,
+          "unit_name": "Kilogram",
+          "metric": "weight"
+        },
+        "secondaryUnit": {
+          "unit_id": 2,
+          "unit_name": "Gram",
+          "metric": "weight"
+        }
+      },
+      {
+        "item_id": 3,
+        "item_name": "Sugar",
+        "quantity": 2,
+        "unit_price": 150,
+        "line_total": 300,
+        "use_secondary_unit": false,
+        "unit_name": "Kilogram",
+        "unit": {
+          "unit_id": 1,
+          "unit_name": "Kilogram",
+          "metric": "weight"
+        },
+        "secondaryUnit": null
+      }
     ]
   }
 ]
 ```
+
+**Purchased Item Fields:**
+- `use_secondary_unit` (boolean): Indicates if sold in secondary units
+- `unit_name` (string): Name of the unit used for this sale
+- `unit` (object): Full primary unit details
+- `secondaryUnit` (object|null): Full secondary unit details (null if not applicable)
 
 **Headers:**
 ```
@@ -3047,8 +3301,40 @@ Authorization: Bearer {token}
         "due_amount": 22.5,
         "purchased_at": "2025-10-16T10:00:00.000000Z",
         "items": [
-          { "stock_id": 1, "item_name": "Rice",  "quantity": 2, "unit_price": 12.5, "line_total": 25 },
-          { "stock_id": 3, "item_name": "Sugar", "quantity": 1, "unit_price": 12.5, "line_total": 12.5 }
+          {
+            "stock_id": 1,
+            "item_name": "Rice",
+            "quantity": 500,
+            "unit_price": 0.20,
+            "line_total": 100,
+            "use_secondary_unit": true,
+            "unit_name": "Gram",
+            "unit": {
+              "unit_id": 1,
+              "unit_name": "Kilogram",
+              "metric": "weight"
+            },
+            "secondaryUnit": {
+              "unit_id": 2,
+              "unit_name": "Gram",
+              "metric": "weight"
+            }
+          },
+          {
+            "stock_id": 3,
+            "item_name": "Sugar",
+            "quantity": 2,
+            "unit_price": 150,
+            "line_total": 300,
+            "use_secondary_unit": false,
+            "unit_name": "Kilogram",
+            "unit": {
+              "unit_id": 1,
+              "unit_name": "Kilogram",
+              "metric": "weight"
+            },
+            "secondaryUnit": null
+          }
         ]
       }
     ]
@@ -3056,9 +3342,16 @@ Authorization: Bearer {token}
 }
 ```
 
+**Item Fields:**
+- `use_secondary_unit` (boolean): `true` if sold in secondary units, `false` if sold in primary units
+- `unit_name` (string): Name of the unit used for this sale (either primary or secondary)
+- `unit` (object): Full primary unit details
+- `secondaryUnit` (object|null): Full secondary unit details (null if not using secondary units)
+
 **Notes:**
 - Results are ordered by `purchased_at` desc, then `id` desc.
 - Each item includes the `stock.item_name` for convenience.
+- Unit information helps frontend display correct unit names (e.g., "500 Gram" vs "2 Kilogram").
 
 ---
 
@@ -3119,6 +3412,208 @@ Authorization: Bearer {token}
 ```json
 { "message": "Customer deleted successfully" }
 ```
+
+---
+
+### 18.1 Rate Customer (Star Rating)
+**PUT** `/core/customer/{id}/rating`
+
+Assign a star rating (0-5) to a customer with optional notes.
+
+**Headers:**
+```
+Authorization: Bearer {token}
+Content-Type: application/json
+```
+
+**Request Body:**
+```json
+{
+  "rating": 5,
+  "rating_notes": "Excellent customer, pays on time"
+}
+```
+
+**Fields:**
+- `rating` (required): Integer from 0-5 (0 = no stars, 5 = 5 stars)
+- `rating_notes` (optional): Text notes explaining the rating (max 1000 characters)
+
+**Response (200):**
+```json
+{
+  "message": "Customer rating updated successfully",
+  "data": {
+    "id": 5,
+    "customer_name": "ABC Trading",
+    "customer_phone_no": "03001234567",
+    "customer_code": "CUST-0001",
+    "total_bill": 15000.00,
+    "bill_paid": 10000.00,
+    "bill_due": 5000.00,
+    "rating": 5,
+    "rating_notes": "Excellent customer, pays on time",
+    "created_at": "2025-09-15T10:00:00.000000Z",
+    "updated_at": "2025-10-16T10:30:00.000000Z"
+  }
+}
+```
+
+---
+
+### 18.2 Get Customer Rating
+**GET** `/core/customer/{id}/rating`
+
+Retrieve the rating and notes for a specific customer.
+
+**Headers:**
+```
+Authorization: Bearer {token}
+```
+
+**Response (200):**
+```json
+{
+  "data": {
+    "id": 5,
+    "customer_name": "ABC Trading",
+    "customer_phone_no": "03001234567",
+    "customer_code": "CUST-0001",
+    "rating": 5,
+    "rating_notes": "Excellent customer, pays on time"
+  }
+}
+```
+
+---
+
+### 18.3 Get Customers By Rating
+**GET** `/core/customers/by-rating`
+
+Filter and list customers by their rating with optional sorting.
+
+**Headers:**
+```
+Authorization: Bearer {token}
+```
+
+**Query Parameters (all optional):**
+```
+min_rating=4&max_rating=5&sort_by=rating_desc
+```
+
+- `min_rating`: Minimum rating (0-5)
+- `max_rating`: Maximum rating (0-5)
+- `sort_by`: Sort order - `rating_asc` or `rating_desc` (default: `rating_desc`)
+
+**Response (200):**
+```json
+{
+  "data": [
+    {
+      "id": 5,
+      "customer_name": "ABC Trading",
+      "rating": 5,
+      "rating_notes": "Excellent customer"
+    },
+    {
+      "id": 8,
+      "customer_name": "XYZ Corp",
+      "rating": 4,
+      "rating_notes": "Good customer, reliable"
+    }
+  ],
+  "summary": {
+    "total_customers": 2,
+    "average_rating": 4.5,
+    "highest_rated": 5,
+    "lowest_rated": 4
+  }
+}
+```
+
+---
+
+### 18.4 Get Customer Rating Summary
+**GET** `/core/customers/rating-summary`
+
+Get comprehensive rating statistics for all customers.
+
+**Headers:**
+```
+Authorization: Bearer {token}
+```
+
+**Response (200):**
+```json
+{
+  "data": {
+    "total_customers": 25,
+    "rated_customers": 22,
+    "unrated_customers": 3,
+    "average_rating": 3.86,
+    "rating_distribution": [
+      {
+        "stars": 5,
+        "count": 8,
+        "percentage": 32
+      },
+      {
+        "stars": 4,
+        "count": 6,
+        "percentage": 24
+      },
+      {
+        "stars": 3,
+        "count": 5,
+        "percentage": 20
+      },
+      {
+        "stars": 2,
+        "count": 2,
+        "percentage": 8
+      },
+      {
+        "stars": 1,
+        "count": 1,
+        "percentage": 4
+      }
+    ],
+    "top_rated": [
+      {
+        "id": 5,
+        "customer_name": "ABC Trading",
+        "rating": 5,
+        "customer_code": "CUST-0001"
+      },
+      {
+        "id": 8,
+        "customer_name": "XYZ Corp",
+        "rating": 5,
+        "customer_code": "CUST-0002"
+      }
+    ],
+    "lowest_rated": [
+      {
+        "id": 15,
+        "customer_name": "Poor Payer Ltd",
+        "rating": 1,
+        "customer_code": "CUST-0010"
+      }
+    ]
+  }
+}
+```
+
+**Summary Fields:**
+- `total_customers`: Total number of customers in system
+- `rated_customers`: Customers with a rating > 0
+- `unrated_customers`: Customers with no rating
+- `average_rating`: Average of all non-zero ratings (rounded to 2 decimals)
+- `rating_distribution`: Breakdown of how many customers have each rating
+- `top_rated`: Top 5 highest rated customers
+- `lowest_rated`: Bottom 5 lowest rated customers (only those with rating > 0)
+
+---
 
 
 ## User Management Endpoints
@@ -5761,3 +6256,323 @@ The following endpoints are not yet implemented but would be useful:
 - Pagination for large datasets
 - Manufacturing Analytics caching and export functionality
 - Supplier performance ratings and reviews
+
+---
+
+### 12.1 Staff Salary Management (Admin Only)
+
+#### 12.1.1 Get All Users with Salary Information
+**GET** `/api/core/users`
+
+Retrieves all staff members with their salary information. **Admin only.**
+
+**Headers:**
+```
+Authorization: Bearer {token}
+```
+
+**Response (200):**
+```json
+{
+  "data": [
+    {
+      "id": 1,
+      "name": "John Doe",
+      "email": "john@example.com",
+      "user_role": "admin",
+      "base_salary": 50000.00,
+      "allowances": 5000.00,
+      "deductions": 2000.00,
+      "salary_currency": "PKR",
+      "salary_effective_from": "2025-01-01",
+      "created_at": "2025-09-14T10:00:00.000000Z",
+      "updated_at": "2025-09-14T10:00:00.000000Z"
+    },
+    {
+      "id": 2,
+      "name": "Jane Smith",
+      "email": "jane@example.com",
+      "user_role": "staff",
+      "base_salary": 30000.00,
+      "allowances": 2000.00,
+      "deductions": 1000.00,
+      "salary_currency": "PKR",
+      "salary_effective_from": "2025-02-01",
+      "created_at": "2025-09-15T10:00:00.000000Z",
+      "updated_at": "2025-09-15T10:00:00.000000Z"
+    }
+  ]
+}
+```
+
+---
+
+#### 12.1.2 Get Single User with Salary
+**GET** `/api/core/users/{id}`
+
+Retrieves a specific user's details including salary information. **Admin only.**
+
+**Headers:**
+```
+Authorization: Bearer {token}
+```
+
+**Response (200):**
+```json
+{
+  "data": {
+    "id": 2,
+    "name": "Jane Smith",
+    "email": "jane@example.com",
+    "user_role": "staff",
+    "base_salary": 30000.00,
+    "allowances": 2000.00,
+    "deductions": 1000.00,
+    "salary_currency": "PKR",
+    "salary_effective_from": "2025-02-01",
+    "created_at": "2025-09-15T10:00:00.000000Z",
+    "updated_at": "2025-09-15T10:00:00.000000Z"
+  }
+}
+```
+
+---
+
+#### 12.1.3 Create User with Salary (Admin Only)
+**POST** `/api/core/users`
+
+Creates a new user account with optional salary information. **Admin only.**
+
+**Headers:**
+```
+Authorization: Bearer {token}
+Content-Type: application/json
+```
+
+**Request Body:**
+```json
+{
+  "name": "Ahmed Khan",
+  "email": "ahmed@example.com",
+  "password": "securepassword123",
+  "user_role": "staff",
+  "base_salary": 35000.00,
+  "allowances": 3000.00,
+  "deductions": 1500.00,
+  "salary_currency": "PKR",
+  "salary_effective_from": "2025-10-16"
+}
+```
+
+**Response (201):**
+```json
+{
+  "message": "User created successfully",
+  "data": {
+    "id": 3,
+    "name": "Ahmed Khan",
+    "email": "ahmed@example.com",
+    "user_role": "staff",
+    "base_salary": 35000.00,
+    "allowances": 3000.00,
+    "deductions": 1500.00,
+    "salary_currency": "PKR",
+    "salary_effective_from": "2025-10-16"
+  }
+}
+```
+
+---
+
+#### 12.1.4 Update User Salary (Admin Only)
+**PUT** `/api/core/users/{id}`
+
+Updates user details including salary information. **Admin only.**
+
+**Headers:**
+```
+Authorization: Bearer {token}
+Content-Type: application/json
+```
+
+**Request Body (all fields optional):**
+```json
+{
+  "name": "Ahmed Khan",
+  "email": "ahmed.khan@example.com",
+  "base_salary": 40000.00,
+  "allowances": 4000.00,
+  "deductions": 2000.00,
+  "salary_currency": "PKR",
+  "salary_effective_from": "2025-11-01"
+}
+```
+
+**Response (200):**
+```json
+{
+  "message": "User updated successfully",
+  "data": {
+    "id": 3,
+    "name": "Ahmed Khan",
+    "email": "ahmed.khan@example.com",
+    "user_role": "staff",
+    "base_salary": 40000.00,
+    "allowances": 4000.00,
+    "deductions": 2000.00,
+    "salary_currency": "PKR",
+    "salary_effective_from": "2025-11-01"
+  }
+}
+```
+
+---
+
+#### 12.1.5 Delete User (Admin Only)
+**DELETE** `/api/core/users/{id}`
+
+Deletes a user account. Cannot delete the last admin or yourself. **Admin only.**
+
+**Headers:**
+```
+Authorization: Bearer {token}
+```
+
+**Response (200):**
+```json
+{
+  "message": "User deleted successfully"
+}
+```
+
+**Error Responses:**
+```json
+{
+  "message": "Cannot delete the last admin user",
+  "error": "Operation not permitted"
+}
+```
+
+---
+
+### 12.2 Staff Attendance Tracking (Admin Only)
+
+#### 12.2.1 Mark Attendance
+**POST** `/api/attendance/mark`
+
+Marks or updates attendance for a staff member on a specific date. **Admin only.**
+
+**Headers:**
+```
+Authorization: Bearer {token}
+Content-Type: application/json
+```
+
+**Request Body:**
+```json
+{
+  "user_id": 2,
+  "date": "2025-10-16",
+  "status": "present",
+  "check_in": "09:00:00",
+  "check_out": "17:30:00",
+  "notes": "Regular working day"
+}
+```
+
+**Fields:**
+- `user_id` (required): ID of the staff member
+- `date` (required): Date in format YYYY-MM-DD
+- `status` (required): One of `present`, `absent`, or `leave`
+- `check_in` (optional): Check-in time in HH:MM:SS format
+- `check_out` (optional): Check-out time in HH:MM:SS format
+- `notes` (optional): Additional notes about the attendance
+
+**Response (201 or 200):**
+```json
+{
+  "message": "Attendance marked successfully",
+  "data": {
+    "id": 5,
+    "user_id": 2,
+    "date": "2025-10-16",
+    "status": "present",
+    "check_in": "09:00:00",
+    "check_out": "17:30:00",
+    "notes": "Regular working day",
+    "created_at": "2025-10-16T10:00:00.000000Z",
+    "updated_at": "2025-10-16T10:00:00.000000Z"
+  }
+}
+```
+
+---
+
+#### 12.2.2 List Attendance Records
+**GET** `/api/attendance/list`
+
+Retrieves attendance records with optional date range filtering. **Admin only.**
+
+**Headers:**
+```
+Authorization: Bearer {token}
+```
+
+**Query Parameters (optional):**
+```
+from=2025-10-01&to=2025-10-31&user_id=2
+```
+
+- `from` (optional): Start date in format YYYY-MM-DD
+- `to` (optional): End date in format YYYY-MM-DD
+- `user_id` (optional): Filter by specific user ID
+
+**Response (200):**
+```json
+{
+  "data": [
+    {
+      "id": 1,
+      "user_id": 2,
+      "user": {
+        "id": 2,
+        "name": "Jane Smith",
+        "email": "jane@example.com",
+        "user_role": "staff"
+      },
+      "date": "2025-10-15",
+      "status": "present",
+      "check_in": "09:00:00",
+      "check_out": "17:30:00",
+      "notes": null,
+      "created_at": "2025-10-15T09:00:00.000000Z",
+      "updated_at": "2025-10-15T17:30:00.000000Z"
+    },
+    {
+      "id": 2,
+      "user_id": 2,
+      "user": {
+        "id": 2,
+        "name": "Jane Smith",
+        "email": "jane@example.com",
+        "user_role": "staff"
+      },
+      "date": "2025-10-16",
+      "status": "absent",
+      "check_in": null,
+      "check_out": null,
+      "notes": "Sick leave",
+      "created_at": "2025-10-16T08:00:00.000000Z",
+      "updated_at": "2025-10-16T08:00:00.000000Z"
+    }
+  ],
+  "summary": {
+    "total_records": 2,
+    "total_present": 1,
+    "total_absent": 1,
+    "total_leave": 0
+  }
+}
+```
+
+---

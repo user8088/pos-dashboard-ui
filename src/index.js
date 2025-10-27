@@ -24,6 +24,7 @@ import AdminLayout from "layouts/Admin.js";
 import RTLLayout from "layouts/RTL.js";
 import FactoryLayout from "layouts/Factory.js";
 import ProtectedRoute from "components/ProtectedRoute";
+import { DashboardProvider } from "contexts/DashboardContext";
 
 // Smart redirect component that checks authentication
 const SmartRedirect = () => {
@@ -45,14 +46,16 @@ const SmartRedirect = () => {
 };
 
 ReactDOM.render(
-  <HashRouter>
-    <Switch>
-      <Route path={`/auth`} component={AuthLayout} />
-      <ProtectedRoute path={`/admin`} component={AdminLayout} />
-      <ProtectedRoute path={`/factory`} component={FactoryLayout} />
-      <ProtectedRoute path={`/rtl`} component={RTLLayout} />
-      <Route exact path="/" component={SmartRedirect} />
-    </Switch>
-  </HashRouter>,
+  <DashboardProvider>
+    <HashRouter>
+      <Switch>
+        <Route path={`/auth`} component={AuthLayout} />
+        <ProtectedRoute path={`/admin`} component={AdminLayout} />
+        <ProtectedRoute path={`/factory`} component={FactoryLayout} />
+        <ProtectedRoute path={`/rtl`} component={RTLLayout} />
+        <Route exact path="/" component={SmartRedirect} />
+      </Switch>
+    </HashRouter>
+  </DashboardProvider>,
   document.getElementById("root")
 );

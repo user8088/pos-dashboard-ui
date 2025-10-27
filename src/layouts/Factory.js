@@ -22,6 +22,7 @@ import "@fontsource/roboto/500.css";
 import "@fontsource/roboto/700.css";
 import theme from "theme/theme.js";
 import { SearchProvider } from "../contexts/SearchContext";
+import { DashboardProvider } from "../contexts/DashboardContext";
 
 export default function FactoryDashboard(props) {
 	const { ...rest } = props;
@@ -96,7 +97,8 @@ export default function FactoryDashboard(props) {
 	// Chakra Color Mode
 	return (
 		<ChakraProvider theme={theme} resetCss={false}>
-			<SearchProvider>
+			<DashboardProvider>
+				<SearchProvider>
 				<Sidebar
 					routes={routes}
 					logoText={'MUGHAL FACTORY'}
@@ -145,7 +147,8 @@ export default function FactoryDashboard(props) {
 						onTransparent={() => setSidebarVariant('transparent')}
 					/>
 				</MainPanel>
-			</SearchProvider>
+				</SearchProvider>
+			</DashboardProvider>
 		</ChakraProvider>
 	);
 }

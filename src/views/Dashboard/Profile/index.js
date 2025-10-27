@@ -20,7 +20,7 @@ function Profile() {
   );
 
   return (
-    <Flex direction='column'>
+    <Flex direction='column' pt={{ base: "120px", md: "75px" }}>
       <Header
         backgroundHeader={ProfileBgImage}
         backgroundProfile={bgProfile}

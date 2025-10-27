@@ -1,0 +1,710 @@
+---
+alwaysApply: true
+---
+# Unit Conversion System Guide
+
+## Overview
+
+The Unit Conversion System allows you to manage inventory in **primary units** (e.g., KG, sq ft, liters) while selling in **secondary units** (e.g., grams, sq inch, ml). The system automatically handles conversions and updates stock levels appropriately.
+
+## Key Features
+
+✨ **Dual Unit Support**: Add stock in primary units, sell in secondary units  
+🔄 **Automatic Conversion**: System automatically converts between units  
+📊 **Accurate Stock Tracking**: Stock deductions happen in primary units  
+💰 **Flexible Pricing**: Set prices per secondary unit for sales  
+🎯 **Conversion Management**: Define and manage conversion factors  
+⚡ **Real-time Availability**: See available quantity in both units  
+
+## Use Cases
+
+### Example 1: Weight-Based Products
+- **Primary Unit**: Kilogram (KG)
+- **Secondary Unit**: Gram (g)
+- **Conversion**: 1 KG = 1000 grams
+- **Scenario**: Buy 50 KG of rice, sell 500g packets
+
+### Example 2: Area-Based Products
+- **Primary Unit**: Square Feet (sq ft)
+- **Secondary Unit**: Square Inch (sq in)
+- **Conversion**: 1 sq ft = 144 sq in
+- **Scenario**: Buy 100 sq ft of fabric, sell by sq inch
+
+### Example 3: Volume-Based Products
+- **Primary Unit**: Liter (L)
+- **Secondary Unit**: Milliliter (ml)
+- **Conversion**: 1 L = 1000 ml
+- **Scenario**: Buy 20 L of juice, sell 250ml bottles
+
+## Database Schema
+
+### New Tables
+
+#### 1. `unit_conversions` Table
+Stores conversion relationships between units.
+
+```sql
+CREATE TABLE unit_conversions (
+    id BIGINT PRIMARY KEY,
+    primary_unit_id BIGINT FOREIGN KEY -> units.unit_id,
+    secondary_unit_id BIGINT FOREIGN KEY -> units.unit_id,
+    conversion_factor DECIMAL(15,6), -- How many secondary units in 1 primary unit
+    notes TEXT,
+    created_at TIMESTAMP,
+    updated_at TIMESTAMP,
+    UNIQUE(primary_unit_id, secondary_unit_id)
+);
+```
+
+**Example Records:**
+| primary_unit_id | secondary_unit_id | conversion_factor | notes |
+|-----------------|-------------------|-------------------|-------|
+| 1 (KG) | 2 (gram) | 1000.000000 | 1 KG = 1000 grams |
+| 3 (sq ft) | 4 (sq in) | 144.000000 | 1 sq ft = 144 sq in |
+| 5 (liter) | 6 (ml) | 1000.000000 | 1 L = 1000 ml |
+
+### Updated Tables
+
+#### 2. `stock_management` Table (New Columns)
+```sql
+ALTER TABLE stock_management ADD COLUMN:
+- secondary_unit_id BIGINT (nullable, FK -> units.unit_id)
+- conversion_factor DECIMAL(15,6) (nullable)
+- allow_secondary_sales BOOLEAN (default: false)
+```
+
+**Field Descriptions:**
+- `unit_id`: Primary unit for inventory (e.g., KG)
+- `secondary_unit_id`: Secondary unit for sales (e.g., grams)
+- `conversion_factor`: How many secondary units in 1 primary unit
+- `allow_secondary_sales`: Whether this item can be sold in secondary units
+- `quantity_per_unit`: Always stored in **primary units**
+
+## API Endpoints
+
+### 1. Unit Conversion Management
+
+#### 1.1 Create Unit Conversion
+**POST** `/api/core/unit-conversions`
+
+Define a conversion relationship between two units.
+
+```bash
+curl -X POST "http://localhost:8000/api/core/unit-conversions" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "primary_unit_id": 1,
+    "secondary_unit_id": 2,
+    "conversion_factor": 1000,
+    "notes": "1 KG = 1000 grams"
+  }'
+```
+
+**Response (201):**
+```json
+{
+  "message": "Unit conversion created successfully",
+  "data": {
+    "id": 1,
+    "primary_unit": {
+      "id": 1,
+      "name": "Kilogram"
+    },
+    "secondary_unit": {
+      "id": 2,
+      "name": "Gram"
+    },
+    "conversion_factor": 1000,
+    "notes": "1 KG = 1000 grams"
+  }
+}
+```
+
+---
+
+#### 1.2 Get All Conversions
+**GET** `/api/core/unit-conversions`
+
+```bash
+curl -X GET "http://localhost:8000/api/core/unit-conversions" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+**Response (200):**
+```json
+{
+  "data": [
+    {
+      "id": 1,
+      "primary_unit": {
+        "id": 1,
+        "name": "Kilogram",
+        "metric": "weight"
+      },
+      "secondary_unit": {
+        "id": 2,
+        "name": "Gram",
+        "metric": "weight"
+      },
+      "conversion_factor": 1000,
+      "notes": "1 KG = 1000 grams"
+    }
+  ]
+}
+```
+
+---
+
+#### 1.3 Update Conversion Factor
+**PUT** `/api/core/unit-conversions/{id}`
+
+```bash
+curl -X PUT "http://localhost:8000/api/core/unit-conversions/1" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "conversion_factor": 1000.5,
+    "notes": "Updated conversion factor"
+  }'
+```
+
+---
+
+#### 1.4 Delete Conversion
+**DELETE** `/api/core/unit-conversions/{id}`
+
+```bash
+curl -X DELETE "http://localhost:8000/api/core/unit-conversions/1" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+---
+
+#### 1.5 Get Conversion Factor
+**GET** `/api/core/unit-conversions/factor`
+
+Query conversion factor between two specific units.
+
+```bash
+curl -X GET "http://localhost:8000/api/core/unit-conversions/factor?primary_unit_id=1&secondary_unit_id=2" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+**Response (200):**
+```json
+{
+  "data": {
+    "primary_unit": "Kilogram",
+    "secondary_unit": "Gram",
+    "conversion_factor": 1000,
+    "example": "1 Kilogram = 1000 Gram"
+  }
+}
+```
+
+---
+
+#### 1.6 Convert Value Between Units
+**POST** `/api/core/unit-conversions/convert`
+
+Convert a value from one unit to another.
+
+```bash
+curl -X POST "http://localhost:8000/api/core/unit-conversions/convert" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "value": 5,
+    "from_unit_id": 1,
+    "to_unit_id": 2
+  }'
+```
+
+**Response (200):**
+```json
+{
+  "data": {
+    "original_value": 5,
+    "converted_value": 5000,
+    "from_unit": "Kilogram",
+    "to_unit": "Gram",
+    "formula": "5 Kilogram = 5000 Gram"
+  }
+}
+```
+
+---
+
+### 2. Stock Management with Unit Conversion
+
+#### 2.1 Add Stock with Secondary Unit
+**POST** `/api/core/stock`
+
+```bash
+curl -X POST "http://localhost:8000/api/core/stock" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "item_name": "Premium Rice",
+    "unit_id": 1,
+    "secondary_unit_id": 2,
+    "conversion_factor": 1000,
+    "allow_secondary_sales": true,
+    "quantity_per_unit": 50,
+    "item_price": 150,
+    "category_id": 5
+  }'
+```
+
+**Fields:**
+- `unit_id`: Primary unit (e.g., KG) - **Required**
+- `secondary_unit_id`: Secondary unit (e.g., grams) - **Optional**
+- `conversion_factor`: Conversion ratio - **Required if secondary_unit_id is provided**
+- `allow_secondary_sales`: Enable selling in secondary units - **Optional** (default: false)
+- `quantity_per_unit`: Stock quantity in **primary units** - **Required**
+
+**Response (200):**
+```json
+{
+  "item_id": 15,
+  "item_name": "Premium Rice",
+  "unit_id": 1,
+  "unit": {
+    "unit_id": 1,
+    "unit_name": "Kilogram"
+  },
+  "secondary_unit_id": 2,
+  "secondaryUnit": {
+    "unit_id": 2,
+    "unit_name": "Gram"
+  },
+  "conversion_factor": 1000,
+  "allow_secondary_sales": true,
+  "quantity_per_unit": 50,
+  "available_secondary_quantity": 50000,
+  "item_price": 150
+}
+```
+
+---
+
+#### 2.2 Update Stock with Unit Conversion
+**PUT** `/api/core/stock/{id}`
+
+```bash
+curl -X PUT "http://localhost:8000/api/core/stock/15" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "secondary_unit_id": 2,
+    "conversion_factor": 1000,
+    "allow_secondary_sales": true
+  }'
+```
+
+---
+
+#### 2.3 Get Stock (includes secondary unit info)
+**GET** `/api/core/stock`
+
+```bash
+curl -X GET "http://localhost:8000/api/core/stock" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+**Response includes:**
+```json
+{
+  "item_id": 15,
+  "item_name": "Premium Rice",
+  "quantity_per_unit": 50,
+  "unit": {
+    "unit_name": "Kilogram"
+  },
+  "secondaryUnit": {
+    "unit_name": "Gram"
+  },
+  "conversion_factor": 1000,
+  "allow_secondary_sales": true,
+  "available_secondary_quantity": 50000
+}
+```
+
+---
+
+### 3. Customer Purchases with Secondary Units
+
+#### 3.1 Create Customer Purchase (Selling in Secondary Units)
+**POST** `/api/core/customer`
+
+```bash
+curl -X POST "http://localhost:8000/api/core/customer" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "customer_name": "ABC Store",
+    "customer_phone_no": "03001234567",
+    "items": [
+      {
+        "stock_id": 15,
+        "quantity": 500,
+        "use_secondary_unit": true,
+        "unit_price": 0.20
+      }
+    ],
+    "paid_cash": 100
+  }'
+```
+
+**Key Fields:**
+- `quantity`: Amount in the unit being sold
+- `use_secondary_unit`: `true` to sell in secondary units, `false` or omit for primary units
+- `unit_price`: Price per unit (secondary unit if `use_secondary_unit` is true)
+
+**What Happens:**
+1. Customer buys **500 grams** (secondary unit)
+2. System converts: 500g ÷ 1000 = **0.5 KG** (primary unit)
+3. Stock deducted: 50 KG - 0.5 KG = **49.5 KG** remaining
+4. Bill calculated: 500 × 0.20 = **100 PKR**
+
+---
+
+#### 3.2 Add Purchase for Existing Customer
+**POST** `/api/core/customer/{id}/purchase`
+
+```bash
+curl -X POST "http://localhost:8000/api/core/customer/5/purchase" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "items": [
+      {
+        "stock_id": 15,
+        "quantity": 2500,
+        "use_secondary_unit": true,
+        "unit_price": 0.18
+      }
+    ],
+    "paid_online": 450
+  }'
+```
+
+**Result:**
+- Sells 2500 grams (2.5 KG)
+- Deducts 2.5 KG from stock
+- Total: 2500 × 0.18 = 450 PKR
+
+---
+
+## How It Works
+
+### Stock Addition Flow
+```
+1. Admin adds stock in PRIMARY units (e.g., 50 KG)
+   ↓
+2. Optionally sets SECONDARY unit (e.g., grams)
+   ↓
+3. Sets conversion factor (e.g., 1 KG = 1000 grams)
+   ↓
+4. Enables secondary sales (allow_secondary_sales = true)
+   ↓
+5. System calculates available secondary quantity
+   (50 KG × 1000 = 50,000 grams)
+```
+
+### Sales Flow (Secondary Units)
+```
+1. Customer buys in SECONDARY units (e.g., 500 grams)
+   ↓
+2. System converts to PRIMARY units
+   (500 grams ÷ 1000 = 0.5 KG)
+   ↓
+3. Checks stock availability in PRIMARY units
+   (Is 0.5 KG available?)
+   ↓
+4. Deducts stock in PRIMARY units
+   (50 KG - 0.5 KG = 49.5 KG)
+   ↓
+5. Calculates bill using SECONDARY unit price
+   (500 grams × 0.20 PKR/gram = 100 PKR)
+```
+
+### Sales Flow (Primary Units)
+```
+1. Customer buys in PRIMARY units (e.g., 2 KG)
+   ↓
+2. No conversion needed (use_secondary_unit = false)
+   ↓
+3. Checks stock availability
+   (Is 2 KG available?)
+   ↓
+4. Deducts stock in PRIMARY units
+   (49.5 KG - 2 KG = 47.5 KG)
+   ↓
+5. Calculates bill using PRIMARY unit price
+   (2 KG × 150 PKR/KG = 300 PKR)
+```
+
+## Important Notes
+
+⚠️ **Stock is ALWAYS stored in primary units**  
+⚠️ **Conversions happen automatically during sales**  
+⚠️ **Secondary unit sales must be explicitly enabled**  
+⚠️ **Conversion factor must be > 0**  
+⚠️ **Primary and secondary units must be different**  
+
+## Best Practices
+
+### 1. Setting Up Conversions
+
+✅ **Do:**
+- Use standard conversion factors (1 KG = 1000g, not 1000.5g)
+- Add notes explaining the conversion
+- Test conversions before enabling sales
+- Use consistent unit naming
+
+❌ **Don't:**
+- Create circular conversions (A→B, B→A)
+- Use approximate conversion factors
+- Change conversion factors frequently
+- Mix unit types (weight ↔ volume)
+
+### 2. Managing Stock
+
+✅ **Do:**
+- Always add stock in primary units
+- Set realistic conversion factors
+- Enable secondary sales only when needed
+- Monitor available quantities in both units
+
+❌ **Don't:**
+- Add stock in secondary units
+- Change conversion factors after sales
+- Disable secondary sales if already sold
+- Use conversion factors < 1 (swap primary/secondary instead)
+
+### 3. Processing Sales
+
+✅ **Do:**
+- Specify `use_secondary_unit: true` when selling in secondary units
+- Set unit_price per the unit being sold
+- Verify available quantity before sale
+- Handle stock shortage errors gracefully
+
+❌ **Don't:**
+- Mix primary and secondary unit prices
+- Assume conversions without checking
+- Ignore stock availability warnings
+- Process sales without conversion setup
+
+## Common Scenarios
+
+### Scenario 1: Bulk Purchase, Retail Sale
+
+**Setup:**
+```json
+{
+  "item_name": "Sugar",
+  "unit_id": 1,
+  "secondary_unit_id": 2,
+  "conversion_factor": 1000,
+  "allow_secondary_sales": true,
+  "quantity_per_unit": 100,
+  "item_price": 120
+}
+```
+
+**Purchase:** 100 KG at 120 PKR/KG  
+**Sell:** 500g packets at 0.15 PKR/gram  
+
+**Result:**
+- 1 packet (500g) = 75 PKR
+- Stock deducted: 0.5 KG per packet
+- Can sell 200 packets from 100 KG
+
+---
+
+### Scenario 2: Fabric by Area
+
+**Setup:**
+```json
+{
+  "item_name": "Cotton Fabric",
+  "unit_id": 3,
+  "secondary_unit_id": 4,
+  "conversion_factor": 144,
+  "allow_secondary_sales": true,
+  "quantity_per_unit": 50,
+  "item_price": 500
+}
+```
+
+**Purchase:** 50 sq ft at 500 PKR/sq ft  
+**Sell:** By sq inch at 4 PKR/sq in  
+
+**Result:**
+- 1 sq ft = 144 sq in
+- 50 sq ft = 7200 sq in available
+- Customer buys 288 sq in (2 sq ft)
+- Stock deducted: 2 sq ft
+
+---
+
+### Scenario 3: Liquid Products
+
+**Setup:**
+```json
+{
+  "item_name": "Olive Oil",
+  "unit_id": 5,
+  "secondary_unit_id": 6,
+  "conversion_factor": 1000,
+  "allow_secondary_sales": true,
+  "quantity_per_unit": 20,
+  "item_price": 2000
+}
+```
+
+**Purchase:** 20 Liters at 2000 PKR/L  
+**Sell:** 250ml bottles at 0.60 PKR/ml  
+
+**Result:**
+- 1 bottle (250ml) = 150 PKR
+- Stock deducted: 0.25 L per bottle
+- Can sell 80 bottles from 20 L
+
+---
+
+## Error Handling
+
+### Error 1: Insufficient Stock (Secondary Units)
+```json
+{
+  "message": "Purchase quantity exceeds available stock for item_id 15",
+  "available_primary": 0.3,
+  "available_secondary": 300
+}
+```
+**Solution:** Customer requested more than available. Show available quantity in their preferred unit.
+
+### Error 2: Conversion Not Found
+```json
+{
+  "message": "No conversion found between these units"
+}
+```
+**Solution:** Create a conversion using `POST /unit-conversions`.
+
+### Error 3: Secondary Sales Disabled
+**Symptom:** System sells in primary units even when `use_secondary_unit: true`  
+**Solution:** Ensure `allow_secondary_sales: true` in stock record.
+
+### Error 4: Invalid Conversion Factor
+```json
+{
+  "message": "The given data was invalid.",
+  "errors": {
+    "conversion_factor": ["The conversion factor must be at least 0.000001."]
+  }
+}
+```
+**Solution:** Use a positive conversion factor > 0.
+
+---
+
+## Frontend Integration Examples
+
+### Vue.js / React Example
+
+```javascript
+// Add stock with secondary unit
+async function addStockWithConversion(stockData) {
+  const response = await fetch('/api/core/stock', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      item_name: stockData.name,
+      unit_id: stockData.primaryUnitId,
+      secondary_unit_id: stockData.secondaryUnitId,
+      conversion_factor: stockData.conversionFactor,
+      allow_secondary_sales: true,
+      quantity_per_unit: stockData.quantity,
+      item_price: stockData.price
+    })
+  });
+  return response.json();
+}
+
+// Sell in secondary units
+async function sellInSecondaryUnits(customerId, items) {
+  const response = await fetch(`/api/core/customer/${customerId}/purchase`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      items: items.map(item => ({
+        stock_id: item.stockId,
+        quantity: item.quantity,
+        use_secondary_unit: true, // Sell in secondary units
+        unit_price: item.pricePerSecondaryUnit
+      })),
+      paid_cash: calculateTotal(items)
+    })
+  });
+  return response.json();
+}
+
+// Display available quantity in both units
+function displayAvailability(stock) {
+  if (stock.allow_secondary_sales && stock.secondaryUnit) {
+    return `
+      Available: ${stock.quantity_per_unit} ${stock.unit.unit_name}
+      (${stock.available_secondary_quantity} ${stock.secondaryUnit.unit_name})
+    `;
+  }
+  return `Available: ${stock.quantity_per_unit} ${stock.unit.unit_name}`;
+}
+```
+
+---
+
+## Troubleshooting
+
+### Issue: Stock not deducting correctly
+**Check:**
+1. Is `use_secondary_unit` set correctly?
+2. Is `conversion_factor` accurate?
+3. Is `allow_secondary_sales` enabled?
+
+### Issue: Wrong price calculation
+**Check:**
+1. Is `unit_price` per the correct unit?
+2. If selling in grams, price should be per gram, not per KG
+
+### Issue: Cannot create conversion
+**Check:**
+1. Are both units different?
+2. Does conversion already exist?
+3. Is conversion_factor > 0?
+
+---
+
+## Summary
+
+The Unit Conversion System provides a powerful way to manage inventory efficiently:
+
+✅ Buy in bulk (primary units)  
+✅ Sell in retail (secondary units)  
+✅ Automatic conversions  
+✅ Accurate stock tracking  
+✅ Flexible pricing  
+✅ Real-time availability  
+
+For complete API documentation, see `API_DOCUMENTATION.md`.
+

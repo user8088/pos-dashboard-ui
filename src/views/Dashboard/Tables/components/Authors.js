@@ -53,10 +53,15 @@ import logo from "assets/img/avatars/placeholder.png";
 import { FaPlus, FaFileCsv, FaRuler, FaTags, FaTrash, FaCog } from "react-icons/fa";
 import { EditIcon, DeleteIcon, HamburgerIcon } from "@chakra-ui/icons";
 import { useSearch } from "contexts/SearchContext";
+import { useDashboard } from "contexts/DashboardContext";
+import { ApiService } from "services/apiService";
+import { getHeaders } from "services/apiConfig";
+import unitConversionService from "services/unitConversionService";
 
 const Authors = ({ title, captions, data }) => {
   const textColor = useColorModeValue("gray.700", "white");
   const toast = useToast();
+  const { currentDashboard, isFactory } = useDashboard();
   const { isOpen, onOpen, onClose } = useDisclosure();
   const { isOpen: isEditOpen, onOpen: onEditOpen, onClose: onEditClose } = useDisclosure();
   const { filterData, isSearchActive } = useSearch();
@@ -72,7 +77,10 @@ const Authors = ({ title, captions, data }) => {
     category: "",
     status: "in_stock",
     stockValue: "",
-    itemPrice: ""
+    itemPrice: "",
+    secondaryUnit: "",
+    conversionFactor: "",
+    allowSecondarySales: false
   });
   const [editingStock, setEditingStock] = React.useState(null);
   const [editIndex, setEditIndex] = React.useState(-1);
@@ -111,6 +119,7 @@ const Authors = ({ title, captions, data }) => {
     insufficientMaterials: [],
     insufficientComponents: []
   });
+  const [unitConversions, setUnitConversions] = React.useState([]);
   
   // Auto-calc helpers for stock value
   const recalcAddStockValue = (nextItemPrice, nextQuantity, nextProducedQty) => {
@@ -137,50 +146,53 @@ const Authors = ({ title, captions, data }) => {
     fetchCategories();
     fetchRawMaterials();
     fetchStock();
+    fetchUnitConversions();
   }, []);
+
+  const fetchUnitConversions = async () => {
+    try {
+      const data = await unitConversionService.getUnitConversions();
+      if (data.data) {
+        setUnitConversions(data.data);
+      } else {
+        setUnitConversions([]);
+      }
+    } catch (error) {
+      console.error('Error fetching unit conversions:', error);
+      setUnitConversions([]);
+    }
+  };
 
   const fetchUnits = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000/api'}/core/unit`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Accept': 'application/json',
-        },
-      });
-
-      if (response.ok) {
-        const unitsData = await response.json();
-        const formattedUnits = unitsData.map(unit => ({
+      const apiService = new ApiService(currentDashboard);
+      const data = await apiService.getUnits();
+      
+      if (data.data) {
+        const formattedUnits = data.data.map(unit => ({
           unitName: unit.unit_name,
           unitMetric: unit.metric,
           unitId: unit.unit_id
         }));
         setCustomUnits(formattedUnits);
-        setUnits(unitsData); // Store raw units data for predefined unit lookup
+        setUnits(data.data);
       } else {
         console.error('Failed to fetch units');
+        setUnits([]);
       }
     } catch (error) {
       console.error('Error fetching units:', error);
+      setUnits([]);
     }
   };
 
   const fetchCategories = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000/api'}/core/category`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Accept': 'application/json',
-        },
-      });
-
-      if (response.ok) {
-        const categoriesData = await response.json();
-        const formattedCategories = categoriesData.map(category => ({
+      const apiService = new ApiService(currentDashboard);
+      const data = await apiService.getCategories();
+      
+      if (data.data) {
+        const formattedCategories = data.data.map(category => ({
           categoryId: category.category_id,
           categoryName: category.category_name,
           serialAlias: category.serial_alias || null
@@ -188,26 +200,26 @@ const Authors = ({ title, captions, data }) => {
         setCategories(formattedCategories);
       } else {
         console.error('Failed to fetch categories');
+        setCategories([]);
       }
     } catch (error) {
       console.error('Error fetching categories:', error);
+      setCategories([]);
     }
   };
 
   const fetchRawMaterials = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000/api'}/core/raw-material`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Accept': 'application/json',
-        },
-      });
-
-      if (response.ok) {
-        const rawMaterialsData = await response.json();
-        const formattedRawMaterials = rawMaterialsData.map(material => ({
+      if (!isFactory) {
+        setRawMaterials([]);
+        return;
+      }
+      
+      const apiService = new ApiService(currentDashboard);
+      const data = await apiService.getRawMaterials();
+      
+      if (data.data) {
+        const formattedRawMaterials = data.data.map(material => ({
           materialId: material.id,
           materialName: material.material_name,
           amountPerUnit: material.amount_per_unit,
@@ -216,30 +228,22 @@ const Authors = ({ title, captions, data }) => {
         setRawMaterials(formattedRawMaterials);
       } else {
         console.error('Failed to fetch raw materials');
+        setRawMaterials([]);
       }
     } catch (error) {
       console.error('Error fetching raw materials:', error);
+      setRawMaterials([]);
     }
   };
 
   const fetchStock = async () => {
     setIsLoading(true);
     try {
-      const token = localStorage.getItem('token');
-      // Add timestamp to prevent caching issues
-      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000/api'}/core/stock?t=${Date.now()}`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Accept': 'application/json',
-          'Cache-Control': 'no-cache'
-        },
-      });
-
-      if (response.ok) {
-        const stockItems = await response.json();
-        console.log('Raw stock items from API:', stockItems);
-        const formattedStock = stockItems.map(item => ({
+      const apiService = new ApiService(currentDashboard);
+      const data = await apiService.getStock();
+      
+      if (data.data && Array.isArray(data.data)) {
+        const formattedStock = data.data.map(item => ({
           logo: logo,
           name: item.item_name,
           serialNumber: item.serial_number || '-',
@@ -261,7 +265,13 @@ const Authors = ({ title, captions, data }) => {
           stockStatusRaw: item.stock_status || 'in_stock',
           itemPriceRaw: item.item_price || 0,
           totalSoldRaw: item.total_sold || 0,
-          totalProfitRaw: item.total_profit || 0
+          totalProfitRaw: item.total_profit || 0,
+          // Secondary unit conversion fields
+          secondaryUnitId: item.secondary_unit_id || null,
+          secondaryUnit: item.secondaryUnit?.unit_name || null,
+          conversionFactor: item.conversion_factor || null,
+          allowSecondarySales: item.allow_secondary_sales || false,
+          availableSecondaryQuantity: item.available_secondary_quantity || null
         }));
         console.log('Formatted stock data:', formattedStock);
         setStockData(formattedStock);
@@ -864,27 +874,12 @@ const Authors = ({ title, captions, data }) => {
   const handleAddStock = async () => {
     if (!newStock.name || !newStock.unit || !newStock.category) return;
     
-    // Validate production requirements if production is enabled
-    if (shouldProduceImmediately && !productionValidation.isValid) {
-      const insufficientItems = productionValidation.insufficientMaterials.map(m => 
-        `${m.materialName} (${m.type === 'component' ? 'Component' : 'Raw Material'}): need ${parseFloat(m.required || 0).toFixed(2)}, have ${parseFloat(m.available || 0).toFixed(2)}`
-      ).join(', ');
-      
-      toast({
-        title: "Cannot Create Stock",
-        description: `Insufficient materials/components for production: ${insufficientItems}. Please adjust quantities or disable immediate production.`,
-        status: "error",
-        duration: 7000,
-        isClosable: true,
-      });
-      return;
-    }
-    
     try {
+      const apiService = new ApiService(currentDashboard);
+      
       // Find or create unit id
       let selectedUnit = customUnits.find(unit => unit.unitName === newStock.unit);
       let unitId = selectedUnit ? selectedUnit.unitId : null;
-      const token = localStorage.getItem('token');
 
       if (!unitId && newStock.unit === 'Custom') {
         if (!newStock.customUnit) {
@@ -892,25 +887,19 @@ const Authors = ({ title, captions, data }) => {
           return;
         }
         // Create custom unit first
-        const unitResp = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000/api'}/core/unit`, {
-          method: 'POST',
-          headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json', 'Accept': 'application/json' },
-          body: JSON.stringify({ unit_name: newStock.customUnit, metric: newStock.customUnit, custom_metric: null })
+        const unitData = await apiService.addUnit({
+          unit_name: newStock.customUnit,
+          metric: newStock.customUnit,
+          custom_metric: null
         });
-        const unitData = await unitResp.json();
-        if (!unitResp.ok) {
-          toast({ title: 'Failed to create unit', description: unitData.message || 'Could not create custom unit', status: 'error', duration: 5000, isClosable: true });
-          return;
-        }
-        unitId = unitData.unit_id;
-        setCustomUnits(prev => [...prev, { unitName: unitData.unit_name, unitMetric: unitData.metric, unitId: unitData.unit_id }]);
-        setNewStock(prev => ({ ...prev, unit: unitData.unit_name }));
+        unitId = unitData.data.unit_id;
+        setCustomUnits(prev => [...prev, { unitName: unitData.data.unit_name, unitMetric: unitData.data.metric, unitId: unitData.data.unit_id }]);
+        setNewStock(prev => ({ ...prev, unit: unitData.data.unit_name }));
       }
       
-      // Find the selected category ID and alias
+      // Find the selected category ID
       const selectedCategory = categories.find(cat => cat.categoryName === newStock.category);
       const categoryId = selectedCategory ? selectedCategory.categoryId : null;
-      const categoryAlias = selectedCategory ? (selectedCategory.serialAlias || null) : null;
       
       if (!unitId) {
         toast({
@@ -923,75 +912,53 @@ const Authors = ({ title, captions, data }) => {
         return;
       }
       
-      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000/api'}/core/stock`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: JSON.stringify({
-          item_name: newStock.name,
-          unit_id: unitId,
-          category_id: categoryId,
-          quantity_per_unit: newStock.quantity ? parseFloat(newStock.quantity) : 0,
-          item_price: newStock.itemPrice ? parseFloat(newStock.itemPrice) : null,
-          stock_value: newStock.stockValue ? parseFloat(newStock.stockValue) : null,
-          stock_status: newStock.status,
-          // Persist serial with alias when alias exists
-          ...(categoryAlias ? { serial_number: `${categoryAlias}-${(Math.random().toString(36).slice(2,10)).toUpperCase()}-${new Date().toISOString().slice(0,10).replace(/-/g,'')}` } : {})
-        }),
+      const response = await apiService.addStock({
+        item_name: newStock.name,
+        unit_id: unitId,
+        category_id: categoryId,
+        quantity_per_unit: newStock.quantity ? parseFloat(newStock.quantity) : 0,
+        item_price: newStock.itemPrice ? parseFloat(newStock.itemPrice) : null,
+        stock_value: newStock.stockValue ? parseFloat(newStock.stockValue) : null,
+        stock_status: newStock.status,
+        // Secondary unit conversion fields - only for Factory dashboard
+        ...(isFactory && newStock.secondaryUnit ? {
+          secondary_unit_id: parseInt(newStock.secondaryUnit),
+          conversion_factor: newStock.conversionFactor ? parseFloat(newStock.conversionFactor) : null,
+          allow_secondary_sales: newStock.allowSecondarySales || false
+        } : {}),
       });
 
-      const data = await response.json();
-
-      if (response.ok) {
+      if (response.success) {
         // Show success message
         toast({
           title: "Stock Item Added Successfully",
-          description: `Stock item "${data.item_name}" has been added to the system${newStock.quantity ? ` with ${newStock.quantity} units` : ' (ready for production)'}.`,
+          description: `Stock item "${response.data.item_name}" has been added to the system.`,
           status: "success",
           duration: 3000,
           isClosable: true,
         });
         
-        // Map raw materials and components to the stock item before optional production
-        if (selectedRawMaterials.length > 0) {
-          await mapRawMaterialsToStock(data.item_id, selectedRawMaterials);
-        }
-        if (selectedComponents.length > 0) {
-          await mapComponentsToStock(data.item_id, selectedComponents);
-        }
-        // If user wants to produce immediately after creating stock
-        if (shouldProduceImmediately && immediateProductionQuantity && parseFloat(immediateProductionQuantity) > 0) {
-          await produceStockImmediately(data.item_id, data.item_name, parseFloat(immediateProductionQuantity));
-        }
-         
-         // Reset form
-    setNewStock({
-      name: "",
-      quantity: "",
-      unit: "",
-      customUnit: "",
-      category: "",
-      status: "in_stock",
-      stockValue: "",
-      itemPrice: ""
-    });
-         
-         // Reset selected raw materials and production settings
-         setSelectedRawMaterials([]);
-         setSelectedComponents([]);
-         setShouldProduceImmediately(false);
-         setImmediateProductionQuantity("");
-         setProductionValidation({ isValid: true, errors: [], insufficientMaterials: [] });
-         
-         // Refresh stock data
-         fetchStock();
-    onClose();
+        // Reset form
+        setNewStock({
+          name: "",
+          quantity: "",
+          unit: "",
+          customUnit: "",
+          category: "",
+          status: "in_stock",
+          stockValue: "",
+          itemPrice: "",
+          secondaryUnit: "",
+          conversionFactor: "",
+          allowSecondarySales: false
+        });
+        
+        // Refresh stock data
+        fetchStock();
+        onClose();
       } else {
         // Handle API errors
-        const errorMessage = data.message || 'Failed to add stock item';
+        const errorMessage = response.message || 'Failed to add stock item';
         toast({
           title: "Failed to Add Stock Item",
           description: errorMessage,
@@ -999,10 +966,6 @@ const Authors = ({ title, captions, data }) => {
           duration: 5000,
           isClosable: true,
         });
-        
-        if (data.errors) {
-          console.error('Validation errors:', data.errors);
-        }
       }
     } catch (error) {
       console.error('Failed to add stock item:', error);
@@ -1046,7 +1009,10 @@ const Authors = ({ title, captions, data }) => {
       components: components || [],
       selectedComponent: "",
       selectedComponentName: "",
-      newComponentQuantity: ""
+      newComponentQuantity: "",
+      secondaryUnit: stock.secondaryUnitId || "",
+      conversionFactor: stock.conversionFactor || "",
+      allowSecondarySales: stock.allowSecondarySales || false
     });
     setEditIndex(index);
     onEditOpen();
@@ -1116,39 +1082,31 @@ const Authors = ({ title, captions, data }) => {
         return;
       }
       
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000/api'}/core/stock/${editingStock.itemId}`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: JSON.stringify({
-          item_name: editingStock.name,
-          unit_id: unitId,
-          category_id: categoryId,
-          quantity_per_unit: parseFloat(editingStock.quantity),
-          item_price: editingStock.itemPrice ? parseFloat(editingStock.itemPrice) : undefined,
-          stock_value: editingStock.stockValue ? parseFloat(editingStock.stockValue) : null,
-          stock_status: editingStock.status,
-          can_be_component: editingStock.canBeComponent || false
-        }),
+      const apiService = new ApiService(currentDashboard);
+      const data = await apiService.updateStock(editingStock.itemId, {
+        item_name: editingStock.name,
+        unit_id: unitId,
+        category_id: categoryId,
+        quantity_per_unit: parseFloat(editingStock.quantity),
+        item_price: editingStock.itemPrice ? parseFloat(editingStock.itemPrice) : undefined,
+        stock_value: editingStock.stockValue ? parseFloat(editingStock.stockValue) : null,
+        stock_status: editingStock.status,
+        can_be_component: editingStock.canBeComponent || false,
+        // Secondary unit conversion fields - only for Factory dashboard
+        ...(isFactory && editingStock.secondaryUnit ? {
+          secondary_unit_id: parseInt(editingStock.secondaryUnit),
+          conversion_factor: editingStock.conversionFactor ? parseFloat(editingStock.conversionFactor) : null,
+          allow_secondary_sales: editingStock.allowSecondarySales || false
+        } : {})
       });
 
-      const data = await response.json();
-
-      if (response.ok) {
+      if (data.success || data.data) {
         // Update components if any
         if (editingStock.components && editingStock.components.length > 0) {
           try {
-            const componentsResponse = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000/api'}/core/stock/${editingStock.itemId}/components`, {
+            const componentsResponse = await fetch(`${apiService.baseURL}/stock/${editingStock.itemId}/components`, {
               method: 'PUT',
-              headers: {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json',
-                'Accept': 'application/json',
-              },
+              headers: getHeaders(),
               body: JSON.stringify({
                 items: editingStock.components.map(comp => ({
                   component_stock_id: comp.component_stock_id,
@@ -1230,24 +1188,14 @@ const Authors = ({ title, captions, data }) => {
     const finalMetric = newUnit.unitMetric === "Custom" ? newUnit.customMetric : newUnit.unitMetric;
     
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000/api'}/core/unit`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: JSON.stringify({
-          unit_name: newUnit.unitName,
-          metric: finalMetric,
-          custom_metric: newUnit.unitMetric === "Custom" ? newUnit.customMetric : null
-        }),
+      const apiService = new ApiService(currentDashboard);
+      const data = await apiService.addUnit({
+        unit_name: newUnit.unitName,
+        metric: finalMetric,
+        custom_metric: newUnit.unitMetric === "Custom" ? newUnit.customMetric : null
       });
 
-      const data = await response.json();
-
-      if (response.ok) {
+      if (data.success || data.data) {
         // Add to custom units list with API response data
         const unitData = {
           unitName: data.unit_name,
@@ -1305,23 +1253,13 @@ const Authors = ({ title, captions, data }) => {
     if (!newCategory.categoryName) return;
     
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000/api'}/core/category`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: JSON.stringify({
-          category_name: newCategory.categoryName,
-          serial_alias: newCategory.serialAlias || undefined
-        }),
+      const apiService = new ApiService(currentDashboard);
+      const data = await apiService.addCategory({
+        category_name: newCategory.categoryName,
+        serial_alias: newCategory.serialAlias || undefined
       });
 
-      const data = await response.json();
-
-      if (response.ok) {
+      if (data.success || data.data) {
         // Add to categories list with API response data
         const categoryData = {
           categoryId: data.category_id,
@@ -1542,16 +1480,10 @@ const Authors = ({ title, captions, data }) => {
     }
     
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000/api'}/core/stock/${stockItem.itemId}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Accept': 'application/json',
-        },
-      });
+      const apiService = new ApiService(currentDashboard);
+      const response = await apiService.deleteStock(stockItem.itemId);
 
-      if (response.ok) {
+      if (response.success || response.data) {
         // Show success message
         toast({
           title: "Stock Item Deleted Successfully",
@@ -1587,7 +1519,8 @@ const Authors = ({ title, captions, data }) => {
   };
 
   return (
-    <Card overflowX={{ sm: "scroll", xl: "hidden" }}>
+    <Box pt={{ base: "120px", md: "75px" }}>
+      <Card overflowX={{ sm: "scroll", xl: "hidden" }}>
       <CardHeader p='6px 0px 22px 0px'>
         <Flex justify='space-between' align='center' w='100%'>
           <Text fontSize='xl' color={textColor} fontWeight='bold'>
@@ -1872,6 +1805,60 @@ const Authors = ({ title, captions, data }) => {
                     ).toFixed(2)}
                   </Text>
                 ) : null}
+              </FormControl>
+
+              {/* Unit Conversion Section */}
+              <Divider />
+              <FormControl>
+                <FormLabel color={textColor} fontSize="md" fontWeight="bold" mb="16px">
+                  Secondary Unit (Optional)
+                </FormLabel>
+                <Text color="gray.500" fontSize="sm" mb="16px">
+                  Set up unit conversion for selling in smaller units (e.g., sell KG in grams)
+                </Text>
+                
+                <FormControl mb="12px">
+                  <FormLabel color={textColor} fontSize="sm">Secondary Unit</FormLabel>
+                  <Select
+                    placeholder='Select secondary unit (optional)'
+                    value={newStock.secondaryUnit}
+                    onChange={(e) => setNewStock({...newStock, secondaryUnit: e.target.value})}>
+                    {customUnits.map((unit, index) => (
+                      <option key={index} value={unit.unitId}>
+                        {unit.unitName} ({unit.unitMetric})
+                      </option>
+                    ))}
+                  </Select>
+                </FormControl>
+                
+                {newStock.secondaryUnit && (
+                  <>
+                    <FormControl mb="12px">
+                      <FormLabel color={textColor} fontSize="sm">Conversion Factor</FormLabel>
+                      <Input
+                        type='number'
+                        step='0.000001'
+                        placeholder='e.g., 1000 (for 1 KG = 1000 grams)'
+                        value={newStock.conversionFactor}
+                        onChange={(e) => setNewStock({...newStock, conversionFactor: e.target.value})}
+                      />
+                      <Text fontSize='xs' color='gray.500' mt='4px'>
+                        How many secondary units in 1 primary unit
+                      </Text>
+                    </FormControl>
+                    
+                    <FormControl mb="12px">
+                      <Checkbox
+                        isChecked={newStock.allowSecondarySales}
+                        onChange={(e) => setNewStock({...newStock, allowSecondarySales: e.target.checked})}
+                      >
+                        <Text fontSize='sm' color={textColor}>
+                          Allow selling in secondary units
+                        </Text>
+                      </Checkbox>
+                    </FormControl>
+                  </>
+                )}
               </FormControl>
 
                {/* Raw Materials Selection */}
@@ -2172,6 +2159,60 @@ const Authors = ({ title, captions, data }) => {
                        Auto: PKR.{(parseFloat(editingStock.itemPrice || 0) * parseFloat(editingStock.quantity || 0)).toFixed(2)}
                      </Text>
                    ) : null}
+                 </FormControl>
+
+                 {/* Unit Conversion Section */}
+                 <Divider />
+                 <FormControl>
+                   <FormLabel color={textColor} fontSize="md" fontWeight="bold" mb="16px">
+                     Secondary Unit (Optional)
+                   </FormLabel>
+                   <Text color="gray.500" fontSize="sm" mb="16px">
+                     Update unit conversion settings for selling in smaller units
+                   </Text>
+                   
+                   <FormControl mb="12px">
+                     <FormLabel color={textColor} fontSize="sm">Secondary Unit</FormLabel>
+                     <Select
+                       placeholder='Select secondary unit (optional)'
+                       value={editingStock.secondaryUnit || ""}
+                       onChange={(e) => setEditingStock({...editingStock, secondaryUnit: e.target.value})}>
+                       {customUnits.map((unit, index) => (
+                         <option key={index} value={unit.unitId}>
+                           {unit.unitName} ({unit.unitMetric})
+                         </option>
+                       ))}
+                     </Select>
+                   </FormControl>
+                   
+                   {editingStock.secondaryUnit && (
+                     <>
+                       <FormControl mb="12px">
+                         <FormLabel color={textColor} fontSize="sm">Conversion Factor</FormLabel>
+                         <Input
+                           type='number'
+                           step='0.000001'
+                           placeholder='e.g., 1000 (for 1 KG = 1000 grams)'
+                           value={editingStock.conversionFactor || ""}
+                           onChange={(e) => setEditingStock({...editingStock, conversionFactor: e.target.value})}
+                         />
+                         <Text fontSize='xs' color='gray.500' mt='4px'>
+                           How many secondary units in 1 primary unit
+                         </Text>
+                       </FormControl>
+                       
+                       <FormControl mb="12px">
+                         <Checkbox
+                           isChecked={editingStock.allowSecondarySales || false}
+                           onChange={(e) => setEditingStock({...editingStock, allowSecondarySales: e.target.checked})}
+                         >
+                           <Text fontSize='sm' color={textColor}>
+                             Allow selling in secondary units
+                           </Text>
+                         </Checkbox>
+                       </FormControl>
+                     </>
+                   )}
                  </FormControl>
 
                  {/* Can be used as component toggle */}
@@ -2663,7 +2704,8 @@ const Authors = ({ title, captions, data }) => {
         </Modal>
 
      </Card>
-   );
- };
+    </Box>
+  );
+};
 
 export default Authors;

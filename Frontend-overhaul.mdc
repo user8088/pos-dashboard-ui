@@ -1,0 +1,488 @@
+---
+alwaysApply: true
+---
+# Frontend Dashboard Overhaul Implementation Guide
+
+## Overview
+
+The backend has been completely restructured to support **two separate dashboards**: Factory and Store. This document provides comprehensive guidance for frontend implementation.
+
+## 🏗️ Architecture Changes
+
+### Dashboard Separation
+- **Factory Dashboard**: Manufacturing, production, raw materials, components
+- **Store Dashboard**: Simple retail, inventory management only
+- **Complete Data Isolation**: Each dashboard has its own data, customers, analytics
+
+### API Structure
+```
+/api/factory/*  - Factory dashboard endpoints
+/api/store/*    - Store dashboard endpoints
+/api/core/*     - Legacy endpoints (default to factory)
+```
+
+---
+
+## 📋 Frontend Implementation Requirements
+
+### 1. Dashboard Selection System
+
+#### Dashboard Context Provider
+```typescript
+// DashboardContext.tsx
+interface DashboardContextType {
+  currentDashboard: 'factory' | 'store';
+  setDashboard: (dashboard: 'factory' | 'store') => void;
+  isFactory: boolean;
+  isStore: boolean;
+}
+
+const DashboardContext = createContext<DashboardContextType | null>(null);
+
+export const DashboardProvider = ({ children }: { children: ReactNode }) => {
+  const [currentDashboard, setCurrentDashboard] = useState<'factory' | 'store'>('factory');
+  
+  const setDashboard = (dashboard: 'factory' | 'store') => {
+    setCurrentDashboard(dashboard);
+    localStorage.setItem('selectedDashboard', dashboard);
+  };
+
+  return (
+    <DashboardContext.Provider value={{
+      currentDashboard,
+      setDashboard,
+      isFactory: currentDashboard === 'factory',
+      isStore: currentDashboard === 'store'
+    }}>
+      {children}
+    </DashboardContext.Provider>
+  );
+};
+```
+
+#### Dashboard Selector Component
+```typescript
+// DashboardSelector.tsx
+const DashboardSelector = () => {
+  const { currentDashboard, setDashboard } = useDashboard();
+  
+  return (
+    <div className="dashboard-selector">
+      <button 
+        className={currentDashboard === 'factory' ? 'active' : ''}
+        onClick={() => setDashboard('factory')}
+      >
+        🏭 Factory Dashboard
+      </button>
+      <button 
+        className={currentDashboard === 'store' ? 'active' : ''}
+        onClick={() => setDashboard('store')}
+      >
+        🏪 Store Dashboard
+      </button>
+    </div>
+  );
+};
+```
+
+### 2. API Service Layer
+
+#### Base API Configuration
+```typescript
+// api/config.ts
+const getBaseURL = (dashboard: 'factory' | 'store') => {
+  return `/api/${dashboard}`;
+};
+
+export const apiFactory = {
+  baseURL: getBaseURL('factory'),
+  endpoints: {
+    stock: '/stock',
+    customers: '/customer',
+    units: '/unit',
+    categories: '/category',
+    analytics: '/analytics',
+    rawMaterials: '/raw-material',
+    manufacturing: '/manufacturing'
+  }
+};
+
+export const apiStore = {
+  baseURL: getBaseURL('store'),
+  endpoints: {
+    stock: '/stock',
+    customers: '/customer',
+    units: '/unit',
+    categories: '/category',
+    analytics: '/analytics'
+  }
+};
+```
+
+#### Dynamic API Service
+```typescript
+// api/service.ts
+export class ApiService {
+  private dashboard: 'factory' | 'store';
+  
+  constructor(dashboard: 'factory' | 'store') {
+    this.dashboard = dashboard;
+  }
+  
+  private getBaseURL() {
+    return this.dashboard === 'factory' ? apiFactory.baseURL : apiStore.baseURL;
+  }
+  
+  // Stock Management
+  async getStock() {
+    return fetch(`${this.getBaseURL()}/stock`);
+  }
+  
+  async addStock(data: any) {
+    return fetch(`${this.getBaseURL()}/stock`, {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+  }
+  
+  // Production (Factory only)
+  async produceStock(id: number, data: any) {
+    if (this.dashboard !== 'factory') {
+      throw new Error('Production only available in Factory dashboard');
+    }
+    return fetch(`${this.getBaseURL()}/stock/${id}/produce`, {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+  }
+  
+  // Raw Materials (Factory only)
+  async getRawMaterials() {
+    if (this.dashboard !== 'factory') {
+      throw new Error('Raw materials only available in Factory dashboard');
+    }
+    return fetch(`${this.getBaseURL()}/raw-material`);
+  }
+}
+```
+
+### 3. Navigation Structure
+
+#### Factory Navigation
+```typescript
+const factoryNavigation = [
+  { name: 'Dashboard', path: '/factory/dashboard', icon: '📊' },
+  { name: 'Stock Management', path: '/factory/stock', icon: '📦' },
+  { name: 'Raw Materials', path: '/factory/raw-materials', icon: '🔧' },
+  { name: 'Production', path: '/factory/production', icon: '⚙️' },
+  { name: 'Customers', path: '/factory/customers', icon: '👥' },
+  { name: 'Analytics', path: '/factory/analytics', icon: '📈' },
+  { name: 'Manufacturing', path: '/factory/manufacturing', icon: '🏭' },
+  { name: 'Transport', path: '/factory/transport', icon: '🚚' },
+  { name: 'Payables', path: '/factory/payables', icon: '💰' },
+  { name: 'Notifications', path: '/factory/notifications', icon: '🔔' }
+];
+```
+
+#### Store Navigation
+```typescript
+const storeNavigation = [
+  { name: 'Dashboard', path: '/store/dashboard', icon: '📊' },
+  { name: 'Stock Management', path: '/store/stock', icon: '📦' },
+  { name: 'Customers', path: '/store/customers', icon: '👥' },
+  { name: 'Analytics', path: '/store/analytics', icon: '📈' },
+  { name: 'Transport', path: '/store/transport', icon: '🚚' },
+  { name: 'Payables', path: '/store/payables', icon: '💰' },
+  { name: 'Notifications', path: '/store/notifications', icon: '🔔' }
+];
+```
+
+### 4. Conditional Feature Rendering
+
+#### Feature Gates
+```typescript
+// components/FeatureGate.tsx
+interface FeatureGateProps {
+  feature: 'production' | 'rawMaterials' | 'manufacturing' | 'components';
+  children: ReactNode;
+  fallback?: ReactNode;
+}
+
+const FeatureGate = ({ feature, children, fallback = null }: FeatureGateProps) => {
+  const { currentDashboard } = useDashboard();
+  
+  const isAllowed = () => {
+    switch (feature) {
+      case 'production':
+      case 'rawMaterials':
+      case 'manufacturing':
+      case 'components':
+        return currentDashboard === 'factory';
+      default:
+        return true;
+    }
+  };
+  
+  return isAllowed() ? <>{children}</> : <>{fallback}</>;
+};
+
+// Usage
+<FeatureGate feature="production">
+  <ProductionModule />
+</FeatureGate>
+
+<FeatureGate feature="rawMaterials">
+  <RawMaterialsModule />
+</FeatureGate>
+```
+
+### 5. Component Structure
+
+#### Dashboard Layout
+```typescript
+// layouts/DashboardLayout.tsx
+const DashboardLayout = ({ children }: { children: ReactNode }) => {
+  const { currentDashboard } = useDashboard();
+  
+  const navigation = currentDashboard === 'factory' ? factoryNavigation : storeNavigation;
+  
+  return (
+    <div className="dashboard-layout">
+      <DashboardSelector />
+      <Sidebar navigation={navigation} />
+      <main className="main-content">
+        {children}
+      </main>
+    </div>
+  );
+};
+```
+
+#### Stock Management Components
+```typescript
+// components/stock/StockManagement.tsx
+const StockManagement = () => {
+  const { currentDashboard } = useDashboard();
+  const apiService = new ApiService(currentDashboard);
+  
+  return (
+    <div className="stock-management">
+      <StockList />
+      <StockForm />
+      
+      {/* Factory-only features */}
+      <FeatureGate feature="production">
+        <ProductionPanel />
+      </FeatureGate>
+      
+      <FeatureGate feature="components">
+        <ComponentManagement />
+      </FeatureGate>
+    </div>
+  );
+};
+```
+
+---
+
+## 🔄 Migration Strategy
+
+### Phase 1: Setup Dashboard Context
+1. Create `DashboardContext` and `DashboardProvider`
+2. Add dashboard selector to header
+3. Update routing to include dashboard prefix
+
+### Phase 2: Update API Calls
+1. Create dynamic API service
+2. Update all existing API calls to use dashboard context
+3. Add feature gates for factory-only features
+
+### Phase 3: Component Updates
+1. Update navigation based on dashboard
+2. Add conditional rendering for features
+3. Update forms to use correct API endpoints
+
+### Phase 4: Testing & Validation
+1. Test both dashboards independently
+2. Verify data isolation
+3. Test feature restrictions
+
+---
+
+## 📊 API Endpoints Reference
+
+### Factory Dashboard Endpoints
+```typescript
+// Stock Management (with production)
+POST   /api/factory/stock
+GET    /api/factory/stock
+PUT    /api/factory/stock/{id}
+DELETE /api/factory/stock/{id}
+POST   /api/factory/stock/{id}/produce
+POST   /api/factory/stock/{id}/sell
+
+// Raw Materials (Factory only)
+POST   /api/factory/raw-material
+GET    /api/factory/raw-material
+PUT    /api/factory/raw-material/{id}
+DELETE /api/factory/raw-material/{id}
+
+// Customers
+POST   /api/factory/customer
+GET    /api/factory/customer
+POST   /api/factory/customer/{id}/purchase
+GET    /api/factory/customer/{id}/purchases
+
+// Units & Categories
+POST   /api/factory/unit
+GET    /api/factory/unit
+POST   /api/factory/category
+GET    /api/factory/category
+
+// Analytics
+GET    /api/factory/analytics/dashboard
+GET    /api/factory/analytics/today
+GET    /api/factory/manufacturing/dashboard
+```
+
+### Store Dashboard Endpoints
+```typescript
+// Stock Management (NO production)
+POST   /api/store/stock
+GET    /api/store/stock
+PUT    /api/store/stock/{id}
+DELETE /api/store/stock/{id}
+POST   /api/store/stock/{id}/sell
+
+// Customers
+POST   /api/store/customer
+GET    /api/store/customer
+POST   /api/store/customer/{id}/purchase
+GET    /api/store/customer/{id}/purchases
+
+// Units & Categories
+POST   /api/store/unit
+GET    /api/store/unit
+POST   /api/store/category
+GET    /api/store/category
+
+// Analytics
+GET    /api/store/analytics/dashboard
+GET    /api/store/analytics/today
+```
+
+---
+
+## 🎨 UI/UX Considerations
+
+### Dashboard Switching
+- **Smooth Transitions**: Animate between dashboards
+- **State Persistence**: Remember last selected dashboard
+- **Visual Indicators**: Clear indication of current dashboard
+
+### Feature Visibility
+- **Progressive Disclosure**: Show only relevant features
+- **Contextual Help**: Explain why features are hidden
+- **Graceful Degradation**: Handle missing features elegantly
+
+### Data Isolation
+- **Clear Separation**: Visual distinction between dashboards
+- **No Cross-Contamination**: Prevent accidental data mixing
+- **Confirmation Dialogs**: Warn before destructive actions
+
+---
+
+## 🧪 Testing Checklist
+
+### Dashboard Isolation
+- [ ] Factory data doesn't appear in Store dashboard
+- [ ] Store data doesn't appear in Factory dashboard
+- [ ] Switching dashboards clears relevant state
+
+### Feature Restrictions
+- [ ] Production features only in Factory
+- [ ] Raw materials only in Factory
+- [ ] Manufacturing analytics only in Factory
+
+### API Integration
+- [ ] Correct endpoints called for each dashboard
+- [ ] Error handling for restricted features
+- [ ] Data persistence across dashboard switches
+
+### User Experience
+- [ ] Smooth dashboard switching
+- [ ] Intuitive navigation
+- [ ] Clear feature availability
+
+---
+
+## 🚀 Implementation Timeline
+
+### Week 1: Foundation
+- Dashboard context setup
+- Basic routing structure
+- API service layer
+
+### Week 2: Core Features
+- Stock management components
+- Customer management
+- Basic analytics
+
+### Week 3: Advanced Features
+- Production modules (Factory)
+- Manufacturing analytics (Factory)
+- Transport management
+
+### Week 4: Polish & Testing
+- UI/UX improvements
+- Comprehensive testing
+- Performance optimization
+
+---
+
+## 📝 Notes for Frontend Team
+
+### Key Differences
+1. **Factory Dashboard**: Full feature set including production, raw materials, manufacturing
+2. **Store Dashboard**: Simplified retail-focused interface
+3. **Shared Features**: Transport, payables, notifications (but data isolated)
+
+### Important Considerations
+1. **Data Isolation**: Each dashboard has completely separate data
+2. **Feature Gates**: Use conditional rendering for dashboard-specific features
+3. **API Endpoints**: Always use dashboard-specific endpoints
+4. **State Management**: Clear state when switching dashboards
+
+### Breaking Changes
+1. All existing API calls need dashboard context
+2. Navigation structure changes based on dashboard
+3. Some features only available in specific dashboards
+
+---
+
+## 🔧 Development Tools
+
+### Dashboard Debugging
+```typescript
+// Add to development environment
+const debugDashboard = () => {
+  console.log('Current Dashboard:', currentDashboard);
+  console.log('Available Features:', getAvailableFeatures());
+  console.log('API Base URL:', getBaseURL());
+};
+```
+
+### Feature Detection
+```typescript
+const getAvailableFeatures = (dashboard: 'factory' | 'store') => {
+  const baseFeatures = ['stock', 'customers', 'analytics', 'transport', 'payables'];
+  
+  if (dashboard === 'factory') {
+    return [...baseFeatures, 'production', 'rawMaterials', 'manufacturing', 'components'];
+  }
+  
+  return baseFeatures;
+};
+```
+
+This comprehensive guide should provide everything the frontend team needs to implement the dashboard separation overhaul successfully! 🎯

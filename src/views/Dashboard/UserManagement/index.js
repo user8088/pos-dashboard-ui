@@ -49,21 +49,63 @@ import {
   NumberInputField,
   Divider,
   Collapse,
+  Alert,
+  AlertIcon,
+  AlertTitle,
+  AlertDescription,
+  Tooltip,
+  IconButton,
+  InputGroup,
+  InputLeftElement,
+  TableContainer,
+  Heading,
+  InputRightElement,
+  CalendarIcon,
+  TimeIcon,
+  CheckIcon,
+  CloseIcon,
+  WarningIcon,
 } from "@chakra-ui/react";
 // Custom components
 import Card from "components/Card/Card.js";
 import CardBody from "components/Card/CardBody.js";
 import CardHeader from "components/Card/CardHeader.js";
 import React, { useState, useEffect } from "react";
-import { FaPlus, FaUserShield, FaUsers, FaCalendarCheck, FaMoneyBillWave, FaCheckCircle, FaTimesCircle } from "react-icons/fa";
+import { 
+  FaPlus, 
+  FaUserShield, 
+  FaUsers, 
+  FaCalendarCheck, 
+  FaMoneyBillWave, 
+  FaCheckCircle, 
+  FaTimesCircle,
+  FaEye,
+  FaClock,
+  FaCalendarAlt,
+  FaWallet,
+  FaCreditCard,
+  FaHandHoldingUsd,
+  FaChartLine,
+  FaUserClock,
+  FaCoins,
+  FaReceipt,
+  FaHistory,
+  FaEdit,
+  FaTrash,
+  FaDownload,
+  FaUpload
+} from "react-icons/fa";
 import { EditIcon, DeleteIcon, HamburgerIcon, ChevronDownIcon, ChevronUpIcon } from "@chakra-ui/icons";
 import ResponsiveTable from "components/Tables/ResponsiveTable";
 import userService from "services/userService";
 import logo from "assets/img/avatars/placeholder.png";
 import { useSearch } from "contexts/SearchContext";
+import { useDashboard } from "contexts/DashboardContext";
+import { ApiService } from "services/apiService";
+import { getHeaders } from "services/apiConfig";
 
 // User Table Row Component
-const UserTableRow = ({ user, currentUserId, onEdit, onDelete }) => {
+const UserTableRow = ({ user, currentUserId, onEdit, onDelete, onViewAttendance, onPaySalary }) => {
   const textColor = useColorModeValue("gray.700", "white");
 
   const getRoleBadgeColor = (role) => {
@@ -106,36 +148,84 @@ const UserTableRow = ({ user, currentUserId, onEdit, onDelete }) => {
       </Td>
 
       <Td>
+        <Text fontSize="sm" color={textColor} fontWeight="bold">
+          {user.base_salary ? `PKR ${parseFloat(user.base_salary).toLocaleString()}` : "Not Set"}
+        </Text>
+        {user.commission_rate && (
+          <Text fontSize="xs" color="gray.500">
+            + {user.commission_rate}% Commission
+          </Text>
+        )}
+      </Td>
+
+      <Td>
+        <Text fontSize="sm" color={textColor} fontWeight="bold">
+          {user.attendance_rate || 0}%
+        </Text>
+        <Text fontSize="xs" color="gray.500">
+          This Month
+        </Text>
+      </Td>
+
+      <Td>
+        <Text fontSize="sm" color={textColor} fontWeight="bold">
+          {user.last_payment_date || "Never"}
+        </Text>
+        <Text fontSize="xs" color="gray.500">
+          Last Payment
+        </Text>
+      </Td>
+
+      <Td>
         <Text fontSize="sm" color="gray.400" fontWeight="medium">
           {new Date(user.created_at).toLocaleDateString()}
         </Text>
       </Td>
 
       <Td>
-        <HStack spacing="12px">
-          <Button p="0px" bg="transparent" variant="no-hover" onClick={() => onEdit(user)}>
-            <Text
-              fontSize="md"
-              color="gray.400"
-              fontWeight="bold"
-              cursor="pointer"
-              _hover={{ color: "brand.500" }}
-            >
-              Edit
-            </Text>
-          </Button>
-          <Button 
-            p="0px" 
-            bg="transparent" 
-            variant="no-hover" 
-            onClick={() => onDelete(user)}
-            isDisabled={isCurrentUser}
-          >
-            <DeleteIcon 
-              color={isCurrentUser ? "gray.300" : "#FF8D28"} 
-              style={{ cursor: isCurrentUser ? "not-allowed" : "pointer" }} 
+        <HStack spacing="8px">
+          <Tooltip label="View Attendance">
+            <IconButton
+              aria-label="View Attendance"
+              icon={<FaCalendarCheck />}
+              size="sm"
+              colorScheme="blue"
+              variant="ghost"
+              onClick={() => onViewAttendance(user)}
             />
-          </Button>
+          </Tooltip>
+          <Tooltip label="Pay Salary">
+            <IconButton
+              aria-label="Pay Salary"
+              icon={<FaMoneyBillWave />}
+              size="sm"
+              colorScheme="green"
+              variant="ghost"
+              onClick={() => onPaySalary(user)}
+            />
+          </Tooltip>
+          <Tooltip label="Edit User">
+            <IconButton
+              aria-label="Edit User"
+              icon={<EditIcon />}
+              size="sm"
+              colorScheme="blue"
+              variant="ghost"
+              onClick={() => onEdit(user)}
+            />
+          </Tooltip>
+          {!isCurrentUser && (
+            <Tooltip label="Delete User">
+              <IconButton
+                aria-label="Delete User"
+                icon={<DeleteIcon />}
+                size="sm"
+                colorScheme="red"
+                variant="ghost"
+                onClick={() => onDelete(user)}
+              />
+            </Tooltip>
+          )}
         </HStack>
       </Td>
     </Tr>
@@ -146,9 +236,13 @@ function UserManagement() {
   const textColor = useColorModeValue("gray.700", "white");
   const cardBg = useColorModeValue("white", "gray.700");
   const cardShadow = useColorModeValue("0 4px 20px rgba(0,0,0,0.06)", "0 4px 20px rgba(0,0,0,0.3)");
+  const { currentDashboard } = useDashboard();
   
   const { isOpen: isAddOpen, onOpen: onAddOpen, onClose: onAddClose } = useDisclosure();
   const { isOpen: isEditOpen, onOpen: onEditOpen, onClose: onEditClose } = useDisclosure();
+  const { isOpen: isAttendanceOpen, onOpen: onAttendanceOpen, onClose: onAttendanceClose } = useDisclosure();
+  const { isOpen: isSalaryOpen, onOpen: onSalaryOpen, onClose: onSalaryClose } = useDisclosure();
+  const { isOpen: isPaymentOpen, onOpen: onPaymentOpen, onClose: onPaymentClose } = useDisclosure();
   const toast = useToast();
   const { filterData, isSearchActive } = useSearch();
  
@@ -156,6 +250,12 @@ function UserManagement() {
   const [stats, setStats] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [currentUserId, setCurrentUserId] = useState(null);
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [attendanceData, setAttendanceData] = useState([]);
+  const [salaryData, setSalaryData] = useState([]);
+  const [accounts, setAccounts] = useState([]);
+  const [salaryHistory, setSalaryHistory] = useState([]);
+  const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
 
   // Get current user ID
   useEffect(() => {
@@ -186,6 +286,7 @@ function UserManagement() {
     
     fetchUsers();
     fetchStats();
+    fetchAccounts();
   }, []);
 
   const fetchUsers = async () => {
@@ -230,21 +331,13 @@ function UserManagement() {
     password: "",
     user_role: "staff",
     base_salary: "",
+    commission_rate: "",
     allowances: "",
     deductions: "",
     salary_currency: "PKR",
     salary_effective_from: ""
   });
 
-  // Attendance state
-  const [attendanceData, setAttendanceData] = useState([]);
-  const [attendanceFilters, setAttendanceFilters] = useState({
-    from: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0],
-    to: new Date().toISOString().split('T')[0]
-  });
-  const [isAttendanceLoading, setIsAttendanceLoading] = useState(false);
-  const [showSalaryFields, setShowSalaryFields] = useState(false);
-  const { isOpen: isAttendanceOpen, onOpen: onAttendanceOpen, onClose: onAttendanceClose } = useDisclosure();
   const [attendanceForm, setAttendanceForm] = useState({
     user_id: "",
     date: new Date().toISOString().split('T')[0],
@@ -254,100 +347,31 @@ function UserManagement() {
     notes: ""
   });
 
+  const [salaryForm, setSalaryForm] = useState({
+    user_id: "",
+    month: new Date().toISOString().slice(0, 7),
+    base_salary: "",
+    commission: "",
+    allowances: "",
+    deductions: "",
+    total_amount: "",
+    payment_method: "bank_transfer",
+    account_id: "",
+    notes: ""
+  });
+
+  const [paymentForm, setPaymentForm] = useState({
+    user_id: "",
+    amount: "",
+    payment_method: "bank_transfer",
+    account_id: "",
+    reference: "",
+    notes: ""
+  });
+
+
   // Fetch attendance data
-  const fetchAttendance = async () => {
-    try {
-      setIsAttendanceLoading(true);
-      const token = localStorage.getItem('token');
-      const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:8000/api';
-      
-      const queryParams = new URLSearchParams(attendanceFilters).toString();
-      const response = await fetch(`${apiUrl}/core/attendance/list?${queryParams}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Accept': 'application/json',
-        },
-      });
 
-      if (response.ok) {
-        const data = await response.json();
-        setAttendanceData(data);
-      } else {
-        throw new Error('Failed to fetch attendance');
-      }
-    } catch (error) {
-      console.error('Error fetching attendance:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to fetch attendance records',
-        status: 'error',
-        duration: 5000,
-        isClosable: true,
-      });
-    } finally {
-      setIsAttendanceLoading(false);
-    }
-  };
-
-  // Mark attendance
-  const handleMarkAttendance = async () => {
-    if (!attendanceForm.user_id || !attendanceForm.date) {
-      toast({
-        title: 'Validation Error',
-        description: 'Please select a staff member and date',
-        status: 'warning',
-        duration: 3000,
-        isClosable: true,
-      });
-      return;
-    }
-
-    try {
-      const token = localStorage.getItem('token');
-      const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:8000/api';
-
-      const response = await fetch(`${apiUrl}/core/attendance/mark`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(attendanceForm),
-      });
-
-      if (response.ok) {
-        toast({
-          title: 'Attendance Marked',
-          description: 'Attendance has been recorded successfully',
-          status: 'success',
-          duration: 4000,
-          isClosable: true,
-        });
-        onAttendanceClose();
-        setAttendanceForm({
-          user_id: "",
-          date: new Date().toISOString().split('T')[0],
-          status: "present",
-          check_in: "",
-          check_out: "",
-          notes: ""
-        });
-        fetchAttendance();
-      } else {
-        throw new Error('Failed to mark attendance');
-      }
-    } catch (error) {
-      console.error('Error marking attendance:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to mark attendance',
-        status: 'error',
-        duration: 5000,
-        isClosable: true,
-      });
-    }
-  };
 
   const handleEditUser = (user) => {
     setEditingUser({
@@ -468,7 +492,6 @@ function UserManagement() {
           salary_currency: "PKR",
           salary_effective_from: ""
         });
-        setShowSalaryFields(false);
         onAddClose();
         fetchUsers();
         fetchStats();
@@ -538,6 +561,188 @@ function UserManagement() {
         duration: 5000,
         isClosable: true,
       });
+    }
+  };
+
+  // Attendance Management
+  const handleViewAttendance = (user) => {
+    setSelectedUser(user);
+    setAttendanceForm({
+      user_id: user.id,
+      date: new Date().toISOString().split('T')[0],
+      status: "present",
+      check_in: "",
+      check_out: "",
+      notes: ""
+    });
+    fetchAttendance(user.id);
+    onAttendanceOpen();
+  };
+
+  const handleMarkAttendance = async () => {
+    if (!attendanceForm.user_id || !attendanceForm.date) {
+      toast({
+        title: "Validation Error",
+        description: "Please select user and date.",
+        status: "error",
+        duration: 3000,
+        isClosable: true,
+      });
+      return;
+    }
+
+    try {
+      const apiService = new ApiService(currentDashboard);
+      const result = await apiService.markAttendance(attendanceForm);
+      
+      if (result.success) {
+        toast({
+          title: "Attendance Marked Successfully",
+          description: `Attendance recorded for ${attendanceForm.date}.`,
+          status: "success",
+          duration: 3000,
+          isClosable: true,
+        });
+        
+        setAttendanceForm({
+          user_id: "",
+          date: new Date().toISOString().split('T')[0],
+          status: "present",
+          check_in: "",
+          check_out: "",
+          notes: ""
+        });
+        
+        fetchAttendance(attendanceForm.user_id);
+        onAttendanceClose();
+      } else {
+        toast({
+          title: "Error",
+          description: result.error,
+          status: "error",
+          duration: 5000,
+          isClosable: true,
+        });
+      }
+    } catch (error) {
+      console.error('Failed to mark attendance:', error);
+      toast({
+        title: "Error",
+        description: "Failed to mark attendance.",
+        status: "error",
+        duration: 5000,
+        isClosable: true,
+      });
+    }
+  };
+
+  // Salary Management
+  const handlePaySalary = (user) => {
+    setSelectedUser(user);
+    setPaymentForm({
+      user_id: user.id,
+      amount: user.base_salary || "",
+      payment_method: "bank_transfer",
+      account_id: "",
+      reference: "",
+      notes: ""
+    });
+    onSalaryOpen();
+  };
+
+  const handleProcessSalaryPayment = async () => {
+    if (!paymentForm.user_id || !paymentForm.amount || !paymentForm.account_id) {
+      toast({
+        title: "Validation Error",
+        description: "Please fill in all required fields.",
+        status: "error",
+        duration: 3000,
+        isClosable: true,
+      });
+      return;
+    }
+
+    try {
+      const apiService = new ApiService(currentDashboard);
+      const result = await apiService.paySalary(paymentForm);
+      
+      if (result.success) {
+        toast({
+          title: "Salary Paid Successfully",
+          description: `Payment of PKR ${paymentForm.amount} has been processed.`,
+          status: "success",
+          duration: 3000,
+          isClosable: true,
+        });
+        
+        setPaymentForm({
+          user_id: "",
+          amount: "",
+          payment_method: "bank_transfer",
+          account_id: "",
+          reference: "",
+          notes: ""
+        });
+        
+        fetchUsers();
+        onSalaryClose();
+      } else {
+        toast({
+          title: "Error",
+          description: result.error,
+          status: "error",
+          duration: 5000,
+          isClosable: true,
+        });
+      }
+    } catch (error) {
+      console.error('Failed to pay salary:', error);
+      toast({
+        title: "Error",
+        description: "Failed to process salary payment.",
+        status: "error",
+        duration: 5000,
+        isClosable: true,
+      });
+    }
+  };
+
+  const fetchAttendance = async (userId, month = null) => {
+    try {
+      const apiService = new ApiService(currentDashboard);
+      const result = await apiService.getStaffAttendance(userId, month);
+      
+      if (result.success) {
+        setAttendanceData(result.data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch attendance:', error);
+    }
+  };
+
+  const fetchAccounts = async () => {
+    try {
+      const apiService = new ApiService(currentDashboard);
+      const result = await apiService.getAccounts();
+      
+      if (result.success) {
+        setAccounts(result.data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch accounts:', error);
+    }
+  };
+
+  const fetchSalaryHistory = async (userId) => {
+    try {
+      const apiService = new ApiService(currentDashboard);
+      const result = await apiService.getSalaryHistory(userId);
+      
+      if (result.success) {
+        setSalaryHistory(result.data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch salary history:', error);
     }
   };
 
@@ -612,6 +817,7 @@ function UserManagement() {
         </SimpleGrid>
       )}
 
+
       {/* Header Section */}
       <Box mb='24px'>
         <Flex direction='column' w='100%'>
@@ -634,6 +840,10 @@ function UserManagement() {
           <Tab _selected={{ color: '#FF8D28', borderColor: '#FF8D28', borderBottomColor: cardBg }} onClick={() => fetchAttendance()}>
             <Icon as={FaCalendarCheck} mr={2} />
             Attendance
+          </Tab>
+          <Tab _selected={{ color: '#FF8D28', borderColor: '#FF8D28', borderBottomColor: cardBg }}>
+            <Icon as={FaMoneyBillWave} mr={2} />
+            Salary Tracker
           </Tab>
         </TabList>
 
@@ -706,10 +916,20 @@ function UserManagement() {
             </Flex>
           ) : (
             <ResponsiveTable
-              captions={["User / Email", "Role", "Created", "Actions"]}
+              captions={["User / Email", "Role", "Salary", "Attendance", "Last Payment", "Created", "Actions"]}
               data={filterData(users, ['name', 'email', 'user_role', 'created_at'])}
               isLoading={isLoading}
               actionButtons={[
+                {
+                  label: "Attendance",
+                  icon: <FaCalendarCheck />,
+                  onClick: (user) => handleViewAttendance(user),
+                },
+                {
+                  label: "Pay Salary",
+                  icon: <FaMoneyBillWave />,
+                  onClick: (user) => handlePaySalary(user),
+                },
                 {
                   label: "Edit",
                   icon: <EditIcon />,
@@ -731,6 +951,8 @@ function UserManagement() {
                   currentUserId={currentUserId}
                   onEdit={handleEditUser}
                   onDelete={handleDeleteUser}
+                  onViewAttendance={handleViewAttendance}
+                  onPaySalary={handlePaySalary}
                 />
               ))}
             </ResponsiveTable>
@@ -741,39 +963,8 @@ function UserManagement() {
 
           {/* Attendance Tab Panel */}
           <TabPanel px={0}>
-            {/* Attendance Filters and Actions */}
+            {/* Attendance Actions */}
             <Flex mb="24px" gap="12px" direction={{ base: "column", lg: "row" }} align={{ base: "stretch", lg: "center" }}>
-              <FormControl maxW={{ base: "100%", lg: "200px" }}>
-                <FormLabel fontSize="sm" color="gray.500">From Date</FormLabel>
-                <Input
-                  type="date"
-                  value={attendanceFilters.from}
-                  onChange={(e) => setAttendanceFilters(prev => ({ ...prev, from: e.target.value }))}
-                  size="md"
-                />
-              </FormControl>
-
-              <FormControl maxW={{ base: "100%", lg: "200px" }}>
-                <FormLabel fontSize="sm" color="gray.500">To Date</FormLabel>
-                <Input
-                  type="date"
-                  value={attendanceFilters.to}
-                  onChange={(e) => setAttendanceFilters(prev => ({ ...prev, to: e.target.value }))}
-                  size="md"
-                />
-              </FormControl>
-
-              <Button
-                colorScheme='teal'
-                bg='blue.500'
-                color='white'
-                _hover={{ bg: 'blue.600' }}
-                onClick={fetchAttendance}
-                mt={{ base: 0, lg: "auto" }}
-                size='md'>
-                Filter
-              </Button>
-
               <Button
                 leftIcon={<FaPlus />}
                 colorScheme='teal'
@@ -790,7 +981,7 @@ function UserManagement() {
             {/* Attendance Table */}
             <Card bg={cardBg} boxShadow={cardShadow}>
               <CardBody>
-                {isAttendanceLoading ? (
+                {isLoading ? (
                   <Flex justify="center" align="center" h="200px" w="100%">
                     <Spinner
                       thickness="4px"
@@ -903,11 +1094,158 @@ function UserManagement() {
               </CardBody>
             </Card>
           </TabPanel>
+
+          {/* Salary Tracker Tab Panel */}
+          <TabPanel px={0}>
+            <Card bg={cardBg} boxShadow={cardShadow}>
+              <CardHeader>
+                <Flex justify="space-between" align="center">
+                  <Heading size="md" color={textColor}>
+                    Monthly Salary Tracker
+                  </Heading>
+                  <HStack spacing="12px">
+                    <Input
+                      type="month"
+                      value={selectedMonth}
+                      onChange={(e) => setSelectedMonth(e.target.value)}
+                      size="sm"
+                      maxW="200px"
+                    />
+                    <Button
+                      size="sm"
+                      colorScheme="blue"
+                      onClick={() => {
+                        // Refresh salary data for selected month
+                        users.forEach(user => {
+                          if (user.base_salary) {
+                            fetchSalaryHistory(user.id);
+                          }
+                        });
+                      }}
+                    >
+                      Refresh
+                    </Button>
+                  </HStack>
+                </Flex>
+              </CardHeader>
+              <CardBody px={8} py={6}>
+                <TableContainer>
+                  <Table variant="simple" size="lg">
+                    <Thead>
+                      <Tr>
+                        <Th py={6} px={4} fontSize="sm" fontWeight="bold" color="gray.600" textTransform="uppercase" letterSpacing="wide">
+                          Employee
+                        </Th>
+                        <Th py={6} px={4} fontSize="sm" fontWeight="bold" color="gray.600" textTransform="uppercase" letterSpacing="wide">
+                          Base Salary
+                        </Th>
+                        <Th py={6} px={4} fontSize="sm" fontWeight="bold" color="gray.600" textTransform="uppercase" letterSpacing="wide">
+                          Commission
+                        </Th>
+                        <Th py={6} px={4} fontSize="sm" fontWeight="bold" color="gray.600" textTransform="uppercase" letterSpacing="wide">
+                          Total Amount
+                        </Th>
+                        <Th py={6} px={4} fontSize="sm" fontWeight="bold" color="gray.600" textTransform="uppercase" letterSpacing="wide">
+                          Payment Status
+                        </Th>
+                        <Th py={6} px={4} fontSize="sm" fontWeight="bold" color="gray.600" textTransform="uppercase" letterSpacing="wide">
+                          Payment Date
+                        </Th>
+                        <Th py={6} px={4} fontSize="sm" fontWeight="bold" color="gray.600" textTransform="uppercase" letterSpacing="wide">
+                          Actions
+                        </Th>
+                      </Tr>
+                    </Thead>
+                    <Tbody>
+                      {users.filter(user => user.base_salary).map((user) => {
+                        const monthlySalary = salaryHistory.find(s => 
+                          s.user_id === user.id && s.month === selectedMonth
+                        );
+                        
+                        return (
+                          <Tr key={user.id} _hover={{ bg: useColorModeValue("gray.50", "gray.700") }}>
+                            <Td py={6} px={4}>
+                              <VStack align="start" spacing="6px">
+                                <Text fontWeight="bold" fontSize="lg" color={textColor}>{user.name}</Text>
+                                <Text fontSize="md" color="gray.500">{user.email}</Text>
+                              </VStack>
+                            </Td>
+                            <Td py={6} px={4}>
+                              <Text fontSize="lg" fontWeight="bold" color={textColor}>
+                                PKR {parseFloat(user.base_salary || 0).toLocaleString()}
+                              </Text>
+                            </Td>
+                            <Td py={6} px={4}>
+                              <Text fontSize="lg" color={textColor}>
+                                {user.commission_rate ? `${user.commission_rate}%` : "0%"}
+                              </Text>
+                            </Td>
+                            <Td py={6} px={4}>
+                              <Text fontSize="lg" fontWeight="bold" color="green.500">
+                                PKR {parseFloat(user.base_salary || 0).toLocaleString()}
+                              </Text>
+                            </Td>
+                            <Td py={6} px={4}>
+                              <Badge
+                                colorScheme={monthlySalary ? "green" : "red"}
+                                fontSize="md"
+                                px="16px"
+                                py="6px"
+                                borderRadius="full"
+                                fontWeight="medium"
+                              >
+                                {monthlySalary ? "Paid" : "Pending"}
+                              </Badge>
+                            </Td>
+                            <Td py={6} px={4}>
+                              <Text fontSize="md" color="gray.500">
+                                {monthlySalary ? new Date(monthlySalary.payment_date).toLocaleDateString() : "Not Paid"}
+                              </Text>
+                            </Td>
+                            <Td py={6} px={4}>
+                              <HStack spacing="12px">
+                                <Tooltip label="View Details" placement="top">
+                                  <IconButton
+                                    aria-label="View Details"
+                                    icon={<FaEye />}
+                                    size="md"
+                                    colorScheme="blue"
+                                    variant="ghost"
+                                    onClick={() => {
+                                      setSelectedUser(user);
+                                      fetchSalaryHistory(user.id);
+                                      onSalaryOpen();
+                                    }}
+                                  />
+                                </Tooltip>
+                                {!monthlySalary && (
+                                  <Tooltip label="Pay Salary" placement="top">
+                                    <IconButton
+                                      aria-label="Pay Salary"
+                                      icon={<FaMoneyBillWave />}
+                                      size="md"
+                                      colorScheme="green"
+                                      variant="ghost"
+                                      onClick={() => handlePaySalary(user)}
+                                    />
+                                  </Tooltip>
+                                )}
+                              </HStack>
+                            </Td>
+                          </Tr>
+                        );
+                      })}
+                    </Tbody>
+                  </Table>
+                </TableContainer>
+              </CardBody>
+            </Card>
+          </TabPanel>
         </TabPanels>
       </Tabs>
 
       {/* Add New User Modal */}
-      <Modal isOpen={isAddOpen} onClose={() => { onAddClose(); setShowSalaryFields(false); }} size="lg">
+      <Modal isOpen={isAddOpen} onClose={onAddClose} size="lg">
         <ModalOverlay />
         <ModalContent maxH="90vh" overflowY="auto">
           <ModalHeader color={textColor}>Add New User</ModalHeader>
@@ -987,8 +1325,8 @@ function UserManagement() {
               <Button
                 variant="ghost"
                 justifyContent="space-between"
-                onClick={() => setShowSalaryFields(!showSalaryFields)}
-                rightIcon={showSalaryFields ? <ChevronUpIcon /> : <ChevronDownIcon />}
+                onClick={() => {}}
+                rightIcon={<ChevronDownIcon />}
                 size="sm"
                 color="gray.600"
               >
@@ -999,7 +1337,7 @@ function UserManagement() {
               </Button>
 
               {/* Collapsible Salary Fields */}
-              <Collapse in={showSalaryFields} animateOpacity>
+              <Collapse in={true} animateOpacity>
                 <VStack spacing="16px" align="stretch" p={4} bg={useColorModeValue("gray.50", "gray.700")} borderRadius="md">
                   <SimpleGrid columns={2} spacing={3}>
                     <FormControl>
@@ -1086,7 +1424,7 @@ function UserManagement() {
           </ModalBody>
           <ModalFooter>
             <HStack spacing="12px">
-              <Button variant="outline" onClick={() => { onAddClose(); setShowSalaryFields(false); }}>
+              <Button variant="outline" onClick={onAddClose}>
                 Cancel
               </Button>
               <Button
@@ -1406,6 +1744,254 @@ function UserManagement() {
                 Mark Attendance
               </Button>
             </HStack>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+
+      {/* Attendance Modal */}
+      <Modal isOpen={isAttendanceOpen} onClose={onAttendanceClose} size="xl">
+        <ModalOverlay />
+        <ModalContent>
+          <ModalHeader>
+            {selectedUser ? `Mark Attendance - ${selectedUser.name}` : "Mark Attendance"}
+          </ModalHeader>
+          <ModalCloseButton />
+          <ModalBody pb="24px">
+            <VStack spacing="16px">
+              {!selectedUser && (
+                <FormControl isRequired>
+                  <FormLabel>Select Staff Member</FormLabel>
+                  <Select
+                    value={attendanceForm.user_id}
+                    onChange={(e) => setAttendanceForm({...attendanceForm, user_id: e.target.value})}
+                  >
+                    <option value="">Choose staff member</option>
+                    {users.map((user) => (
+                      <option key={user.id} value={user.id}>
+                        {user.name}
+                      </option>
+                    ))}
+                  </Select>
+                </FormControl>
+              )}
+
+              <FormControl isRequired>
+                <FormLabel>Date</FormLabel>
+                <Input
+                  type="date"
+                  value={attendanceForm.date}
+                  onChange={(e) => setAttendanceForm({...attendanceForm, date: e.target.value})}
+                />
+              </FormControl>
+
+              <FormControl isRequired>
+                <FormLabel>Status</FormLabel>
+                <Select
+                  value={attendanceForm.status}
+                  onChange={(e) => setAttendanceForm({...attendanceForm, status: e.target.value})}
+                >
+                  <option value="present">Present</option>
+                  <option value="absent">Absent</option>
+                  <option value="leave">On Leave</option>
+                  <option value="late">Late</option>
+                </Select>
+              </FormControl>
+
+              {attendanceForm.status === "present" && (
+                <>
+                  <FormControl>
+                    <FormLabel>Check In Time</FormLabel>
+                    <Input
+                      type="time"
+                      value={attendanceForm.check_in}
+                      onChange={(e) => setAttendanceForm({...attendanceForm, check_in: e.target.value})}
+                    />
+                  </FormControl>
+
+                  <FormControl>
+                    <FormLabel>Check Out Time</FormLabel>
+                    <Input
+                      type="time"
+                      value={attendanceForm.check_out}
+                      onChange={(e) => setAttendanceForm({...attendanceForm, check_out: e.target.value})}
+                    />
+                  </FormControl>
+                </>
+              )}
+
+              <FormControl>
+                <FormLabel>Notes</FormLabel>
+                <Input
+                  value={attendanceForm.notes}
+                  onChange={(e) => setAttendanceForm({...attendanceForm, notes: e.target.value})}
+                  placeholder="Enter any notes (optional)"
+                />
+              </FormControl>
+
+              {selectedUser && attendanceData.length > 0 && (
+                <>
+                  <Divider />
+                  <Text fontSize="lg" fontWeight="bold" color={textColor}>
+                    Recent Attendance
+                  </Text>
+                  <Box w="100%" maxH="200px" overflowY="auto">
+                    <Table size="sm">
+                      <Thead>
+                        <Tr>
+                          <Th>Date</Th>
+                          <Th>Status</Th>
+                          <Th>Check In</Th>
+                          <Th>Check Out</Th>
+                        </Tr>
+                      </Thead>
+                      <Tbody>
+                        {attendanceData.slice(0, 10).map((record, index) => (
+                          <Tr key={index}>
+                            <Td>{record.date}</Td>
+                            <Td>
+                              <Badge
+                                colorScheme={
+                                  record.status === "present" ? "green" :
+                                  record.status === "absent" ? "red" :
+                                  record.status === "leave" ? "blue" : "orange"
+                                }
+                              >
+                                {record.status}
+                              </Badge>
+                            </Td>
+                            <Td>{record.check_in || "-"}</Td>
+                            <Td>{record.check_out || "-"}</Td>
+                          </Tr>
+                        ))}
+                      </Tbody>
+                    </Table>
+                  </Box>
+                </>
+              )}
+            </VStack>
+          </ModalBody>
+          <ModalFooter>
+            <Button variant="ghost" mr="12px" onClick={onAttendanceClose}>
+              Cancel
+            </Button>
+            <Button colorScheme="teal" bg="#FF8D28" color="white" _hover={{ bg: "#E67E22" }} onClick={handleMarkAttendance}>
+              Mark Attendance
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+
+      {/* Salary Payment Modal */}
+      <Modal isOpen={isSalaryOpen} onClose={onSalaryClose} size="xl">
+        <ModalOverlay />
+        <ModalContent>
+          <ModalHeader>
+            {selectedUser ? `Pay Salary - ${selectedUser.name}` : "Pay Salary"}
+          </ModalHeader>
+          <ModalCloseButton />
+          <ModalBody pb="24px">
+            <VStack spacing="16px">
+              {!selectedUser && (
+                <FormControl isRequired>
+                  <FormLabel>Select Staff Member</FormLabel>
+                  <Select
+                    value={paymentForm.user_id}
+                    onChange={(e) => {
+                      const selectedUser = users.find(u => u.id === e.target.value);
+                      setPaymentForm({
+                        ...paymentForm,
+                        user_id: e.target.value,
+                        amount: selectedUser?.base_salary || ""
+                      });
+                    }}
+                  >
+                    <option value="">Choose staff member</option>
+                    {users.map((user) => (
+                      <option key={user.id} value={user.id}>
+                        {user.name} - PKR {user.base_salary ? parseFloat(user.base_salary).toLocaleString() : "0"}
+                      </option>
+                    ))}
+                  </Select>
+                </FormControl>
+              )}
+
+              <FormControl isRequired>
+                <FormLabel>Payment Amount (PKR)</FormLabel>
+                <NumberInput
+                  value={paymentForm.amount}
+                  onChange={(valueString) => setPaymentForm({...paymentForm, amount: valueString})}
+                >
+                  <NumberInputField placeholder="Enter payment amount" />
+                </NumberInput>
+              </FormControl>
+
+              <FormControl isRequired>
+                <FormLabel>Payment Method</FormLabel>
+                <Select
+                  value={paymentForm.payment_method}
+                  onChange={(e) => setPaymentForm({...paymentForm, payment_method: e.target.value})}
+                >
+                  <option value="bank_transfer">Bank Transfer</option>
+                  <option value="cash">Cash</option>
+                  <option value="check">Check</option>
+                  <option value="mobile_payment">Mobile Payment</option>
+                </Select>
+              </FormControl>
+
+              <FormControl isRequired>
+                <FormLabel>Payment Account</FormLabel>
+                <Select
+                  value={paymentForm.account_id}
+                  onChange={(e) => setPaymentForm({...paymentForm, account_id: e.target.value})}
+                >
+                  <option value="">Choose payment account</option>
+                  {accounts.map((account) => (
+                    <option key={account.id} value={account.id}>
+                      {account.account_name} - {account.account_type} (PKR {parseFloat(account.balance || 0).toLocaleString()})
+                    </option>
+                  ))}
+                </Select>
+              </FormControl>
+
+              <FormControl>
+                <FormLabel>Reference Number</FormLabel>
+                <Input
+                  value={paymentForm.reference}
+                  onChange={(e) => setPaymentForm({...paymentForm, reference: e.target.value})}
+                  placeholder="Enter reference number (optional)"
+                />
+              </FormControl>
+
+              <FormControl>
+                <FormLabel>Notes</FormLabel>
+                <Input
+                  value={paymentForm.notes}
+                  onChange={(e) => setPaymentForm({...paymentForm, notes: e.target.value})}
+                  placeholder="Enter payment notes (optional)"
+                />
+              </FormControl>
+
+              {paymentForm.amount && paymentForm.account_id && (
+                <Alert status="info">
+                  <AlertIcon />
+                  <Box>
+                    <AlertTitle>Payment Summary</AlertTitle>
+                    <AlertDescription>
+                      You are about to pay PKR {parseFloat(paymentForm.amount).toLocaleString()} to {selectedUser?.name || "selected staff"} 
+                      from {accounts.find(a => a.id === paymentForm.account_id)?.account_name || "selected account"}.
+                    </AlertDescription>
+                  </Box>
+                </Alert>
+              )}
+            </VStack>
+          </ModalBody>
+          <ModalFooter>
+            <Button variant="ghost" mr="12px" onClick={onSalaryClose}>
+              Cancel
+            </Button>
+            <Button colorScheme="green" onClick={handleProcessSalaryPayment}>
+              Process Payment
+            </Button>
           </ModalFooter>
         </ModalContent>
       </Modal>

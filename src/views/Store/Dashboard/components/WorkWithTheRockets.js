@@ -14,13 +14,12 @@ import CardBody from "components/Card/CardBody.js";
 import React from "react";
 // react icons
 import { BsArrowRight } from "react-icons/bs";
-import { useHistory, useLocation } from "react-router-dom";
+import { useHistory } from "react-router-dom";
 import { useDashboard } from "contexts/DashboardContext";
 
 const WorkWithTheRockets = ({ title, description, backgroundImage }) => {
   const overlayRef = React.useRef();
   const history = useHistory();
-  const location = useLocation();
   const { currentDashboard, setDashboard } = useDashboard();
   
   const isFactoryDashboard = currentDashboard === 'factory';

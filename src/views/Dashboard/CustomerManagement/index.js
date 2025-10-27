@@ -50,6 +50,7 @@ import {
   Radio,
   RadioGroup,
   Stack,
+  Checkbox,
 } from "@chakra-ui/react";
 // Custom components
 import Card from "components/Card/Card.js";
@@ -458,7 +459,11 @@ function CustomerManagement() {
           name: s.item_name,
           available: parseFloat(s.quantity_per_unit || 0),
           itemPrice: s.item_price ? parseFloat(s.item_price) : null,
-          unitLabel: s.unit?.unit_name || 'Units'
+          unitLabel: s.unit?.unit_name || 'Units',
+          allowSecondarySales: s.allow_secondary_sales || false,
+          secondaryUnitLabel: s.secondaryUnit?.unit_name || null,
+          conversionFactor: s.conversion_factor || null,
+          availableSecondaryQuantity: s.available_secondary_quantity || null,
         })));
       } else {
         setStockOptions([]);
@@ -485,7 +490,7 @@ function CustomerManagement() {
     if (stockOptions.length === 0) return;
     setNewCustomer(prev => ({
       ...prev,
-      items: [...prev.items, { stockId: "", quantity: "" }]
+      items: [...prev.items, { stockId: "", quantity: "", useSecondaryUnit: false }]
     }));
   };
 
@@ -585,7 +590,8 @@ function CustomerManagement() {
           uniqueItems.push({
             stock_id: stockId,
             quantity: parseFloat(item.quantity),
-            ...(item.unitPrice !== undefined && item.unitPrice !== "" ? { unit_price: parseFloat(item.unitPrice) } : {})
+            ...(item.unitPrice !== undefined && item.unitPrice !== "" ? { unit_price: parseFloat(item.unitPrice) } : {}),
+            ...(item.useSecondaryUnit ? { use_secondary_unit: true } : {})
           });
         }
       }
@@ -1144,13 +1150,24 @@ function CustomerManagement() {
                             {stock ? (
                               <Text mt="6px" fontSize="xs" color="gray.500">
                                 {`Available: ${stock.available} ${stock.unitLabel}`}
+                                {stock.allowSecondarySales && stock.availableSecondaryQuantity && (
+                                  <Text as="span" ml="8px">
+                                    / {stock.availableSecondaryQuantity} {stock.secondaryUnitLabel}
+                                  </Text>
+                                )}
                               </Text>
                             ) : (
                               <Text mt="6px" fontSize="xs" color="gray.400">Select an item to see availability</Text>
                             )}
                           </FormControl>
                           <FormControl>
-                            <FormLabel fontSize="xs" color="gray.500">Quantity</FormLabel>
+                            <FormLabel fontSize="xs" color="gray.500">
+                              Quantity {it.useSecondaryUnit && stock?.secondaryUnitLabel && (
+                                <Badge ml="6px" colorScheme="orange" fontSize="xs">
+                                  in {stock.secondaryUnitLabel}
+                                </Badge>
+                              )}
+                            </FormLabel>
                             <Input
                               type="number"
                               placeholder="Qty"
@@ -1158,6 +1175,23 @@ function CustomerManagement() {
                               value={it.quantity}
                               onChange={(e) => { const v = e.target.value; updatePurchaseItem(idx, { quantity: v }); }}
                             />
+                            <HStack mt="8px" spacing="12px" wrap="wrap">
+                              <Text fontSize="xs" color="gray.500">
+                                {it.useSecondaryUnit && stock?.secondaryUnitLabel
+                                  ? `Selling in: ${stock.secondaryUnitLabel}`
+                                  : `Selling in: ${stock?.unitLabel || 'Units'}`
+                                }
+                              </Text>
+                              {stock && stock.allowSecondarySales && (
+                                <Checkbox
+                                  size="sm"
+                                  isChecked={it.useSecondaryUnit || false}
+                                  onChange={(e) => updatePurchaseItem(idx, { useSecondaryUnit: e.target.checked })}
+                                >
+                                  <Text fontSize="xs" color="gray.500">Use secondary</Text>
+                                </Checkbox>
+                              )}
+                            </HStack>
                           </FormControl>
                           <FormControl>
                             <FormLabel fontSize="xs" color="gray.500">Unit Price</FormLabel>

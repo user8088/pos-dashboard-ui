@@ -20,6 +20,7 @@ import MainPanel from '../components/Layout/MainPanel';
 import PanelContainer from '../components/Layout/PanelContainer';
 // Search context
 import { SearchProvider } from '../contexts/SearchContext';
+import { DashboardProvider } from '../contexts/DashboardContext';
 import PanelContent from '../components/Layout/PanelContent';
 export default function Dashboard(props) {
 	const { ...rest } = props;
@@ -98,7 +99,8 @@ export default function Dashboard(props) {
 	// Chakra Color Mode
 	return (
 		<ChakraProvider theme={theme} resetCss={false}>
-			<SearchProvider>
+			<DashboardProvider>
+				<SearchProvider>
 				<Sidebar
 					routes={routes}
 					logoText={'POS MUGHAL SUPPLIERS'}
@@ -149,7 +151,8 @@ export default function Dashboard(props) {
 						onTransparent={() => setSidebarVariant('transparent')}
 					/>
 				</MainPanel>
-			</SearchProvider>
+				</SearchProvider>
+			</DashboardProvider>
 		</ChakraProvider>
 	);
 }

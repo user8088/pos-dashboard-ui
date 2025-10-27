@@ -46,6 +46,7 @@ import {
   NumberDecrementStepper,
   useDisclosure,
   Textarea,
+  Checkbox,
 } from "@chakra-ui/react";
 // Custom components
 import Card from "components/Card/Card.js";
@@ -78,7 +79,7 @@ function CustomerProfile() {
   const { isOpen: isRatingOpen, onOpen: onRatingOpen, onClose: onRatingClose } = useDisclosure();
   
   // Purchase form state
-  const [purchaseItems, setPurchaseItems] = useState([{ stock_id: '', quantity: 1, unit_price: '' }]);
+  const [purchaseItems, setPurchaseItems] = useState([{ stock_id: '', quantity: 1, unit_price: '', use_secondary_unit: false }]);
   const [discountAmount, setDiscountAmount] = useState(0);
   const [paidCash, setPaidCash] = useState(0);
   const [paidOnline, setPaidOnline] = useState(0);
@@ -262,6 +263,7 @@ function CustomerProfile() {
         stock_id: parseInt(item.stock_id),
         quantity: parseFloat(item.quantity),
         unit_price: item.unit_price ? parseFloat(item.unit_price) : undefined,
+        ...(item.use_secondary_unit ? { use_secondary_unit: true } : {})
       }));
 
       const requestBody = {
@@ -319,7 +321,7 @@ function CustomerProfile() {
 
   // Add new item row
   const handleAddItemRow = () => {
-    setPurchaseItems([...purchaseItems, { stock_id: '', quantity: 1, unit_price: '' }]);
+    setPurchaseItems([...purchaseItems, { stock_id: '', quantity: 1, unit_price: '', use_secondary_unit: false }]);
   };
 
   // Remove item row
@@ -348,7 +350,7 @@ function CustomerProfile() {
 
   // Reset form
   const handleResetForm = () => {
-    setPurchaseItems([{ stock_id: '', quantity: 1, unit_price: '' }]);
+    setPurchaseItems([{ stock_id: '', quantity: 1, unit_price: '', use_secondary_unit: false }]);
     setDiscountAmount(0);
     setPaidCash(0);
     setPaidOnline(0);
@@ -858,68 +860,78 @@ function CustomerProfile() {
                 <Tr>
                   <Th fontSize="xs" py={1.5} px={4} w="45%">ITEM NAME</Th>
                   <Th fontSize="xs" py={1.5} px={4} w="15%">PURCHASE</Th>
-                  <Th fontSize="xs" py={1.5} px={4} isNumeric w="10%">QTY</Th>
+                  <Th fontSize="xs" py={1.5} px={4} isNumeric w="15%">QTY & UNIT</Th>
                   <Th fontSize="xs" py={1.5} px={4} isNumeric w="15%">UNIT PRICE</Th>
-                  <Th fontSize="xs" py={1.5} px={4} isNumeric w="15%">TOTAL</Th>
+                  <Th fontSize="xs" py={1.5} px={4} isNumeric w="10%">TOTAL</Th>
                 </Tr>
               </Thead>
               <Tbody>
                 {/* Display items from original purchased_items (first purchase) */}
                 {customer.purchased_items && customer.purchased_items.length > 0 && (
-                  customer.purchased_items.map((item, index) => (
-                    <Tr key={`original-${index}`}>
-                      <Td py={2} px={4}>
-                        <Text fontSize="sm" fontWeight="medium" color={textColor}>
-                          {item.item_name}
-                        </Text>
-                      </Td>
-                      <Td py={2} px={4}>
-                        <Badge colorScheme="gray" fontSize="2xs">Initial</Badge>
-                      </Td>
-                      <Td py={2} px={4} isNumeric>
-                        <Text fontSize="sm" color={textColor}>{item.quantity}</Text>
-                      </Td>
-                      <Td py={2} px={4} isNumeric>
-                        <Text fontSize="sm" color={textColor}>{formatCurrency(item.unit_price)}</Text>
-                      </Td>
-                      <Td py={2} px={4} isNumeric>
-                        <Text fontSize="sm" fontWeight="bold" color="teal.500">
-                          {formatCurrency(item.line_total)}
-                        </Text>
-                      </Td>
-                    </Tr>
-                  ))
+                  customer.purchased_items.map((item, index) => {
+                    // The backend already sends the correct unit_name based on use_secondary_unit flag
+                    // Just use it directly!
+                    const unitName = item.unit_name || 'Units';
+                    return (
+                      <Tr key={`original-${index}`}>
+                        <Td py={2} px={4}>
+                          <Text fontSize="sm" fontWeight="medium" color={textColor}>
+                            {item.item_name}
+                          </Text>
+                        </Td>
+                        <Td py={2} px={4}>
+                          <Badge colorScheme="gray" fontSize="2xs">Initial</Badge>
+                        </Td>
+                        <Td py={2} px={4} isNumeric>
+                          <Text fontSize="sm" color={textColor}>{item.quantity} {unitName}</Text>
+                        </Td>
+                        <Td py={2} px={4} isNumeric>
+                          <Text fontSize="sm" color={textColor}>{formatCurrency(item.unit_price)}</Text>
+                        </Td>
+                        <Td py={2} px={4} isNumeric>
+                          <Text fontSize="sm" fontWeight="bold" color="teal.500">
+                            {formatCurrency(item.line_total)}
+                          </Text>
+                        </Td>
+                      </Tr>
+                    );
+                  })
                 )}
                 
                 {/* Display items from all purchases */}
                 {purchases && purchases.length > 0 && purchases.map((purchase) => (
-                  purchase.items && purchase.items.length > 0 && purchase.items.map((item, itemIndex) => (
-                    <Tr key={`purchase-${purchase.id}-item-${itemIndex}`}>
-                      <Td py={2} px={4}>
-                        <Text fontSize="sm" fontWeight="medium" color={textColor}>
-                          {item.item_name}
-                        </Text>
-                      </Td>
-                      <Td py={2} px={4}>
-                        <Tooltip label={`From ${purchase.purchase_code}`}>
-                          <Badge colorScheme="blue" fontSize="2xs">
-                            {purchase.purchase_code.split('-')[0]}
-                          </Badge>
-                        </Tooltip>
-                      </Td>
-                      <Td py={2} px={4} isNumeric>
-                        <Text fontSize="sm" color={textColor}>{item.quantity}</Text>
-                      </Td>
-                      <Td py={2} px={4} isNumeric>
-                        <Text fontSize="sm" color={textColor}>{formatCurrency(item.unit_price)}</Text>
-                      </Td>
-                      <Td py={2} px={4} isNumeric>
-                        <Text fontSize="sm" fontWeight="bold" color="teal.500">
-                          {formatCurrency(item.line_total)}
-                        </Text>
-                      </Td>
-                    </Tr>
-                  ))
+                  purchase.items && purchase.items.length > 0 && purchase.items.map((item, itemIndex) => {
+                    // The backend already sends the correct unit_name based on use_secondary_unit flag
+                    // Just use it directly!
+                    const unitName = item.unit_name || 'Units';
+                    return (
+                      <Tr key={`purchase-${purchase.id}-item-${itemIndex}`}>
+                        <Td py={2} px={4}>
+                          <Text fontSize="sm" fontWeight="medium" color={textColor}>
+                            {item.item_name}
+                          </Text>
+                        </Td>
+                        <Td py={2} px={4}>
+                          <Tooltip label={`From ${purchase.purchase_code}`}>
+                            <Badge colorScheme="blue" fontSize="2xs">
+                              {purchase.purchase_code.split('-')[0]}
+                            </Badge>
+                          </Tooltip>
+                        </Td>
+                        <Td py={2} px={4} isNumeric>
+                          <Text fontSize="sm" color={textColor}>{item.quantity} {unitName}</Text>
+                        </Td>
+                        <Td py={2} px={4} isNumeric>
+                          <Text fontSize="sm" color={textColor}>{formatCurrency(item.unit_price)}</Text>
+                        </Td>
+                        <Td py={2} px={4} isNumeric>
+                          <Text fontSize="sm" fontWeight="bold" color="teal.500">
+                            {formatCurrency(item.line_total)}
+                          </Text>
+                        </Td>
+                      </Tr>
+                    );
+                  })
                 ))}
                 
                 {/* Show empty state only if no items at all */}
@@ -1201,63 +1213,98 @@ function CustomerProfile() {
                 <Text fontSize="sm" fontWeight="bold" mb={2}>
                   Purchase Items
                 </Text>
-                {purchaseItems.map((item, index) => (
-                  <HStack key={index} spacing={2} mb={2} align="flex-end">
-                    <FormControl flex={2}>
-                      <FormLabel fontSize="xs">Item</FormLabel>
-                      <Select
-                        size="sm"
-                        placeholder="Select item"
-                        value={item.stock_id}
-                        onChange={(e) => handleItemChange(index, 'stock_id', e.target.value)}
-                      >
-                        {stockItems.map((stock) => (
-                          <option key={stock.item_id} value={stock.item_id}>
-                            {stock.item_name} - Available: {stock.quantity_per_unit}
-                          </option>
-                        ))}
-                      </Select>
-                    </FormControl>
-                    <FormControl flex={1}>
-                      <FormLabel fontSize="xs">Quantity</FormLabel>
-                      <NumberInput
-                        size="sm"
-                        min={0.01}
-                        value={item.quantity}
-                        onChange={(valueString) => handleItemChange(index, 'quantity', valueString)}
-                      >
-                        <NumberInputField />
-                        <NumberInputStepper>
-                          <NumberIncrementStepper />
-                          <NumberDecrementStepper />
-                        </NumberInputStepper>
-                      </NumberInput>
-                    </FormControl>
-                    <FormControl flex={1}>
-                      <FormLabel fontSize="xs">Unit Price</FormLabel>
-                      <NumberInput
-                        size="sm"
-                        min={0}
-                        value={item.unit_price}
-                        onChange={(valueString) => handleItemChange(index, 'unit_price', valueString)}
-                      >
-                        <NumberInputField />
-                        <NumberInputStepper>
-                          <NumberIncrementStepper />
-                          <NumberDecrementStepper />
-                        </NumberInputStepper>
-                      </NumberInput>
-                    </FormControl>
-                    <IconButton
-                      icon={<FaTrash />}
-                      size="sm"
-                      colorScheme="red"
-                      variant="ghost"
-                      onClick={() => handleRemoveItemRow(index)}
-                      isDisabled={purchaseItems.length === 1}
-                    />
-                  </HStack>
-                ))}
+                {purchaseItems.map((item, index) => {
+                  const stock = stockItems.find(s => s.item_id === parseInt(item.stock_id));
+                  return (
+                    <VStack key={index} spacing={2} mb={2} align="stretch">
+                      <HStack spacing={2} align="flex-end">
+                        <FormControl flex={2}>
+                          <FormLabel fontSize="xs">Item</FormLabel>
+                          <Select
+                            size="sm"
+                            placeholder="Select item"
+                            value={item.stock_id}
+                            onChange={(e) => handleItemChange(index, 'stock_id', e.target.value)}
+                          >
+                            {stockItems.map((stock) => (
+                              <option key={stock.item_id} value={stock.item_id}>
+                                {stock.item_name} - Available: {stock.quantity_per_unit} {stock.unit?.unit_name}
+                              </option>
+                            ))}
+                          </Select>
+                          {stock && (
+                            <Text fontSize="xs" color="gray.600" mt="4px">
+                              {stock.allow_secondary_sales && stock.secondaryUnit 
+                                ? `${stock.quantity_per_unit} ${stock.unit?.unit_name} / ${stock.available_secondary_quantity} ${stock.secondaryUnit?.unit_name}`
+                                : `${stock.quantity_per_unit} ${stock.unit?.unit_name}`
+                              }
+                            </Text>
+                          )}
+                        </FormControl>
+                        <FormControl flex={1}>
+                          <FormLabel fontSize="xs">
+                            Quantity {item.use_secondary_unit && stock?.secondaryUnit && (
+                              <Badge ml="2px" colorScheme="orange" fontSize="xs">
+                                {stock.secondaryUnit.unit_name}
+                              </Badge>
+                            )}
+                          </FormLabel>
+                          <NumberInput
+                            size="sm"
+                            min={0.01}
+                            value={item.quantity}
+                            onChange={(valueString) => handleItemChange(index, 'quantity', valueString)}
+                          >
+                            <NumberInputField />
+                            <NumberInputStepper>
+                              <NumberIncrementStepper />
+                              <NumberDecrementStepper />
+                            </NumberInputStepper>
+                          </NumberInput>
+                        </FormControl>
+                        <FormControl flex={1}>
+                          <FormLabel fontSize="xs">Unit Price</FormLabel>
+                          <NumberInput
+                            size="sm"
+                            min={0}
+                            value={item.unit_price}
+                            onChange={(valueString) => handleItemChange(index, 'unit_price', valueString)}
+                          >
+                            <NumberInputField />
+                            <NumberInputStepper>
+                              <NumberIncrementStepper />
+                              <NumberDecrementStepper />
+                            </NumberInputStepper>
+                          </NumberInput>
+                        </FormControl>
+                        <IconButton
+                          icon={<FaTrash />}
+                          size="sm"
+                          colorScheme="red"
+                          variant="ghost"
+                          onClick={() => handleRemoveItemRow(index)}
+                          isDisabled={purchaseItems.length === 1}
+                        />
+                      </HStack>
+                      {stock && stock.allow_secondary_sales && stock.secondaryUnit && (
+                        <HStack spacing="12px">
+                          <Text fontSize="xs" color="gray.600">
+                            Selling in: {item.use_secondary_unit ? stock.secondaryUnit?.unit_name : stock.unit?.unit_name}
+                          </Text>
+                          <Checkbox
+                            size="sm"
+                            isChecked={item.use_secondary_unit || false}
+                            onChange={(e) => handleItemChange(index, 'use_secondary_unit', e.target.checked)}
+                          >
+                            <Text fontSize="xs" color="gray.600">
+                              Use {stock.secondaryUnit?.unit_name}
+                            </Text>
+                          </Checkbox>
+                        </HStack>
+                      )}
+                    </VStack>
+                  );
+                })}
                 <Button
                   leftIcon={<FaPlus />}
                   size="sm"
