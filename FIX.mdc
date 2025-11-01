@@ -1,0 +1,80 @@
+# Units and Items API
+
+All endpoints require Bearer auth. Base prefix: `/api`.
+
+## Units
+
+### List Units
+GET `/api/units?q=kg&page=1`
+
+### Create Unit
+POST `/api/units`
+```json
+{ "name": "Kilogram", "symbol": "kg", "description": "Weight" }
+```
+
+### Show Unit
+GET `/api/units/{id}`
+
+### Update Unit
+PUT/PATCH `/api/units/{id}`
+```json
+{ "name": "Bag" }
+```
+
+### Delete Unit
+DELETE `/api/units/{id}`
+
+---
+
+## Items (updated)
+
+Fields:
+- `product_category_id` (required)
+- `primary_unit_id` (required) → references `units.id`
+- `secondary_unit_id` (optional) → references `units.id`
+- `secondary_per_primary` (optional, numeric > 0) → how many secondary units in one primary
+- `qty_per_primary_unit`, `qty_per_secondary_unit` (existing integer fields)
+- `last_purchase_price`, `selling_price`, `image_url`
+
+Rules:
+- If either `secondary_unit_id` or `secondary_per_primary` is provided, both must be provided.
+
+### List Items
+GET `/api/items?q=cement&product_category_id=1&page=1`
+- Returns items with `category`, `primaryUnit`, `secondaryUnit` relations.
+
+### Create Item
+POST `/api/items`
+```json
+{
+  "name": "Cement",
+  "product_category_id": 1,
+  "primary_unit_id": 2,
+  "secondary_unit_id": 3,
+  "secondary_per_primary": 2.0,
+  "qty_per_primary_unit": 1,
+  "qty_per_secondary_unit": 1,
+  "last_purchase_price": 900.0,
+  "selling_price": 1000.0,
+  "image_url": null
+}
+```
+
+### Show Item
+GET `/api/items/{id}`
+
+### Update Item
+PUT/PATCH `/api/items/{id}`
+```json
+{ "secondary_unit_id": 3, "secondary_per_primary": 2.5 }
+```
+
+### Delete Item
+DELETE `/api/items/{id}`
+
+---
+
+## Notes
+- Use `secondary_per_primary` to convert between units in your UI.
+- Old text fields `primary_unit` and `secondary_unit` are deprecated in the API.

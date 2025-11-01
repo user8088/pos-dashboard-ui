@@ -2,6 +2,7 @@ import {
   Badge,
   Button,
   Flex,
+  HStack,
   Image,
   Td,
   Text,
@@ -11,7 +12,7 @@ import {
 import React from "react";
 
 function RawMaterialTableRow(props) {
-  const { logo, name, amountPerUnit, totalPurchaseCost, invoiceLink, status, amountPending, onEdit } = props;
+  const { logo, name, amountPerUnit, totalPurchaseCost, invoiceLink, status, amountPending, onEdit, onDelete } = props;
   const textColor = useColorModeValue("gray.700", "white");
 
   // Status color mapping
@@ -94,18 +95,34 @@ function RawMaterialTableRow(props) {
       </Td>
 
       <Td>
-        <Button p="0px" bg="transparent" variant="no-hover" onClick={onEdit}>
-          <Text
-            fontSize="md"
-            color={textColor}
-            fontWeight="bold"
-            cursor="pointer"
-            transition="all .5s ease"
-            _hover={{ me: "4px" }}
-          >
-            Edit
-          </Text>
-        </Button>
+        <HStack spacing='2'>
+          <Button p="0px" bg="transparent" variant="no-hover" onClick={onEdit}>
+            <Text
+              fontSize="md"
+              color="blue.500"
+              fontWeight="bold"
+              cursor="pointer"
+              transition="all .5s ease"
+              _hover={{ me: "4px" }}
+            >
+              Edit
+            </Text>
+          </Button>
+          {onDelete && (
+            <Button p="0px" bg="transparent" variant="no-hover" onClick={onDelete}>
+              <Text
+                fontSize="md"
+                color="red.500"
+                fontWeight="bold"
+                cursor="pointer"
+                transition="all .5s ease"
+                _hover={{ me: "4px" }}
+              >
+                Delete
+              </Text>
+            </Button>
+          )}
+        </HStack>
       </Td>
     </Tr>
   );

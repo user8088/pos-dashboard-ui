@@ -15,6 +15,7 @@ import AdminNavbar from "components/Navbars/AdminNavbar";
 import Footer from "components/Footer/Footer";
 import FixedPlugin from "components/FixedPlugin/FixedPlugin";
 import Configurator from "components/Configurator/Configurator";
+import ProtectedRoute from "components/ProtectedRoute";
 import { Redirect, Route, Switch } from "react-router-dom";
 import routes from "factoryRoutes.js";
 import "@fontsource/roboto/400.css";
@@ -120,10 +121,12 @@ export default function FactoryDashboard(props) {
 				{getRoute() ? (
 					<PanelContent>
 						<PanelContainer>
-							<Switch>
-								{getRoutes(routes)}
-								<Redirect from='/factory' to='/factory/dashboard' />
-							</Switch>
+							<ProtectedRoute>
+								<Switch>
+									{getRoutes(routes)}
+									<Redirect from='/factory' to='/factory/dashboard' />
+								</Switch>
+							</ProtectedRoute>
 						</PanelContainer>
 					</PanelContent>
 				) : null}

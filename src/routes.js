@@ -7,6 +7,13 @@ import Profile from "views/Dashboard/Profile";
 import InProgress from "views/Dashboard/InProgress";
 import SalesAnalytics from "views/Dashboard/SalesAnalytics";
 import CustomerManagement from "views/Dashboard/CustomerManagement";
+import StaffManagement from "views/Dashboard/StaffManagement";
+import AttendanceReports from "views/Dashboard/AttendanceReports";
+import SalaryTracker from "views/Dashboard/SalaryTracker";
+import POS from "views/Dashboard/POS";
+import Invoices from "views/Dashboard/Invoices";
+import CustomerProfile from "views/Dashboard/CustomerProfile";
+import StockItemDetail from "views/Dashboard/StockItemDetail";
 import SignIn from "views/Auth/SignIn.js";
 import SignUp from "views/Auth/SignUp.js";
 
@@ -39,6 +46,39 @@ var dashRoutes = [
     layout: "/admin",
   },
   {
+    path: "/pos",
+    name: "POS",
+    rtlName: "لوحة القيادة",
+    icon: <CreditIcon color="inherit" />,
+    component: POS,
+    layout: "/admin",
+  },
+  {
+    path: "/invoices",
+    name: "Invoices",
+    rtlName: "لوحة القيادة",
+    icon: <DocumentIcon color="inherit" />,
+    component: Invoices,
+    layout: "/admin",
+  },
+  {
+    path: "/customers/:id",
+    name: "Customer Profile",
+    rtlName: "لوحة القيادة",
+    component: CustomerProfile,
+    layout: "/admin",
+    hidden: true,
+  },
+  // Detail route placed BEFORE list route so it matches first
+  {
+    path: "/stock-management/:id",
+    name: "Stock Item Detail",
+    rtlName: "لوحة القيادة",
+    component: StockItemDetail,
+    layout: "/admin",
+    hidden: true,
+  },
+  {
     path: "/stock-management",
     name: "Stock Management",
     rtlName: "لوحة القيادة",
@@ -60,6 +100,30 @@ var dashRoutes = [
     rtlName: "لوحة القيادة",
     icon: <CreditIcon color="inherit" />,
     component: Billing,
+    layout: "/admin",
+  },
+  {
+    path: "/staff-management",
+    name: "Staff Management",
+    rtlName: "لوحة القيادة",
+    icon: <PersonIcon color="inherit" />,
+    component: StaffManagement,
+    layout: "/admin",
+  },
+  {
+    path: "/attendance-reports",
+    name: "Attendance Reports",
+    rtlName: "لوحة القيادة",
+    icon: <StatsIcon color="inherit" />,
+    component: AttendanceReports,
+    layout: "/admin",
+  },
+  {
+    path: "/salary-tracker",
+    name: "Salary Tracker",
+    rtlName: "لوحة القيادة",
+    icon: <CreditIcon color="inherit" />,
+    component: SalaryTracker,
     layout: "/admin",
   },
 

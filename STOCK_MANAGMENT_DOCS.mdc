@@ -1,0 +1,119 @@
+---
+alwaysApply: true
+---
+# Store Stock Management — Frontend Docs
+
+Base namespace (web views)
+- Categories: /admin/categories
+- Items: /admin/items
+
+Note: These are Laravel resource routes returning HTML. For SPA/JSON, send `Accept: application/json` (to receive JSON validation errors/responses) or expose dedicated API endpoints.
+
+## Product Categories
+
+Routes
+- GET /admin/categories — List (paginated)
+- GET /admin/categories/create — Create form
+- POST /admin/categories — Create
+- GET /admin/categories/{id} — Details
+- GET /admin/categories/{id}/edit — Edit form
+- PUT /admin/categories/{id} — Update
+- DELETE /admin/categories/{id} — Delete
+
+Fields (form/JSON keys)
+- name string (required, unique)
+- description string (optional)
+
+Validation
+- name: required, unique
+
+## Stock Items
+
+Routes
+- GET /admin/items — List (paginated, includes category name)
+- GET /admin/items/create — Create form (category dropdown prefilled)
+- POST /admin/items — Create
+- GET /admin/items/{id} — Details
+- GET /admin/items/{id}/edit — Edit form
+- PUT /admin/items/{id} — Update
+- DELETE /admin/items/{id} — Delete
+
+Fields (form/JSON keys)
+- name string (required)
+- product_category_id integer (required; must exist)
+- primary_unit string (required)
+- secondary_unit string (required)
+- qty_per_primary_unit integer (>= 1)
+- qty_per_secondary_unit integer (>= 1)
+- last_purchase_price number (>= 0)
+- selling_price number (>= 0)
+- image_url string (optional)
+
+Validation
+- name: required
+- product_category_id: required, exists
+- primary_unit, secondary_unit: required
+- qty_per_*: integer, min 1
+- last_purchase_price, selling_price: numeric, min 0
+
+## HTML Form Field Names
+- Category: name, description
+- Item: name, product_category_id, primary_unit, secondary_unit, qty_per_primary_unit, qty_per_secondary_unit, last_purchase_price, selling_price, image_url
+
+## Examples (SPA / fetch)
+
+Create Category
+```javascript
+await fetch('/admin/categories', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'Accept': 'application/json',
+    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
+  },
+  body: JSON.stringify({ name: 'Cement', description: 'All cement types' })
+});
+```
+
+Create Stock Item
+```javascript
+await fetch('/admin/items', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'Accept': 'application/json',
+    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
+  },
+  body: JSON.stringify({
+    name: 'Portland Cement',
+    product_category_id: 1,
+    primary_unit: 'bag',
+    secondary_unit: 'kg',
+    qty_per_primary_unit: 50,
+    qty_per_secondary_unit: 1,
+    last_purchase_price: 1200.00,
+    selling_price: 1400.00,
+    image_url: 'https://cdn.example.com/img/cement.jpg'
+  })
+});
+```
+
+## Category Dropdown Data
+- Server-rendered forms already receive `$categories = ProductCategory::orderBy('name')->pluck('name','id')`.
+- SPA option (add API if needed): expose `GET /api/product-categories` returning `[ { id, name } ]` for dropdowns.
+
+## JSON Responses (optional SPA mode)
+- Send `Accept: application/json` to receive JSON on success and 422 validation errors.
+- Standard Laravel validation error shape:
+```json
+{
+  "message": "The given data was invalid.",
+  "errors": { "name": ["The name field is required."] }
+}
+```
+
+## Success Redirects vs JSON
+- Current controllers redirect after create/update/delete for server-rendered pages.
+- For SPA, either:
+  - Handle 302 by following redirect, or
+  - Switch to API endpoints that return JSON 200/201 without redirects.

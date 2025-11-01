@@ -14,6 +14,8 @@ import {
   MenuList,
   Text,
   useColorModeValue,
+  Avatar,
+  useToast,
 } from "@chakra-ui/react";
 // Assets
 import avatar1 from "assets/img/avatars/avatar1.png";
@@ -26,8 +28,9 @@ import { ItemContent } from "components/Menu/ItemContent";
 import SidebarResponsive from "components/Sidebar/SidebarResponsive";
 import PropTypes from "prop-types";
 import React from "react";
-import { NavLink } from "react-router-dom";
+import { NavLink, useHistory } from "react-router-dom";
 import routes from "routes.js";
+import { useAuth } from "../../contexts/AuthContext";
 
 export default function HeaderLinks(props) {
   const { variant, children, fixed, secondary, onOpen, ...rest } = props;
@@ -43,7 +46,32 @@ export default function HeaderLinks(props) {
     navbarIcon = "white";
     mainText = "white";
   }
+  
+  const { user, logout, isAuthenticated } = useAuth();
+  const history = useHistory();
+  const toast = useToast();
   const settingsRef = React.useRef();
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+      toast({
+        title: "Logged out successfully",
+        status: "success",
+        duration: 3000,
+        isClosable: true,
+      });
+      history.push("/auth/signin");
+    } catch (error) {
+      toast({
+        title: "Logout failed",
+        description: "An error occurred while logging out",
+        status: "error",
+        duration: 3000,
+        isClosable: true,
+      });
+    }
+  };
   return (
     <Flex
       pe={{ sm: "0px", md: "16px" }}
@@ -91,33 +119,85 @@ export default function HeaderLinks(props) {
           color={mainText}
           placeholder="Type here..."
           borderRadius="inherit"
+          onChange={(e) => {
+            try {
+              window.dispatchEvent(new CustomEvent('app:search', { detail: e.target.value }));
+            } catch (_) {}
+          }}
         />
       </InputGroup>
-      <NavLink to="/auth/signin">
-        <Button
-          ms="0px"
-          px="0px"
-          me={{ sm: "2px", md: "16px" }}
-          color={navbarIcon}
-          variant="transparent-with-icon"
-          rightIcon={
-            document.documentElement.dir ? (
-              ""
-            ) : (
-              <ProfileIcon color={navbarIcon} w="22px" h="22px" me="0px" />
-            )
-          }
-          leftIcon={
-            document.documentElement.dir ? (
-              <ProfileIcon color={navbarIcon} w="22px" h="22px" me="0px" />
-            ) : (
-              ""
-            )
-          }
-        >
-          <Text display={{ sm: "none", md: "flex" }}>Sign In</Text>
-        </Button>
-      </NavLink>
+      {isAuthenticated && user ? (
+        <Menu>
+          <MenuButton
+            as={Button}
+            ms="0px"
+            px="0px"
+            me={{ sm: "2px", md: "16px" }}
+            color={navbarIcon}
+            variant="transparent-with-icon"
+            rightIcon={
+              document.documentElement.dir ? (
+                ""
+              ) : (
+                <Avatar size="sm" name={user.name} src={avatar1} />
+              )
+            }
+            leftIcon={
+              document.documentElement.dir ? (
+                <Avatar size="sm" name={user.name} src={avatar1} />
+              ) : (
+                ""
+              )
+            }
+          >
+            <Text display={{ sm: "none", md: "flex" }}>{user.name}</Text>
+          </MenuButton>
+          <MenuList>
+            <MenuItem>
+              <Flex direction="column" align="start">
+                <Text fontWeight="bold">{user.name}</Text>
+                <Text fontSize="sm" color="gray.500">{user.email}</Text>
+                <Text fontSize="xs" color="gray.400" textTransform="uppercase">
+                  {user.user_type}
+                </Text>
+              </Flex>
+            </MenuItem>
+            <MenuItem onClick={() => history.push("/admin/profile")}>
+              <ProfileIcon color={navbarIcon} w="18px" h="18px" me="8px" />
+              Profile
+            </MenuItem>
+            <MenuItem onClick={handleLogout}>
+              <Text color="red.500">Logout</Text>
+            </MenuItem>
+          </MenuList>
+        </Menu>
+      ) : (
+        <NavLink to="/auth/signin">
+          <Button
+            ms="0px"
+            px="0px"
+            me={{ sm: "2px", md: "16px" }}
+            color={navbarIcon}
+            variant="transparent-with-icon"
+            rightIcon={
+              document.documentElement.dir ? (
+                ""
+              ) : (
+                <ProfileIcon color={navbarIcon} w="22px" h="22px" me="0px" />
+              )
+            }
+            leftIcon={
+              document.documentElement.dir ? (
+                <ProfileIcon color={navbarIcon} w="22px" h="22px" me="0px" />
+              ) : (
+                ""
+              )
+            }
+          >
+            <Text display={{ sm: "none", md: "flex" }}>Sign In</Text>
+          </Button>
+        </NavLink>
+      )}
       <SidebarResponsive
         logoText={props.logoText}
         secondary={props.secondary}

@@ -1,0 +1,422 @@
+# POS / Invoices API
+
+Base: `/api` (Bearer auth required)
+
+## Fetch Data for POS
+
+### List Stock Items (catalog)
+GET `/api/items?q={search}&product_category_id={id}&page=1`
+- Returns items with `category`, `primaryUnit`, `secondaryUnit`, and `last_purchase_price`.
+
+Example response (trimmed):
+```json
+{
+  "success": true,
+  "data": {
+    "data": [
+      {
+        "id": 5,
+        "name": "Cement",
+        "selling_price": "1000.00",
+        "last_purchase_price": "900.00",
+        "primary_unit_id": 2,
+        "secondary_unit_id": 3,
+        "secondary_per_primary": "2.000",
+        "category": { "id": 1, "name": "Construction" },
+        "primaryUnit": { "id": 2, "name": "Bag", "symbol": "bag" },
+        "secondaryUnit": { "id": 3, "name": "Kilogram", "symbol": "kg" }
+      }
+    ],
+    "total": 1
+  }
+}
+```
+
+### Search Customers
+GET `/api/customers?search={nameOrPhone}&per_page=10`
+
+---
+
+## Create Invoice (Checkout)
+POST `/api/invoices`
+
+Body
+```json
+{
+  "customer_id": 1,
+  "payment_method": "cash",
+  "discount_percent": 5,
+  "discount_amount": 100,
+  "hidden_costs": 50.00,            // optional; added to total after discounts, not shown on PDF
+  "paid_amount": 500,                // optional; see payment_as
+  "payment_as": "payment",          // payment | advance
+  "apply_advance": true,              // optional; if true, applies existing customer advance to invoice (default: true)
+  "due_date": "2025-11-15",         // optional promise-to-pay date
+  "salesperson_user_id": 1,
+  "notes": "Walk-in customer",
+  "skip": false,                    // optional; if true, skips customer balance updates
+  "items": [
+    { "stock_item_id": 3, "quantity": 1 },
+    { "stock_item_id": 5, "quantity": 2, "unit_price": 850 }
+  ]
+}
+```
+
+Rules
+- `items[].unit_price` optional; defaults to the item's `selling_price`.
+- Discounts: both fixed and percent can be supplied; both are applied.
+- `hidden_costs`: Optional. Added to total AFTER discounts are applied. Included in customer balance calculations but NOT displayed on printed invoices/PDFs.
+- `paid_amount` with `payment_as`:
+  - `payment`: applied to this invoice; excess goes to customer advance.
+  - `advance`: entire amount goes to advance; invoice remains fully due.
+- `apply_advance`: Optional boolean (default: `true`). Controls whether to apply existing customer advance balance to the invoice:
+  - `true` or omitted: automatically applies available advance balance to invoice (reduces advance, reduces invoice due)
+  - `false`: does not apply existing advance balance; invoice is created with full amount due
+- `skip`: Optional boolean. If `true`, creates the invoice but skips:
+  - Customer balance updates (`due_balance`, `advance_balance`)
+  - Customer transaction creation
+  - Payment processing
+  - Useful for draft invoices or testing without affecting balances
+- `due_date` is stored on the invoice and shown on customer profile.
+- Customer balances (`due_balance`, `advance_balance`) are updated and a `customer_transactions` entry is recorded (unless `skip: true`).
+
+Success 201 (trimmed)
+```json
+{
+  "success": true,
+  "message": "Invoice created",  // or "Invoice created (balance updates skipped)" if skip: true
+  "data": {
+    "id": 12,
+    "invoice_number": "INV-20251030-123",
+    "subtotal": "2700.00",
+    "discount_amount": "235.00",
+    "hidden_costs": "50.00",
+    "total": "2515.00",
+    "paid_amount": "500.00",
+    "advance_applied": "200.00",
+    "due_amount": "1815.00",
+    "due_date": "2025-11-15",
+    "created_at": "2025-10-30T10:30:00.000000Z"
+  }
+}
+```
+
+Validation errors 422
+```json
+{ "success": false, "message": "Validation errors", "errors": { "items.0.quantity": ["The items.0.quantity must be at least 0.001."] } }
+```
+
+---
+
+## List Invoices (for table)
+GET `/api/invoices?per_page=20`
+- Returns paginated invoices; each row includes `customer_name` which is `Guest` when `customer_id` is null.
+
+Example
+```json
+{
+  "success": true,
+  "data": {
+    "data": [
+      {
+        "id": 12,
+        "invoice_number": "INV-20251030-123",
+        "customer_id": 1,
+        "customer_name": "Ali",
+        "payment_method": "cash",
+        "total": "2465.00",
+        "created_at": "2025-10-30T10:30:00.000000Z"
+      }
+    ],
+    "total": 1
+  }
+}
+```
+
+## Get Invoice Details
+GET `/api/invoices/{id}`
+- Returns invoice with `customer`, `items`, and all invoice details including `hidden_costs`.
+
+Example response:
+```json
+{
+  "success": true,
+  "data": {
+    "id": 12,
+    "invoice_number": "INV-20251030-123",
+    "customer_id": 1,
+    "subtotal": "2700.00",
+    "discount_amount": "235.00",
+    "hidden_costs": "50.00",
+    "total": "2515.00",
+    "paid_amount": "500.00",
+    "due_amount": "2015.00",
+    "payment_method": "cash",
+    "notes": "Walk-in customer",
+    "customer": { "id": 1, "name": "Ali", "phone": "..." },
+    "items": [
+      {
+        "id": 101,
+        "stock_item_id": 5,
+        "name": "Cement",
+        "quantity": "2.000",
+        "unit_price": "850.00",
+        "line_total": "1700.00"
+      }
+    ]
+  }
+}
+```
+
+## Download Invoice PDF (Thermal Printer Format)
+GET `/api/invoices/{id}/download`
+- Returns a PDF file formatted for thermal printers (80mm width).
+- PDF includes all invoice details but **excludes** `hidden_costs` from display (hidden costs are included in the total but not shown as a separate line item).
+- Response: PDF file download with filename `invoice-{invoice_number}.pdf`
+
+**Note:** The PDF total includes hidden costs, but they are not displayed as a separate line item on the printed invoice.
+
+---
+
+## Customer Profile (with invoices and sales)
+GET `/api/customers/{id}/profile`
+- Includes:
+  - `invoices` (with `items`) and invoice `due_date`, `paid_amount`, `due_amount`, `hidden_costs`.
+  - `sales` with `items.stock_item.primaryUnit`, `secondaryUnit`.
+  - `transactions` history reflecting sales/payments/advance.
+- **Note:** Invoice `hidden_costs` are included in the response for customer profiles (for profit/loss calculations).
+
+### Sales data included in customer profile
+- Path in payload: `sales[]`
+- Each sale contains `items[]` with linked stock item and unit info.
+
+Example (trimmed)
+```json
+{
+  "id": 1,
+  "name": "Ali",
+  "sales": [
+    {
+      "id": 44,
+      "sale_date": "2025-10-30T12:30:00.000000Z",
+      "total_amount": "2700.00",
+      "items": [
+        {
+          "id": 101,
+          "stock_item_id": 5,
+          "quantity": "2.000",
+          "unit_price": "850.00",
+          "total_price": "1700.00",
+          "stock_item": {
+            "id": 5,
+            "name": "Cement",
+            "secondary_per_primary": "2.000",
+            "primaryUnit": { "id": 2, "name": "Bag", "symbol": "bag" },
+            "secondaryUnit": { "id": 3, "name": "Kilogram", "symbol": "kg" }
+          }
+        }
+      ]
+    }
+  ]
+}
+```
+
+---
+
+## Frontend Flow (summary)
+1) Load catalog: GET `/api/items`
+2) Add to cart; allow custom price per line (optional)
+3) Select customer: GET `/api/customers?search=...`
+4) Choose payment method and discounts
+5) If customer pays now: include `paid_amount` and `payment_as` in POST `/api/invoices`
+6) Table view: GET `/api/invoices`
+7) Customer profile: GET `/api/customers/{id}/profile`
+
+---
+
+## Frontend Usage Recipes
+
+### A) Collect Advance BEFORE Sale (customer pays today, picks later)
+Use customer payments endpoint to store advance. This will auto-apply on the next invoice.
+
+POST `/api/customers/{customerId}/payments`
+```json
+{
+  "amount": 2000,
+  "type": "advance",
+  "description": "Advance for future purchase"
+}
+```
+
+UI hint: After success, show updated `advance_balance` from `GET /api/customers/{id}/profile`.
+
+### B) Create Invoice WITH Partial Payment NOW
+POST `/api/invoices`
+```json
+{
+  "customer_id": 1,
+  "payment_method": "cash",
+  "paid_amount": 1500,
+  "due_date": "2025-11-15",
+  "items": [
+    { "stock_item_id": 5, "quantity": 2 }
+  ]
+}
+```
+Behavior:
+- Existing customer advance (if any) is auto-applied first (unless `apply_advance: false`).
+- `paid_amount` is then applied to the invoice due.
+- Any overpayment becomes new advance.
+
+### C) Create Invoice Using Existing Advance ONLY (no new payment)
+POST `/api/invoices`
+```json
+{
+  "customer_id": 1,
+  "payment_method": "cash",
+  "items": [
+    { "stock_item_id": 5, "quantity": 1 }
+  ]
+}
+```
+Behavior:
+- System auto-uses `advance_balance` to reduce the invoice due.
+- Remaining `due_amount` is reflected on invoice and customer profile.
+
+### D) Show Invoices Table
+GET `/api/invoices?per_page=20`
+- Display columns: `invoice_number`, `customer_name` (or "Guest"), `total`, `paid_amount`, `due_amount`, `due_date`, `created_at`.
+
+### E) Customer Profile Summary
+GET `/api/customers/{id}/profile`
+- Read and display:
+  - Balances: `due_balance`, `advance_balance`
+  - Next promise to pay: min non-null `invoices[].due_date` in the future (optional UI)
+  - Recent invoices and sales with item-level details and units
+  - `transactions` timeline (payments, advances, adjustments)
+  - Invoice `hidden_costs` (available in API response but not shown on printed invoices)
+
+### G) Create Invoice with Hidden Costs
+POST `/api/invoices`
+```json
+{
+  "customer_id": 1,
+  "payment_method": "cash",
+  "discount_percent": 5,
+  "hidden_costs": 50.00,
+  "items": [
+    { "stock_item_id": 5, "quantity": 2 }
+  ]
+}
+```
+Behavior:
+- `hidden_costs` is added to the total AFTER discounts are applied.
+- Hidden costs are included in customer balance calculations.
+- Hidden costs are included in API responses (for profit/loss calculations).
+- Hidden costs are NOT displayed on printed invoice PDFs (they're included in the total but not shown as a line item).
+
+### H) Create Invoice Without Applying Advance
+POST `/api/invoices`
+```json
+{
+  "customer_id": 1,
+  "payment_method": "cash",
+  "apply_advance": false,  // Don't apply existing advance
+  "items": [
+    { "stock_item_id": 5, "quantity": 2 }
+  ]
+}
+```
+Behavior:
+- Invoice is created with full amount due
+- Existing customer advance balance is NOT touched
+- Use case: Customer wants to save advance for future invoices
+- Response includes `advance_applied: "0.00"`
+
+### I) Create Draft Invoice (Skip Balance Updates)
+POST `/api/invoices`
+```json
+{
+  "customer_id": 1,
+  "payment_method": "cash",
+  "apply_advance": false,  // Optional: also prevent advance application
+  "skip": true,
+  "items": [
+    { "stock_item_id": 5, "quantity": 2 }
+  ]
+}
+```
+Behavior:
+- Invoice is created and saved with all items and totals.
+- Customer balances (`due_balance`, `advance_balance`) are NOT updated.
+- Customer transactions are NOT created.
+- Payment processing is skipped.
+- Response message: `"Invoice created (balance updates skipped)"`
+- Useful for: Draft invoices, testing, or creating invoices that will be processed later.
+
+### F) Minimal Fetch Example (Fetch API)
+```ts
+// Create invoice with partial payment, hidden costs, and skip option
+await fetch('/api/invoices', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${token}`
+  },
+  body: JSON.stringify({
+    customer_id: selectedCustomerId,
+    payment_method: selectedMethod, // 'cash'|'card'|'other'
+    paid_amount: Number(paidNow) || 0,
+    due_date: promisedDate || null,
+    discount_percent: Number(discountPct) || null,
+    discount_amount: Number(discountAmt) || null,
+    hidden_costs: Number(hiddenCosts) || null,
+    apply_advance: applyAdvance !== false, // Default to true, set false to skip advance application
+    skip: skipInvoice || false, // Set to true to skip balance updates
+    items: cart.map(l => ({ stock_item_id: l.id, quantity: l.qty, unit_price: l.customPrice || undefined }))
+  })
+});
+```
+
+### I) Download Invoice PDF
+```ts
+// Download invoice as PDF
+const invoiceId = 12;
+const response = await fetch(`/api/invoices/${invoiceId}/download`, {
+  headers: {
+    Authorization: `Bearer ${token}`
+  }
+});
+
+if (response.ok) {
+  const blob = await response.blob();
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `invoice-${invoiceId}.pdf`;
+  document.body.appendChild(a);
+  a.click();
+  window.URL.revokeObjectURL(url);
+  document.body.removeChild(a);
+}
+```
+
+---
+
+## Important Notes
+
+### Hidden Costs
+- **Included in:** Invoice total, customer balance calculations, API responses
+- **Excluded from:** Printed invoice PDF display (shown only in total, not as a line item)
+- **Use case:** For internal costs like delivery fees, service charges, etc. that affect profitability but shouldn't be visible to customers on receipts
+
+### Skip Invoice Feature
+- **When to use:** Draft invoices, testing, or when you need to create invoices without immediately affecting customer balances
+- **Behavior:** Invoice is created normally, but customer balances and transactions are not updated
+- **Note:** Skipped invoices can later have their balances updated manually or through a separate process
+
+### Invoice PDF
+- **Format:** Thermal printer format (80mm width, A4-style layout)
+- **Content:** All invoice details except hidden costs as a separate line item
+- **Total:** Includes hidden costs (they're just not displayed separately)
+- **Filename:** `invoice-{invoice_number}.pdf`

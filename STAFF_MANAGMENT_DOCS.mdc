@@ -1,0 +1,349 @@
+# 📊 Staff Management System API
+
+## Base URL
+```
+http://localhost:8000/api
+```
+
+## Authentication
+Include Bearer token in headers:
+```
+Authorization: Bearer {token}
+```
+
+---
+
+## 👥 User Management
+
+### Get All Users
+**GET** `/api/users`
+- Query: `?user_type=staff&search=john&page=1`
+
+### Create User
+**POST** `/api/users`
+```json
+{
+  "name": "John Doe",
+  "email": "john@example.com", 
+  "password": "password123",
+  "password_confirmation": "password123",
+  "user_type": "staff"
+}
+```
+
+### Get User
+**GET** `/api/users/{id}`
+
+### Update User
+**PUT** `/api/users/{id}`
+```json
+{
+  "name": "John Smith",
+  "email": "johnsmith@example.com"
+}
+```
+
+### Delete User
+**DELETE** `/api/users/{id}`
+
+### Get Staff Only
+**GET** `/api/staff`
+
+### Get User Stats
+**GET** `/api/user-stats`
+
+---
+
+## 📅 Attendance Management (Per‑day, no carry‑over)
+
+### Get Attendance Records
+**GET** `/api/attendances`
+- You must pass either `date` OR both `start_date` and `end_date`.
+- Strict filter: no fallback to latest; only the requested day/range is returned.
+- Query examples:
+  - Daily: `?date=2025-01-15&user_id=1&status=present`
+  - Range: `?start_date=2025-01-01&end_date=2025-01-31&user_id=1`
+
+### Mark Attendance (Upsert by user_id + date)
+**POST** `/api/attendances`
+```json
+{
+  "user_id": 1,
+  "date": "2025-01-15",
+  "status": "present",
+  "remarks": "On time"
+}
+```
+Notes:
+- Required: `date` (YYYY-MM-DD). Stored as DATE (no time).
+- Operation is an upsert by `(user_id, date)` — calling again for the same day updates that row (does not touch other days).
+
+### Bulk Mark Attendance (Single day upsert)
+**POST** `/api/attendances/bulk-mark`
+```json
+{
+  "date": "2025-01-15", // required, single day for all rows
+  "attendances": [
+    {
+      "user_id": 1,
+      "status": "present",
+      "remarks": "On time"
+    },
+    {
+      "user_id": 2, 
+      "status": "late",
+      "remarks": "Traffic"
+    }
+  ]
+}
+```
+Notes:
+- Top-level `date` is required and applied to all rows.
+- Each row is upserted by `(user_id, date)`.
+- Response returns the upserted rows for that date only.
+
+### Get Attendance Summary (Strict by range)
+**GET** `/api/attendances/summary/{userId}`
+- Query: `?start_date=2025-01-01&end_date=2025-01-31`
+
+### Update Attendance (Same-day fields)
+**PUT** `/api/attendances/{id}`
+```json
+{
+  "status": "late",
+  "remarks": "Updated status"
+}
+```
+
+### Delete Attendance
+**DELETE** `/api/attendances/{id}`
+
+---
+
+### Data Integrity Guarantees
+- Unique per day: database constraint on `(user_id, date)`.
+- Date storage: `date` column is DATE-only (no time component).
+- No carry‑over: reads require `date` or `start_date`+`end_date`; nothing is inferred.
+
+---
+
+## 💰 Salary Structure
+
+### Get Salary Structures
+**GET** `/api/salary-structures`
+- Query: `?user_id=1&type=fixed`
+
+### Create Salary Structure
+**POST** `/api/salary-structures`
+```json
+{
+  "user_id": 1,
+  "type": "fixed",
+  "base_salary": 5000.00,
+  "notes": "Monthly fixed salary"
+}
+```
+
+### Commission Structure
+```json
+{
+  "user_id": 2,
+  "type": "commission", 
+  "commission_rate": 8.5,
+  "base_salary": 2000.00,
+  "notes": "8.5% commission on sales"
+}
+```
+
+### Get Structure by User
+**GET** `/api/salary-structures/user/{userId}`
+
+### Update Structure
+**PUT** `/api/salary-structures/{id}`
+
+### Delete Structure
+**DELETE** `/api/salary-structures/{id}`
+
+---
+
+## 💵 Salary Payments
+
+### Get Salary Payments
+**GET** `/api/salary-payments`
+- Query: `?user_id=1&month=2025-01-01&status=pending&year=2025`
+ - Response includes `paid_amount` (aggregated) and `status` in `pending|partial|paid`.
+
+### Create Payment
+**POST** `/api/salary-payments`
+```json
+{
+  "user_id": 1,
+  "salary_structure_id": 1,
+  "month": "2025-01-01",
+  "amount": 5000.00,
+  "status": "pending",
+  "notes": "January salary"
+}
+```
+
+### Generate Monthly Payments
+**POST** `/api/salary-payments/generate-monthly`
+```json
+{
+  "month": "2025-01-01",
+  "notes": "January 2025 salaries"
+}
+```
+
+### Record Payment Transaction (Partial payments; allowed even after "paid")
+**POST** `/api/salary-payments/{id}/transactions`
+```json
+{
+  "amount": 2500.00,
+  "paid_on": "2025-01-15",
+  "method": "cash",
+  "notes": "advance"
+}
+```
+Rules:
+- Increments `paid_amount` and auto-sets `status`:
+  - `paid_amount == 0` → `pending`
+  - `0 < paid_amount < amount` → `partial`
+  - `paid_amount >= amount` → `paid` (sets `payment_date` = latest `paid_on`)
+- Multiple transactions are allowed even after status is `paid`.
+- Remaining displayed by UI = `max(0, amount - paid_amount)`.
+### List Transactions
+**GET** `/api/salary-payments/{id}/transactions`
+
+### Delete Transaction
+**DELETE** `/api/salary-payments/transactions/{txnId}`
+
+UI guidance:
+- Show columns: Amount, Paid (aggregated), Remaining, Status, Month, Last Paid On.
+- "Record Payment" button visible while status ≠ paid.
+- Prevent entering amount > remaining.
+
+### Get Payment Summary
+**GET** `/api/salary-payments/summary/{userId}`
+- Query: `?start_date=2025-01-01&end_date=2025-12-31`
+
+### Update Payment
+**PUT** `/api/salary-payments/{id}`
+
+### Delete Payment
+**DELETE** `/api/salary-payments/{id}`
+
+---
+
+## 🔐 Authentication (from previous)
+
+### Register
+**POST** `/api/register`
+
+### Login  
+**POST** `/api/login`
+
+### Logout
+**POST** `/api/logout`
+
+### Profile
+**GET** `/api/profile`
+
+---
+
+## 📝 Response Format
+
+### Success Response
+```json
+{
+  "success": true,
+  "message": "Operation successful",
+  "data": { ... }
+}
+```
+
+### Error Response
+```json
+{
+  "success": false,
+  "message": "Error description",
+  "errors": {
+    "field": ["Error message"]
+  }
+}
+```
+
+### Pagination
+```json
+{
+  "success": true,
+  "data": {
+    "data": [...],
+    "current_page": 1,
+    "last_page": 5,
+    "per_page": 20,
+    "total": 100
+  }
+}
+```
+
+---
+
+## 🚀 Frontend Integration
+
+### JavaScript Example
+```javascript
+// Get all staff
+const staff = await fetch('/api/staff', {
+  headers: { 'Authorization': `Bearer ${token}` }
+}).then(r => r.json());
+
+// Mark attendance
+const attendance = await fetch('/api/attendances', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${token}`
+  },
+  body: JSON.stringify({
+    user_id: 1,
+    status: 'present',
+    remarks: 'On time'
+  })
+}).then(r => r.json());
+
+// Generate monthly payments
+const payments = await fetch('/api/salary-payments/generate-monthly', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json', 
+    'Authorization': `Bearer ${token}`
+  },
+  body: JSON.stringify({
+    month: '2025-01-01',
+    notes: 'January salaries'
+  })
+}).then(r => r.json());
+```
+
+---
+
+## 📊 Status Values
+
+### Attendance Status
+- `present` - Present
+- `absent` - Absent  
+- `late` - Late arrival
+- `half-day` - Half day
+
+### Payment Status
+- `pending` - Not yet paid
+- `paid` - Payment completed
+
+### User Types
+- `admin` - Administrator
+- `staff` - Staff member
+
+### Salary Types
+- `fixed` - Fixed monthly salary
+- `commission` - Commission-based salary

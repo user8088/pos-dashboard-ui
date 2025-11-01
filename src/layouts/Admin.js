@@ -18,6 +18,7 @@ import FixedPlugin from '../components/FixedPlugin/FixedPlugin';
 import MainPanel from '../components/Layout/MainPanel';
 import PanelContainer from '../components/Layout/PanelContainer';
 import PanelContent from '../components/Layout/PanelContent';
+import ProtectedRoute from '../components/ProtectedRoute';
 export default function Dashboard(props) {
 	const { ...rest } = props;
 	// states and functions
@@ -112,10 +113,12 @@ export default function Dashboard(props) {
 				{getRoute() ? (
 					<PanelContent>
 						<PanelContainer>
-							<Switch>
-								{getRoutes(routes)}
-								<Redirect from='/admin' to='/admin/dashboard' />
-							</Switch>
+							<ProtectedRoute>
+								<Switch>
+									{getRoutes(routes)}
+									<Redirect from='/admin' to='/admin/dashboard' />
+								</Switch>
+							</ProtectedRoute>
 						</PanelContainer>
 					</PanelContent>
 				) : null}

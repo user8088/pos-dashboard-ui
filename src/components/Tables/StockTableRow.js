@@ -1,17 +1,35 @@
 import {
   Badge,
-  Button,
   Flex,
   Image,
   Td,
   Text,
   Tr,
   useColorModeValue,
+  Menu,
+  MenuButton,
+  MenuList,
+  MenuItem,
+  IconButton,
 } from "@chakra-ui/react";
+import { FaEllipsisV } from "react-icons/fa";
 import React from "react";
 
 function StockTableRow(props) {
-  const { logo, name, quantity, category, status, stockValue, onEdit } = props;
+  const {
+    logo,
+    name,
+    primaryUnit,
+    secondaryUnit,
+    category,
+    status,
+    lastPurchase,
+    sellingPrice,
+    onEdit,
+    onView,
+    onDelete,
+    onProduce,
+  } = props;
   const textColor = useColorModeValue("gray.700", "white");
 
   // Status color mapping
@@ -30,17 +48,21 @@ function StockTableRow(props) {
 
   return (
     <Tr>
-             <Td minWidth={{ sm: "250px" }} pl="0px">
-         <Flex align="center" py=".8rem" minWidth="100%" flexWrap="nowrap">
-           <Image src={logo} w="30px" h="30px"  me="18px" objectFit="cover" />
+      <Td minWidth={{ sm: "250px" }} pl="0px">
+        <Flex align="center" py=".8rem" minWidth="100%" flexWrap="nowrap">
+          <Image src={logo} w="30px" h="30px" borderRadius="8px" me="18px" objectFit="cover" />
            <Flex direction="column">
              <Text
                fontSize="md"
                color={textColor}
                fontWeight="bold"
                minWidth="100%"
-             >
-               {name}
+              noOfLines={1}
+            onClick={onView}
+            cursor={onView ? 'pointer' : 'default'}
+            _hover={onView ? { color: 'brand.500' } : undefined}
+            >
+              {name}
              </Text>
            </Flex>
          </Flex>
@@ -48,7 +70,13 @@ function StockTableRow(props) {
 
       <Td>
         <Text fontSize="md" color={textColor} fontWeight="bold">
-          {quantity}
+          {primaryUnit}
+        </Text>
+      </Td>
+
+      <Td>
+        <Text fontSize="md" color={textColor} fontWeight="bold">
+          {secondaryUnit}
         </Text>
       </Td>
 
@@ -71,22 +99,31 @@ function StockTableRow(props) {
 
       <Td>
         <Text fontSize="md" color={textColor} fontWeight="bold">
-          {stockValue}
+          {lastPurchase}
         </Text>
       </Td>
 
       <Td>
-        <Button p="0px" bg="transparent" variant="no-hover" onClick={onEdit}>
-          <Text
-            fontSize="md"
-            color="gray.400"
-            fontWeight="bold"
-            cursor="pointer"
-            _hover={{ color: "brand.500" }}
-          >
-            Edit
-          </Text>
-        </Button>
+        <Text fontSize="md" color={textColor} fontWeight="bold">
+          {sellingPrice}
+        </Text>
+      </Td>
+
+      <Td isNumeric>
+        <Menu placement="bottom-end">
+          <MenuButton
+            as={IconButton}
+            aria-label="Actions"
+            icon={<FaEllipsisV />}
+            size="sm"
+            variant="ghost"
+          />
+          <MenuList>
+            {onProduce && <MenuItem onClick={onProduce}>Produce</MenuItem>}
+            <MenuItem onClick={onEdit}>Edit</MenuItem>
+            {onDelete && <MenuItem color="red.500" onClick={onDelete}>Delete</MenuItem>}
+          </MenuList>
+        </Menu>
       </Td>
     </Tr>
   );

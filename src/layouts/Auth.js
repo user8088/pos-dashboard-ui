@@ -10,11 +10,19 @@ import '@fontsource/roboto/400.css';
 import '@fontsource/roboto/500.css';
 import '@fontsource/roboto/700.css';
 import theme from 'theme/theme.js';
+import { useAuth } from '../contexts/AuthContext';
 
 export default function Pages(props) {
 	const { ...rest } = props;
+	const { isAuthenticated, loading } = useAuth();
+	
 	// ref for the wrapper div
 	const wrapper = React.createRef();
+	
+	// Redirect authenticated users to dashboard
+	if (!loading && isAuthenticated) {
+		return <Redirect to="/admin/dashboard" />;
+	}
 	React.useEffect(() => {
 		document.body.style.overflow = 'unset';
 		// Specify how to clean up after this effect:

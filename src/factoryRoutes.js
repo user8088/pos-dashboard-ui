@@ -4,6 +4,8 @@ import ManufacturingReports from "views/Factory/ManufacturingReports";
 import RawMaterialManagement from "views/Factory/RawMaterialManagement";
 import FactoryExpensesCashflow from "views/Factory/ExpensesCashflow";
 import SupplierManagement from "views/Factory/SupplierManagement";
+import StockManagement from "views/Factory/StockManagement";
+import FactoryStockItemDetail from "views/Factory/StockItemDetail";
 import Profile from "views/Dashboard/Profile";
 import SignIn from "views/Auth/SignIn.js";
 import SignUp from "views/Auth/SignUp.js";
@@ -50,6 +52,23 @@ var factoryRoutes = [
     rtlName: "إدارة الموردين",
     icon: <SettingsIcon color="inherit" />,
     component: SupplierManagement,
+    layout: "/factory",
+  },
+  // Detail route placed BEFORE list route so it matches first
+  {
+    path: "/stock-management/:id",
+    name: "Factory Stock Item Detail",
+    rtlName: "تفاصيل عنصر المخزون",
+    component: FactoryStockItemDetail,
+    layout: "/factory",
+    hidden: true,
+  },
+  {
+    path: "/stock-management",
+    name: "Factory Stock Management",
+    rtlName: "إدارة مخزون المصنع",
+    icon: <SettingsIcon color="inherit" />,
+    component: StockManagement,
     layout: "/factory",
   },
   {
