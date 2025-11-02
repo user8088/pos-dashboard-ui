@@ -35,7 +35,7 @@ Fields:
 - `secondary_unit_id` (optional) → references `units.id`
 - `secondary_per_primary` (optional, numeric > 0) → how many secondary units in one primary
 - `qty_per_primary_unit`, `qty_per_secondary_unit` (existing integer fields)
-- `last_purchase_price`, `selling_price`, `image_url`
+- `last_purchase_price`, `selling_price`, `quantity`, `image_url`
 
 Rules:
 - If either `secondary_unit_id` or `secondary_per_primary` is provided, both must be provided.
@@ -57,6 +57,7 @@ POST `/api/items`
   "qty_per_secondary_unit": 1,
   "last_purchase_price": 900.0,
   "selling_price": 1000.0,
+  "quantity": 0.0,
   "image_url": null
 }
 ```
@@ -78,3 +79,4 @@ DELETE `/api/items/{id}`
 ## Notes
 - Use `secondary_per_primary` to convert between units in your UI.
 - Old text fields `primary_unit` and `secondary_unit` are deprecated in the API.
+- The `quantity` field tracks current inventory levels. It defaults to `0` if not provided during creation. Update this field manually when items are purchased or sold.

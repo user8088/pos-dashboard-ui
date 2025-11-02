@@ -59,7 +59,7 @@ const FactoryStockTable = ({ title, captions }) => {
     secondary_per_primary: "",
     qty_per_primary_unit: "",
     qty_per_secondary_unit: "1",
-    last_purchase_price: "",
+    manufacturing_cost: "",
     selling_price: "",
     image_url: "",
     status: "In Stock",
@@ -215,7 +215,7 @@ const FactoryStockTable = ({ title, captions }) => {
         secondary_per_primary: newStock.secondary_per_primary ? Number(newStock.secondary_per_primary) : undefined,
         qty_per_primary_unit: Math.max(1, Number(newStock.qty_per_primary_unit) || 1),
         qty_per_secondary_unit: Math.max(1, Number(newStock.qty_per_secondary_unit) || 1),
-        last_purchase_price: Math.max(0, Number(newStock.last_purchase_price) || 0),
+        manufacturing_cost: newStock.manufacturing_cost ? Math.max(0, Number(newStock.manufacturing_cost)) : undefined,
         selling_price: Math.max(0, Number(newStock.selling_price) || 0),
         image_url: newStock.image_url || undefined,
         raw_materials: rawMaterialsPayload,
@@ -230,7 +230,7 @@ const FactoryStockTable = ({ title, captions }) => {
         secondary_per_primary: "",
         qty_per_primary_unit: "",
         qty_per_secondary_unit: "1",
-        last_purchase_price: "",
+        manufacturing_cost: "",
         selling_price: "",
         image_url: "",
         status: "In Stock",
@@ -270,7 +270,7 @@ const FactoryStockTable = ({ title, captions }) => {
         secondary_per_primary: editingStock.secondary_per_primary ? Number(editingStock.secondary_per_primary) : undefined,
         qty_per_primary_unit: Math.max(1, Number(editingStock.qty_per_primary_unit) || 1),
         qty_per_secondary_unit: Math.max(1, Number(editingStock.qty_per_secondary_unit) || 1),
-        last_purchase_price: Math.max(0, Number(editingStock.last_purchase_price) || 0),
+        manufacturing_cost: editingStock.manufacturing_cost ? Math.max(0, Number(editingStock.manufacturing_cost)) : undefined,
         selling_price: Math.max(0, Number(editingStock.selling_price) || 0),
         image_url: editingStock.image_url || undefined,
         raw_materials: rawMaterialsPayload,
@@ -337,7 +337,7 @@ const FactoryStockTable = ({ title, captions }) => {
       secondary_per_primary: raw.secondary_per_primary || "",
       qty_per_primary_unit: raw.qty_per_primary_unit || "",
       qty_per_secondary_unit: raw.qty_per_secondary_unit || "1",
-      last_purchase_price: raw.last_purchase_price || "",
+      manufacturing_cost: raw.manufacturing_cost || "",
       selling_price: raw.selling_price || "",
       image_url: raw.image_url || "",
       status: row.status || 'In Stock',
@@ -592,13 +592,16 @@ const FactoryStockTable = ({ title, captions }) => {
               </FormControl>
               
               <FormControl>
-                <FormLabel color={textColor}>Last Purchase Price (PKR)</FormLabel>
+                <FormLabel color={textColor}>Manufacturing Cost (PKR) - Optional</FormLabel>
                 <Input
                   type='number'
-                  placeholder='Enter cost price'
-                  value={newStock.last_purchase_price}
-                  onChange={(e) => setNewStock({...newStock, last_purchase_price: e.target.value})}
+                  placeholder='Enter manufacturing cost'
+                  value={newStock.manufacturing_cost}
+                  onChange={(e) => setNewStock({...newStock, manufacturing_cost: e.target.value})}
                 />
+                <Text fontSize='xs' color='gray.500' mt='1'>
+                  Leave empty to auto-calculate from raw materials below
+                </Text>
               </FormControl>
               
               <FormControl>
@@ -761,13 +764,16 @@ const FactoryStockTable = ({ title, captions }) => {
                 </FormControl>
                 
                 <FormControl>
-                  <FormLabel color={textColor}>Last Purchase Price (PKR)</FormLabel>
+                  <FormLabel color={textColor}>Manufacturing Cost (PKR) - Optional</FormLabel>
                   <Input
                     type='number'
-                    placeholder='Enter cost price'
-                    value={editingStock.last_purchase_price}
-                    onChange={(e) => setEditingStock({...editingStock, last_purchase_price: e.target.value})}
+                    placeholder='Enter manufacturing cost'
+                    value={editingStock.manufacturing_cost}
+                    onChange={(e) => setEditingStock({...editingStock, manufacturing_cost: e.target.value})}
                   />
+                  <Text fontSize='xs' color='gray.500' mt='1'>
+                    Leave empty to auto-calculate from raw materials below
+                  </Text>
                 </FormControl>
                 
                 <FormControl>

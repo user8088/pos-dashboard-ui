@@ -74,6 +74,7 @@ Authorization: Bearer {your-token}
         "secondary_unit_id": 2,
         "manufacturing_cost": "100.00",
         "selling_price": "120.00",
+        "quantity": "50.00",
         "category": { "id": 1, "name": "Category" },
         "primaryUnit": { "id": 1, "name": "kg", "symbol": "kg" },
         "secondaryUnit": { "id": 2, "name": "g", "symbol": "g" },
@@ -110,6 +111,7 @@ Authorization: Bearer {your-token}
   "qty_per_secondary_unit": 1,
   "manufacturing_cost": "100.00",
   "selling_price": "120.00",
+  "quantity": "0.00",
   "image_url": "https://example.com/image.jpg",
   "raw_materials": [
     {
@@ -134,6 +136,7 @@ Authorization: Bearer {your-token}
 
 **Optional Fields:**
 - `manufacturing_cost`: numeric, min 0 (if not provided, will be calculated from raw materials)
+- `quantity`: numeric, min 0 (default: 0) - current inventory quantity
 - `secondary_unit_id`: exists in units (must be provided with secondary_per_primary)
 - `secondary_per_primary`: numeric, min 0.000001 (must be provided with secondary_unit_id)
 - `image_url`: string, max 2048
@@ -179,6 +182,7 @@ Authorization: Bearer {your-token}
     "factory_product_category_id": 1,
     "manufacturing_cost": "150.00",
     "selling_price": "120.00",
+    "quantity": "0.00",
     "category": { "id": 1, "name": "Category" },
     "primaryUnit": { "id": 1, "name": "kg" },
     "secondaryUnit": { "id": 2, "name": "g" },
@@ -219,7 +223,7 @@ Authorization: Bearer {your-token}
 ### Produce Stock Item
 **POST** `/factory-stock-items/{id}/produce`
 
-Produces a specified quantity of the stock item by consuming raw materials from inventory.
+Produces a specified quantity of the stock item by consuming raw materials from inventory. The stock item's `quantity` field is automatically incremented by the produced amount.
 
 **Request Body:**
 ```json
@@ -229,7 +233,7 @@ Produces a specified quantity of the stock item by consuming raw materials from 
 ```
 
 **Required Fields:**
-- `quantity`: integer, min 1 - number of units to produce
+- `quantity`: numeric, min 0.0001 - number of units to produce
 
 **Response:** `201 Created`
 
@@ -241,6 +245,7 @@ Produces a specified quantity of the stock item by consuming raw materials from 
     "stock_item": {
       "id": 1,
       "name": "Metal Sheet",
+      "quantity": "10.00",
       "rawMaterials": [...]
     },
     "quantity_produced": 10,
@@ -2087,4 +2092,11 @@ PUT /api/factory-product-categories/5
     - Production automatically consumes raw materials from inventory based on `quantity_required` per unit
     - Production fails if insufficient raw materials are available
     - Production returns a detailed report of raw materials used and remaining quantities
+    - The factory stock item's `quantity` field is automatically incremented by the produced amount
+
+13. **Inventory Quantity:**
+    - Factory stock items have a `quantity` field to track current inventory levels
+    - The `quantity` field defaults to `0` if not provided during creation
+    - Quantity can be manually set via the create/update endpoints
+    - Quantity is automatically incremented when items are produced using the `/factory-stock-items/{id}/produce` endpoint
       

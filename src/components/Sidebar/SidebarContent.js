@@ -6,12 +6,14 @@ import {
     Link,
     Stack,
     Text,
-    useColorModeValue
+    useColorModeValue,
+    useDisclosure
 } from "@chakra-ui/react";
 import IconBox from "components/Icons/IconBox";
 import { CreativeTimLogo } from "components/Icons/Icons";
 import { Separator } from "components/Separator/Separator";
 import { SidebarHelp } from "components/Sidebar/SidebarHelp";
+import ExpenseManagementComingSoonModal from "components/ExpenseManagementComingSoonModal";
 import React from "react";
 import { NavLink, useLocation } from "react-router-dom";
 
@@ -24,6 +26,7 @@ const SidebarContent = ({ logoText, routes }) => {
   let location = useLocation();
   // this is for the rest of the collapses
   const [state, setState] = React.useState({});
+  const { isOpen, onOpen, onClose } = useDisclosure();
 
   // verifies if routeName is the one active (in browser input)
   const activeRoute = (routeName) => {
@@ -69,6 +72,75 @@ const SidebarContent = ({ logoText, routes }) => {
           </div>
         );
       }
+      // Check if this is the expenses route in admin layout - show modal instead
+      const isExpensesRoute = prop.layout === '/admin' && prop.path === '/expenses-cashflow';
+      const handleClick = (e) => {
+        if (isExpensesRoute) {
+          e.preventDefault();
+          onOpen();
+          return;
+        }
+      };
+
+      // For expenses route, use a button instead of NavLink
+      if (isExpensesRoute) {
+        return (
+          <Box key={prop.name}>
+            <Button
+              boxSize="initial"
+              justifyContent="flex-start"
+              alignItems="center"
+              bg={activeRoute(prop.layout + prop.path) === "active" ? activeBg : "transparent"}
+              mb={{
+                xl: "12px",
+              }}
+              mx={{
+                xl: "auto",
+              }}
+              ps={{
+                sm: "10px",
+                xl: "16px",
+              }}
+              py="12px"
+              borderRadius="15px"
+              _hover="none"
+              w="100%"
+              onClick={handleClick}
+              cursor="pointer"
+              _active={{
+                bg: "inherit",
+                transform: "none",
+                borderColor: "transparent",
+              }}
+              _focus={{
+                boxShadow: "none",
+              }}
+            >
+              <Flex>
+                {typeof prop.icon === "string" ? (
+                  <Icon>{prop.icon}</Icon>
+                ) : (
+                  <IconBox
+                    bg={activeRoute(prop.layout + prop.path) === "active" ? "#FF8D28" : inactiveBg}
+                    color={activeRoute(prop.layout + prop.path) === "active" ? "white" : "#FF8D28"}
+                    h="30px"
+                    w="30px"
+                    me="12px"
+                  >
+                    {prop.icon}
+                  </IconBox>
+                )}
+                <Text color={activeRoute(prop.layout + prop.path) === "active" ? activeColor : inactiveColor} my="auto" fontSize="sm">
+                  {document.documentElement.dir === "rtl"
+                    ? prop.rtlName
+                    : prop.name}
+                </Text>
+              </Flex>
+            </Button>
+          </Box>
+        );
+      }
+
       return (
         <NavLink to={prop.layout + prop.path} key={prop.name}>
           {activeRoute(prop.layout + prop.path) === "active" ? (
@@ -203,6 +275,7 @@ const SidebarContent = ({ logoText, routes }) => {
             <Box>{links}</Box>
           </Stack>
           <SidebarHelp />
+          <ExpenseManagementComingSoonModal isOpen={isOpen} onClose={onClose} />
     </>
   )
 }

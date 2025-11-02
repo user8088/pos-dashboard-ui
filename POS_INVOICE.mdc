@@ -19,6 +19,7 @@ Example response (trimmed):
         "name": "Cement",
         "selling_price": "1000.00",
         "last_purchase_price": "900.00",
+        "quantity": "50.00",
         "primary_unit_id": 2,
         "secondary_unit_id": 3,
         "secondary_per_primary": "2.000",
