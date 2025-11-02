@@ -470,7 +470,7 @@ function CustomerManagement() {
           </ModalBody>
           <ModalFooter>
             <Button onClick={onSaleClose} mr='3'>Cancel</Button>
-            <Button bg='#FF8D28' color='white' _hover={{bg:'#E67E22'}} onClick={async ()=> { try { const payload = { items: [{ stock_item_id: Number(saleForm.stock_item_id), quantity: Number(saleForm.quantity), unit_price: Number(saleForm.unit_price)}], paid_amount: Number(saleForm.paid_amount||0) }; await customerService.createSale(selectedCustomer.id, payload); onSaleClose(); await loadCustomers(); } catch(e){ alert(e?.message||'Failed'); } }}>Save</Button>
+            <Button bg='#FF8D28' color='white' _hover={{bg:'#E67E22'}} onClick={async ()=> { try { const payload = { items: [{ stock_item_id: Number(saleForm.stock_item_id), quantity: Number(saleForm.quantity), unit_price: Number(saleForm.unit_price)}], paid_amount: Number(saleForm.paid_amount||0) }; await customerService.createSale(selectedCustomer.id, payload); onSaleClose(); await loadCustomers(); window.dispatchEvent(new CustomEvent('sale-created')); window.dispatchEvent(new CustomEvent('stock-updated')); } catch(e){ alert(e?.message||'Failed'); } }}>Save</Button>
           </ModalFooter>
         </ModalContent>
       </Modal>

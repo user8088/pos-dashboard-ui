@@ -1,0 +1,178 @@
+<?php
+
+use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\AttendanceController;
+use App\Http\Controllers\Api\SalaryStructureController;
+use App\Http\Controllers\Api\ProductCategoryController;
+use App\Http\Controllers\Api\SalaryPaymentController;
+use App\Http\Controllers\Api\StockItemController as ApiStockItemController;
+use App\Http\Controllers\Api\UnitController;
+use App\Http\Controllers\Api\InvoiceController;
+use App\Http\Controllers\Api\CustomerController;
+use App\Http\Controllers\Api\UserController;
+use App\Http\Controllers\Api\AccountController;
+use App\Http\Controllers\Api\FactoryInvoiceController;
+use App\Http\Controllers\Api\FactoryCustomerController;
+use App\Http\Controllers\Api\FactoryAccountController;
+use App\Http\Controllers\Api\FactoryStockItemController;
+use App\Http\Controllers\Api\FactoryAttendanceController;
+use App\Http\Controllers\Api\FactoryProductCategoryController;
+use App\Http\Controllers\Api\FactoryUnitController;
+use App\Http\Controllers\Api\FactorySalaryStructureController;
+use App\Http\Controllers\Api\FactorySalaryPaymentController;
+use App\Http\Controllers\Api\FactoryUserController;
+use App\Http\Controllers\Api\FactoryRawMaterialController;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Route;
+
+/*
+|--------------------------------------------------------------------------
+| API Routes
+|--------------------------------------------------------------------------
+|
+| Here is where you can register API routes for your application. These
+| routes are loaded by the RouteServiceProvider and all of them will
+| be assigned to the "api" middleware group. Make something great!
+|
+*/
+
+// Public routes (no authentication required)
+Route::post('/register', [AuthController::class, 'register']);
+Route::post('/login', [AuthController::class, 'login']);
+
+// Protected routes (authentication required)
+Route::middleware('auth:sanctum')->group(function () {
+    // Authentication routes
+    Route::post('/logout', [AuthController::class, 'logout']);
+    Route::post('/logout-all', [AuthController::class, 'logoutAll']);
+    Route::get('/profile', [AuthController::class, 'profile']);
+    Route::put('/profile', [AuthController::class, 'updateProfile']);
+    
+    // Test route to verify authentication
+    Route::get('/user', function (Request $request) {
+        return $request->user();
+    });
+
+    // User Management Routes
+    Route::apiResource('users', UserController::class);
+    Route::get('/staff', [UserController::class, 'staff']);
+    Route::get('/user-stats', [UserController::class, 'stats']);
+
+    // Attendance Routes
+    Route::apiResource('attendances', AttendanceController::class);
+    Route::post('/attendances/bulk-mark', [AttendanceController::class, 'bulkMark']);
+    Route::get('/attendances/summary/{userId}', [AttendanceController::class, 'summary']);
+
+    // Salary Structure Routes
+    Route::apiResource('salary-structures', SalaryStructureController::class);
+    Route::get('/salary-structures/user/{userId}', [SalaryStructureController::class, 'getByUser']);
+
+    // Salary Payment Routes
+    Route::apiResource('salary-payments', SalaryPaymentController::class);
+    // partial payments: record a transaction (also updates aggregate paid_amount/status)
+    Route::post('/salary-payments/{id}/transactions', [SalaryPaymentController::class, 'markPaid']);
+    Route::get('/salary-payments/{id}/transactions', [SalaryPaymentController::class, 'listTransactions']);
+    Route::delete('/salary-payments/transactions/{txnId}', [SalaryPaymentController::class, 'deleteTransaction']);
+    Route::post('/salary-payments/generate-monthly', [SalaryPaymentController::class, 'generateMonthly']);
+    Route::get('/salary-payments/summary/{userId}', [SalaryPaymentController::class, 'summary']);
+
+    // Product Category Routes
+    Route::apiResource('product-categories', ProductCategoryController::class);
+
+    // Stock Items Routes (JSON API)
+    Route::apiResource('items', ApiStockItemController::class);
+    Route::post('/items/{id}/update-quantity', [ApiStockItemController::class, 'updateQuantity']);
+    Route::post('/items/{id}/add-quantity', [ApiStockItemController::class, 'addQuantity']);
+
+    // Units Routes (JSON API)
+    Route::apiResource('units', UnitController::class);
+
+    // POS / Invoices
+    Route::apiResource('invoices', InvoiceController::class)->only(['index','show','store']);
+    Route::get('/invoices/{id}/download', [InvoiceController::class, 'download']);
+
+    // Customer Module Routes
+    Route::prefix('customers')->group(function () {
+        Route::get('/', [CustomerController::class, 'index']);
+        Route::post('/', [CustomerController::class, 'store']);
+        Route::get('{customer}', [CustomerController::class, 'show']);
+        Route::put('{customer}', [CustomerController::class, 'update']);
+        Route::delete('{customer}', [CustomerController::class, 'destroy']);
+
+        Route::get('{customer}/profile', [CustomerController::class, 'profile']);
+        Route::post('{customer}/rate', [CustomerController::class, 'rate']);
+        Route::post('{customer}/payments', [CustomerController::class, 'recordPayment']);
+        Route::post('{customer}/sales', [CustomerController::class, 'createSale']);
+    });
+
+    // Account Management Routes
+    Route::apiResource('accounts', AccountController::class);
+    Route::post('/accounts/transfer', [AccountController::class, 'transfer']);
+    Route::get('/accounts/{id}/transactions', [AccountController::class, 'transactions']);
+    Route::get('/accounts-summary', [AccountController::class, 'summary']);
+
+    // Factory Routes
+    // Factory Stock Items Routes
+    Route::apiResource('factory-stock-items', FactoryStockItemController::class);
+    Route::post('/factory-stock-items/{id}/produce', [FactoryStockItemController::class, 'produce']);
+
+    // Factory Invoice Routes
+    Route::apiResource('factory-invoices', FactoryInvoiceController::class)->only(['index','show','store']);
+    Route::get('/factory-invoices/{id}/download', [FactoryInvoiceController::class, 'download']);
+
+    // Factory Customer Routes
+    Route::prefix('factory-customers')->group(function () {
+        Route::get('/', [FactoryCustomerController::class, 'index']);
+        Route::post('/', [FactoryCustomerController::class, 'store']);
+        Route::get('{factoryCustomer}', [FactoryCustomerController::class, 'show']);
+        Route::put('{factoryCustomer}', [FactoryCustomerController::class, 'update']);
+        Route::delete('{factoryCustomer}', [FactoryCustomerController::class, 'destroy']);
+
+        Route::get('{factoryCustomer}/profile', [FactoryCustomerController::class, 'profile']);
+        Route::post('{factoryCustomer}/rate', [FactoryCustomerController::class, 'rate']);
+        Route::post('{factoryCustomer}/payments', [FactoryCustomerController::class, 'recordPayment']);
+        Route::post('{factoryCustomer}/sales', [FactoryCustomerController::class, 'createSale']);
+    });
+
+    // Factory Account Routes
+    Route::apiResource('factory-accounts', FactoryAccountController::class);
+    Route::post('/factory-accounts/transfer', [FactoryAccountController::class, 'transfer']);
+    Route::get('/factory-accounts/{id}/transactions', [FactoryAccountController::class, 'transactions']);
+    Route::get('/factory-accounts-summary', [FactoryAccountController::class, 'summary']);
+
+    // Factory Attendance Routes
+    Route::apiResource('factory-attendances', FactoryAttendanceController::class);
+    Route::post('/factory-attendances/bulk-mark', [FactoryAttendanceController::class, 'bulkMark']);
+    Route::get('/factory-attendances/summary/{userId}', [FactoryAttendanceController::class, 'summary']);
+
+    // Factory Product Category Routes
+    Route::apiResource('factory-product-categories', FactoryProductCategoryController::class);
+
+    // Factory Unit Routes
+    Route::apiResource('factory-units', FactoryUnitController::class);
+
+    // Factory Salary Structure Routes
+    Route::apiResource('factory-salary-structures', FactorySalaryStructureController::class);
+    Route::get('/factory-salary-structures/user/{userId}', [FactorySalaryStructureController::class, 'getByUser']);
+
+    // Factory Salary Payment Routes
+    Route::apiResource('factory-salary-payments', FactorySalaryPaymentController::class);
+    Route::post('/factory-salary-payments/{id}/transactions', [FactorySalaryPaymentController::class, 'markPaid']);
+    Route::get('/factory-salary-payments/{id}/transactions', [FactorySalaryPaymentController::class, 'listTransactions']);
+    Route::delete('/factory-salary-payments/transactions/{txnId}', [FactorySalaryPaymentController::class, 'deleteTransaction']);
+    Route::post('/factory-salary-payments/generate-monthly', [FactorySalaryPaymentController::class, 'generateMonthly']);
+    Route::get('/factory-salary-payments/summary/{userId}', [FactorySalaryPaymentController::class, 'summary']);
+
+    // Factory User Routes
+    Route::apiResource('factory-users', FactoryUserController::class);
+    Route::get('/factory-staff', [FactoryUserController::class, 'staff']);
+    Route::get('/factory-user-stats', [FactoryUserController::class, 'stats']);
+
+    // Factory Raw Materials Routes
+    Route::apiResource('factory-raw-materials', FactoryRawMaterialController::class);
+    Route::post('/factory-raw-materials/{id}/add-quantity', [FactoryRawMaterialController::class, 'addQuantity']);
+    Route::post('/factory-raw-materials/{id}/reduce-quantity', [FactoryRawMaterialController::class, 'reduceQuantity']);
+    Route::post('/factory-raw-materials/{id}/add-waste', [FactoryRawMaterialController::class, 'addWaste']);
+    Route::post('/factory-raw-materials/{id}/reduce-waste', [FactoryRawMaterialController::class, 'reduceWaste']);
+    Route::post('/factory-raw-materials/{id}/set-waste', [FactoryRawMaterialController::class, 'setWaste']);
+});

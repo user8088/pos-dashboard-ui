@@ -123,7 +123,7 @@ const BillingInformation = ({ title, data }) => {
   };
 
   return (
-    <Card my={{ lg: "24px" }} me={{ lg: "24px" }}>
+    <Card>
       <Flex direction='column'>
         <CardHeader py='12px'>
           <Flex justify='space-between' align='center' w='100%'>

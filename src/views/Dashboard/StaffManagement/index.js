@@ -49,8 +49,16 @@ const StaffManagement = () => {
   const [attendanceData, setAttendanceData] = useState({});
   const [stats, setStats] = useState({});
   const { isOpen, onOpen, onClose } = useDisclosure();
+  const { isOpen: isAddStaffOpen, onOpen: onAddStaffOpen, onClose: onAddStaffClose } = useDisclosure();
   const [selectedStaff, setSelectedStaff] = useState(null);
   const [remarks, setRemarks] = useState('');
+  const [newStaffData, setNewStaffData] = useState({
+    name: '',
+    email: '',
+    password: '',
+    password_confirmation: '',
+    user_type: 'staff',
+  });
   const toast = useToast();
 
   useEffect(() => {
@@ -239,6 +247,86 @@ const StaffManagement = () => {
     }
   };
 
+  const handleAddStaff = async () => {
+    try {
+      if (!newStaffData.name || !newStaffData.email || !newStaffData.password || !newStaffData.password_confirmation) {
+        toast({
+          title: 'Validation Error',
+          description: 'Please fill in all required fields',
+          status: 'error',
+          duration: 3000,
+          isClosable: true,
+        });
+        return;
+      }
+
+      if (newStaffData.password !== newStaffData.password_confirmation) {
+        toast({
+          title: 'Validation Error',
+          description: 'Password and password confirmation do not match',
+          status: 'error',
+          duration: 3000,
+          isClosable: true,
+        });
+        return;
+      }
+
+      const response = await staffService.createUser(newStaffData);
+      if (response && response.success) {
+        toast({
+          title: 'Success',
+          description: 'Staff member added successfully',
+          status: 'success',
+          duration: 3000,
+          isClosable: true,
+        });
+        setNewStaffData({
+          name: '',
+          email: '',
+          password: '',
+          password_confirmation: '',
+          user_type: 'staff',
+        });
+        onAddStaffClose();
+        loadStaff();
+        loadStats();
+      } else {
+        // Handle case where response doesn't have success property
+        toast({
+          title: 'Error',
+          description: response?.message || 'Failed to add staff member',
+          status: 'error',
+          duration: 3000,
+          isClosable: true,
+        });
+      }
+    } catch (error) {
+      // Extract validation errors if they exist
+      let errorMessage = error.message || 'Failed to add staff member';
+      
+      if (error.errors) {
+        // Format validation errors
+        const validationErrors = Object.entries(error.errors)
+          .map(([field, messages]) => {
+            const fieldName = field.charAt(0).toUpperCase() + field.slice(1).replace(/_/g, ' ');
+            const messageList = Array.isArray(messages) ? messages.join(', ') : messages;
+            return `${fieldName}: ${messageList}`;
+          })
+          .join('\n');
+        
+        errorMessage = validationErrors || errorMessage;
+      }
+      
+      toast({
+        title: 'Validation Error',
+        description: errorMessage,
+        status: 'error',
+        duration: 5000,
+        isClosable: true,
+      });
+    }
+  };
+
   const filteredStaff = staff.filter(member =>
     member.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     member.email.toLowerCase().includes(searchTerm.toLowerCase())
@@ -253,15 +341,24 @@ const StaffManagement = () => {
   }
 
   return (
-    <Box>
+    <Flex flexDirection='column' pt={{ base: "120px", md: "75px" }}>
       {/* Header */}
       <Flex justify="space-between" align="center" mb={6}>
-        <Heading size="lg" color="brand.500">
-          Staff Management
-        </Heading>
-        <Text fontSize="sm" color="gray.500">
-          Manage staff attendance and track daily records
-        </Text>
+        <Box>
+          <Heading size="lg" color="brand.500">
+            Staff Management
+          </Heading>
+          <Text fontSize="sm" color="gray.500">
+            Manage staff attendance and track daily records
+          </Text>
+        </Box>
+        <Button
+          leftIcon={<AddIcon />}
+          colorScheme="blue"
+          onClick={onAddStaffOpen}
+        >
+          Add Staff
+        </Button>
       </Flex>
 
       {/* Stats Cards */}
@@ -464,7 +561,86 @@ const StaffManagement = () => {
           </ModalBody>
         </ModalContent>
       </Modal>
-    </Box>
+
+      {/* Add Staff Modal */}
+      <Modal isOpen={isAddStaffOpen} onClose={onAddStaffClose}>
+        <ModalOverlay />
+        <ModalContent>
+          <ModalHeader>Add New Staff</ModalHeader>
+          <ModalCloseButton />
+          <ModalBody pb={6}>
+            <VStack spacing={4}>
+              <FormControl isRequired>
+                <FormLabel>Name</FormLabel>
+                <Input
+                  placeholder="Enter staff name"
+                  value={newStaffData.name}
+                  onChange={(e) => setNewStaffData({ ...newStaffData, name: e.target.value })}
+                />
+              </FormControl>
+
+              <FormControl isRequired>
+                <FormLabel>Email</FormLabel>
+                <Input
+                  type="email"
+                  placeholder="Enter email address"
+                  value={newStaffData.email}
+                  onChange={(e) => setNewStaffData({ ...newStaffData, email: e.target.value })}
+                />
+              </FormControl>
+
+              <FormControl isRequired>
+                <FormLabel>Password</FormLabel>
+                <Input
+                  type="password"
+                  placeholder="Enter password"
+                  value={newStaffData.password}
+                  onChange={(e) => setNewStaffData({ ...newStaffData, password: e.target.value })}
+                />
+              </FormControl>
+
+              <FormControl isRequired>
+                <FormLabel>Confirm Password</FormLabel>
+                <Input
+                  type="password"
+                  placeholder="Confirm password"
+                  value={newStaffData.password_confirmation}
+                  onChange={(e) => setNewStaffData({ ...newStaffData, password_confirmation: e.target.value })}
+                />
+              </FormControl>
+
+              <FormControl>
+                <FormLabel>User Type</FormLabel>
+                <Select
+                  value={newStaffData.user_type}
+                  onChange={(e) => setNewStaffData({ ...newStaffData, user_type: e.target.value })}
+                >
+                  <option value="staff">Staff</option>
+                  <option value="admin">Admin</option>
+                </Select>
+              </FormControl>
+
+              <HStack spacing={4} w="full" pt={4}>
+                <Button
+                  colorScheme="blue"
+                  onClick={handleAddStaff}
+                  flex={1}
+                >
+                  Add Staff
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={onAddStaffClose}
+                  flex={1}
+                >
+                  Cancel
+                </Button>
+              </HStack>
+            </VStack>
+          </ModalBody>
+        </ModalContent>
+      </Modal>
+    </Flex>
   );
 };
 

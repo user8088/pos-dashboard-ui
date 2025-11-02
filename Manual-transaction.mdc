@@ -1,0 +1,238 @@
+---
+alwaysApply: true
+---
+# Manual Transactions API
+
+## Overview
+
+Manual transactions allow you to directly inject or withdraw money from any account without going through an invoice or sale. This is useful for recording investments, expenses, adjustments, and other direct financial movements.
+
+## Add Transaction
+
+**Endpoint**: `POST /api/accounts/add-transaction`
+
+**Authentication**: Bearer token required
+
+### Request Body
+
+```json
+{
+  "account_id": 2,
+  "transaction_type": "inflow",
+  "amount": 2500.00,
+  "description": "Daily Investment",
+  "transaction_date": "2021-03-27 12:30:00"
+}
+```
+
+### Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `account_id` | integer | Yes | The ID of the account to add the transaction to |
+| `transaction_type` | string | Yes | Either "inflow" or "outflow" |
+| `amount` | decimal | Yes | Amount to add or remove (must be > 0) |
+| `description` | string | Yes | Description of the transaction (max 500 chars) |
+| `transaction_date` | datetime | No | When the transaction occurred (defaults to now) |
+
+### Transaction Types
+
+- **Inflow** (`"transaction_type": "inflow"`): Adds money to the account
+  - Increases account balance
+  - Recorded as "credit" in the database
+  
+- **Outflow** (`"transaction_type": "outflow"`): Removes money from the account
+  - Decreases account balance
+  - Recorded as "debit" in the database
+
+### Success Response (201)
+
+```json
+{
+  "success": true,
+  "message": "Transaction added successfully",
+  "data": {
+    "id": 123,
+    "account_id": 2,
+    "type": "credit",
+    "amount": "2500.00",
+    "balance_after": "3700.00",
+    "reference_type": "ManualTransaction",
+    "reference_id": null,
+    "description": "Daily Investment",
+    "from_account_id": null,
+    "to_account_id": null,
+    "transaction_date": "2021-03-27T12:30:00.000000Z",
+    "created_at": "2021-03-27T12:30:00.000000Z",
+    "updated_at": "2021-03-27T12:30:00.000000Z",
+    "account": {
+      "id": 2,
+      "name": "Cash",
+      "code": "CASH-001",
+      "type": "cash",
+      "balance": "3700.00"
+    }
+  }
+}
+```
+
+### Error Responses
+
+#### 422 Validation Error
+
+```json
+{
+  "success": false,
+  "message": "Validation errors",
+  "errors": {
+    "account_id": ["The account id field is required."],
+    "transaction_type": ["The transaction type must be inflow or outflow."],
+    "amount": ["The amount must be at least 0.01."]
+  }
+}
+```
+
+#### 404 Account Not Found
+
+```json
+{
+  "success": false,
+  "message": "Account not found"
+}
+```
+
+## Examples
+
+### Add Investment (Inflow)
+
+```bash
+curl -X POST http://localhost:8000/api/accounts/add-transaction \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "account_id": 4,
+    "transaction_type": "inflow",
+    "amount": 5000.00,
+    "description": "Monthly Investment Deposit",
+    "transaction_date": "2021-03-27 09:00:00"
+  }'
+```
+
+### Record Expense (Outflow)
+
+```bash
+curl -X POST http://localhost:8000/api/accounts/add-transaction \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "account_id": 4,
+    "transaction_type": "outflow",
+    "amount": 987.00,
+    "description": "Internet Bill",
+    "transaction_date": "2021-03-25 16:30:00"
+  }'
+```
+
+### JavaScript/Fetch Example
+
+```javascript
+// Add inflow transaction
+const addTransaction = async (accountId, type, amount, description, date = null) => {
+  const response = await fetch('/api/accounts/add-transaction', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    },
+    body: JSON.stringify({
+      account_id: accountId,
+      transaction_type: type, // "inflow" or "outflow"
+      amount: amount,
+      description: description,
+      transaction_date: date
+    })
+  });
+  
+  const data = await response.json();
+  return data;
+};
+
+// Usage
+await addTransaction(2, 'inflow', 2500.00, 'Daily Investment');
+await addTransaction(2, 'outflow', 2500.00, 'Store Maintenance');
+```
+
+## Workflow Integration
+
+### Typical Use Cases
+
+1. **Investment Tracking**
+   ```json
+   {
+     "account_id": 4,
+     "transaction_type": "inflow",
+     "amount": 10000.00,
+     "description": "Quarterly Investment"
+   }
+   ```
+
+2. **Expense Recording**
+   ```json
+   {
+     "account_id": 4,
+     "transaction_type": "outflow",
+     "amount": 2500.00,
+     "description": "Store Maintenance"
+   }
+   ```
+
+3. **Balance Adjustments**
+   ```json
+   {
+     "account_id": 5,
+     "transaction_type": "outflow",
+     "amount": 1500.00,
+     "description": "Cash count adjustment"
+   }
+   ```
+
+4. **Bank Deposits**
+   ```json
+   {
+     "account_id": 5,
+     "transaction_type": "inflow",
+     "amount": 50000.00,
+     "description": "Bank deposit from investment"
+   }
+   ```
+
+## Viewing Transactions
+
+After adding a transaction, you can view it using the account transactions endpoint:
+
+```bash
+GET /api/accounts/{account_id}/transactions
+```
+
+This will show all transactions for that account, including:
+- Manual transactions
+- Invoice transactions
+- Transfer transactions
+- Customer payment transactions
+
+## Important Notes
+
+1. **Balance Updates**: Account balance is automatically updated when a transaction is added
+2. **Transaction Date**: If not provided, defaults to current server time
+3. **Audit Trail**: All manual transactions are marked with `reference_type: "ManualTransaction"`
+4. **No Negative Balance Check**: The system does not prevent negative balances on manual transactions
+5. **Immediate Effect**: Transactions take effect immediately and cannot be undone without creating a reversing transaction
+
+## Best Practices
+
+1. Use descriptive transaction descriptions
+2. Record transactions as they occur (don't backdate unless necessary)
+3. Use transfers for moving money between accounts instead of separate inflow/outflow
+4. Regularly review transaction history for accuracy
+5. Maintain consistent naming conventions for descriptions
+

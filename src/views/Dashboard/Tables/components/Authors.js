@@ -59,6 +59,7 @@ const Authors = ({ title, captions, data }) => {
     secondary_per_primary: "",
     qty_per_primary_unit: "",
     qty_per_secondary_unit: "1",
+    quantity: "",
     last_purchase_price: "",
     selling_price: "",
     image_url: "",
@@ -143,6 +144,7 @@ const Authors = ({ title, captions, data }) => {
         })(),
         qtyPerPrimary: it.qty_per_primary_unit ?? it.qty ?? 0,
         qtyPerSecondary: it.qty_per_secondary_unit ?? 1,
+        quantity: it.quantity ?? it.stock_quantity ?? it.inventory_quantity ?? it.qty ?? 0,
         // Ensure category is rendered as text, not an object
         category: (() => {
           const cat = it.category;
@@ -188,6 +190,24 @@ const Authors = ({ title, captions, data }) => {
     loadItems();
   }, [loadItems]);
 
+  // Listen for stock updates (when invoices/sales are created)
+  React.useEffect(() => {
+    const handleStockUpdate = () => {
+      loadItems();
+    };
+    
+    // Listen for custom events from POS/sales
+    window.addEventListener('stock-updated', handleStockUpdate);
+    window.addEventListener('invoice-created', handleStockUpdate);
+    window.addEventListener('sale-created', handleStockUpdate);
+    
+    return () => {
+      window.removeEventListener('stock-updated', handleStockUpdate);
+      window.removeEventListener('invoice-created', handleStockUpdate);
+      window.removeEventListener('sale-created', handleStockUpdate);
+    };
+  }, [loadItems]);
+
   // Debounce search typing
   React.useEffect(() => {
     const handler = (e) => {
@@ -201,6 +221,7 @@ const Authors = ({ title, captions, data }) => {
   // Stock management captions (updated for API fields)
   const stockCaptions = [
     "Product",
+    "Quantity",
     "Sell Unit",
     "Inventory Unit",
     "Category",
@@ -230,6 +251,7 @@ const Authors = ({ title, captions, data }) => {
         secondary_per_primary: newStock.secondary_per_primary ? Number(newStock.secondary_per_primary) : undefined,
         qty_per_primary_unit: Math.max(1, Number(newStock.qty_per_primary_unit) || 1),
         qty_per_secondary_unit: Math.max(1, Number(newStock.qty_per_secondary_unit) || 1),
+        quantity: newStock.quantity !== "" ? Math.max(0, Number(newStock.quantity)) : undefined,
         last_purchase_price: Math.max(0, Number(newStock.last_purchase_price) || 0),
         selling_price: Math.max(0, Number(newStock.selling_price) || 0),
         image_url: newStock.image_url || undefined,
@@ -244,6 +266,7 @@ const Authors = ({ title, captions, data }) => {
         secondary_per_primary: "",
         qty_per_primary_unit: "",
         qty_per_secondary_unit: "1",
+        quantity: "",
         last_purchase_price: "",
         selling_price: "",
         image_url: "",
@@ -263,6 +286,7 @@ const Authors = ({ title, captions, data }) => {
       secondary_per_primary: "",
       qty_per_primary_unit: row.qtyPerPrimary || "",
       qty_per_secondary_unit: row.qtyPerSecondary || "1",
+      quantity: row.quantity != null ? String(row.quantity) : "",
       last_purchase_price: (row.lastPurchase || '').replace('PKR.', ''),
       selling_price: (row.sellingPrice || '').replace('PKR.', ''),
       image_url: "",
@@ -294,6 +318,7 @@ const Authors = ({ title, captions, data }) => {
         secondary_per_primary: editingStock.secondary_per_primary ? Number(editingStock.secondary_per_primary) : undefined,
         qty_per_primary_unit: Math.max(1, Number(editingStock.qty_per_primary_unit) || 1),
         qty_per_secondary_unit: Math.max(1, Number(editingStock.qty_per_secondary_unit) || 1),
+        quantity: editingStock.quantity !== "" ? Math.max(0, Number(editingStock.quantity)) : undefined,
         last_purchase_price: Math.max(0, Number(editingStock.last_purchase_price) || 0),
         selling_price: Math.max(0, Number(editingStock.selling_price) || 0),
         image_url: editingStock.image_url || undefined,
@@ -429,6 +454,7 @@ const Authors = ({ title, captions, data }) => {
                   key={`${row.id || row.name}-${index}`}
                   logo={row.logo}
                   name={row.name}
+                  quantity={row.quantity}
                   primaryUnit={row.primaryUnit}
                   secondaryUnit={row.secondaryUnit}
                   category={row.category}
@@ -533,6 +559,20 @@ const Authors = ({ title, captions, data }) => {
                   value={newStock.qty_per_secondary_unit}
                   onChange={(e) => setNewStock({ ...newStock, qty_per_secondary_unit: e.target.value })}
                 />
+              </FormControl>
+
+              <FormControl>
+                <FormLabel color={textColor}>Initial Quantity</FormLabel>
+                <Input
+                  type='number'
+                  step='any'
+                  placeholder='Enter initial stock quantity (in primary unit)'
+                  value={newStock.quantity}
+                  onChange={(e) => setNewStock({ ...newStock, quantity: e.target.value })}
+                />
+                <Text mt='1' fontSize='sm' color='gray.500'>
+                  Current stock quantity in {getUnitLabel(newStock.primary_unit_id) || 'primary unit'}. Leave empty to start with 0.
+                </Text>
               </FormControl>
 
               <FormControl isRequired>
@@ -874,6 +914,20 @@ const Authors = ({ title, captions, data }) => {
                     value={editingStock.qty_per_secondary_unit}
                     onChange={(e) => setEditingStock({ ...editingStock, qty_per_secondary_unit: e.target.value })}
                   />
+                </FormControl>
+
+                <FormControl>
+                  <FormLabel color={textColor}>Quantity</FormLabel>
+                  <Input
+                    type='number'
+                    step='any'
+                    placeholder='Enter stock quantity (in primary unit)'
+                    value={editingStock.quantity || ''}
+                    onChange={(e) => setEditingStock({ ...editingStock, quantity: e.target.value })}
+                  />
+                  <Text mt='1' fontSize='sm' color='gray.500'>
+                    Current stock quantity in {getUnitLabel(editingStock.primary_unit_id) || 'primary unit'}. This is the actual inventory count.
+                  </Text>
                 </FormControl>
 
                 <FormControl isRequired>

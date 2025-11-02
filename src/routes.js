@@ -149,6 +149,7 @@ var dashRoutes = [
         icon: <DocumentIcon color="inherit" />,
         component: SignIn,
         layout: "/auth",
+        hideInSidebar: true,
       },
       {
         path: "/signup",
@@ -158,6 +159,7 @@ var dashRoutes = [
         secondaryNavbar: true,
         component: SignUp,
         layout: "/auth",
+        hideInSidebar: true,
       },
     ],
   },

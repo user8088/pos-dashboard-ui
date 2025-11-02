@@ -23,7 +23,10 @@ class StaffService {
         if (response.status === 401) {
           throw new Error('Unauthorized. Please login again.');
         } else if (response.status === 422) {
-          throw new Error(data.message || 'Validation failed', data.errors);
+          const error = new Error(data.message || 'Validation failed');
+          error.errors = data.errors;
+          error.status = 422;
+          throw error;
         } else if (response.status === 500) {
           throw new Error('Server error. Please try again later.');
         } else {
@@ -210,6 +213,82 @@ class StaffService {
     return this.makeRequest(`/salary-payments/transactions/${txnId}`, {
       method: 'DELETE',
     });
+  }
+
+  // ==========================================
+  // UDHAAR (LOAN) MANAGEMENT
+  // ==========================================
+
+  // Create a new loan
+  async createUdhaar(udhaarData) {
+    return this.makeRequest('/udhaars', {
+      method: 'POST',
+      body: JSON.stringify(udhaarData),
+    });
+  }
+
+  // Get all loans with optional filters
+  async getUdhaars(params = {}) {
+    const queryString = new URLSearchParams(params).toString();
+    return this.makeRequest(`/udhaars${queryString ? `?${queryString}` : ''}`);
+  }
+
+  // Get single loan details
+  async getUdhaar(id) {
+    return this.makeRequest(`/udhaars/${id}`);
+  }
+
+  // Update loan
+  async updateUdhaar(id, udhaarData) {
+    return this.makeRequest(`/udhaars/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(udhaarData),
+    });
+  }
+
+  // Delete loan (soft delete)
+  async deleteUdhaar(id) {
+    return this.makeRequest(`/udhaars/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
+  // Record loan repayment
+  async recordUdhaarRepayment(udhaarId, repaymentData) {
+    return this.makeRequest(`/udhaars/${udhaarId}/repayments`, {
+      method: 'POST',
+      body: JSON.stringify(repaymentData),
+    });
+  }
+
+  // Get all repayments for a loan
+  async getUdhaarRepayments(udhaarId) {
+    return this.makeRequest(`/udhaars/${udhaarId}/repayments`);
+  }
+
+  // Update repayment
+  async updateUdhaarRepayment(repaymentId, repaymentData) {
+    return this.makeRequest(`/udhaars/repayments/${repaymentId}`, {
+      method: 'PUT',
+      body: JSON.stringify(repaymentData),
+    });
+  }
+
+  // Delete repayment
+  async deleteUdhaarRepayment(repaymentId) {
+    return this.makeRequest(`/udhaars/repayments/${repaymentId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  // Get loans summary statistics
+  async getUdhaarsSummary() {
+    return this.makeRequest('/udhaars/summary');
+  }
+
+  // Get user's loan summary
+  async getUserUdhaarSummary(userId) {
+    return this.makeRequest(`/udhaars/user/${userId}/summary`);
   }
 }
 

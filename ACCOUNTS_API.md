@@ -1,459 +1,357 @@
-# Accounts / Expense Management API
-
-Base: `/api` (Bearer auth required)
+# New Account Management System
 
 ## Overview
 
-The accounts module tracks revenue and expenses across multiple accounts. All sales and payments are automatically recorded to the appropriate accounts.
+This document describes the simplified account management system for the POS backend. The system uses a streamlined approach with Cash, Bank, and Revenue accounts, removing the complexity of advance account tracking.
 
-### Default Accounts
+## Key Changes
 
-- **Revenue Account**: Stores all sales revenue from invoices and sales
-- **Advance Account**: Stores customer advance payments
+### 1. Account Structure
 
-### Account Types
+**Main System Accounts** (Non-deletable):
+- **Cash Account** (`CASH-001`): Main cash account for POS transactions
+- **Bank Account** (`BANK-001`): Main bank account for POS transactions
+- **Revenue Account** (`REV-001`): Main revenue account tracking total sales
 
-- `revenue`: Revenue account for sales
-- `advance`: Account for customer advances
-- `custom`: Custom accounts created by users
+**Custom Accounts**:
+- Users can create additional accounts with `type: 'custom'`
+- Custom accounts can be edited and deleted (if no transactions exist)
 
----
+### 2. POS Transaction Flow
 
-## List Accounts
+When creating an invoice/sale through POS:
 
-**GET** `/api/accounts?type={type}&is_active={true|false}`
+1. **Select Deposit Account**: User MUST specify `deposit_account_id` - the account where the payment will be deposited (Cash, Bank, or any custom account)
 
-- Returns all accounts with their current balances
-- Includes total revenue across all accounts
+2. **Payment Processing**:
+   - If `paid_amount > 0`, the payment is deposited to the selected account
+   - The payment amount is credited to the `deposit_account_id`
 
-**Query Parameters:**
-- `type`: Filter by account type (`revenue`, `advance`, `custom`)
-- `is_active`: Filter by active status (`true` or `false`)
+3. **Revenue Tracking**:
+   - The **total sale amount** is ALWAYS credited to the Revenue account
+   - This ensures total revenue is accurately tracked regardless of which account received the payment
 
-**Example Response:**
+### 3. Database Changes
+
+**Invoices Table**:
+- Added `deposit_account_id` field (foreign key to accounts table)
+- Required for all new invoices
+
+**Accounts Table**:
+- Updated account `type` values: `revenue`, `cash`, `bank`, `custom`
+- Removed: `advance` type
+
+### 4. Account Operations
+
+**Create Account**:
 ```json
+POST /api/accounts
 {
-  "success": true,
-  "data": {
-    "accounts": [
-      {
-        "id": 1,
-        "name": "Main Revenue Account",
-        "type": "revenue",
-        "code": "REV-001",
-        "description": "Default revenue account for all sales and payments",
-        "balance": "125000.00",
-        "is_default": true,
-        "is_active": true,
-        "created_at": "2025-10-30T10:00:00.000000Z",
-        "updated_at": "2025-10-30T10:00:00.000000Z"
-      },
-      {
-        "id": 2,
-        "name": "Advance Account",
-        "type": "advance",
-        "code": "ADV-001",
-        "description": "Default account for customer advance payments",
-        "balance": "5000.00",
-        "is_default": true,
-        "is_active": true,
-        "created_at": "2025-10-30T10:00:00.000000Z",
-        "updated_at": "2025-10-30T10:00:00.000000Z"
-      }
-    ],
-    "total_revenue": "130000.00"
-  }
-}
-```
-
----
-
-## Create Account
-
-**POST** `/api/accounts`
-
-**Body:**
-```json
-{
-  "name": "Operations Account",
+  "name": "My Custom Account",
   "type": "custom",
-  "code": "OPS-001",
-  "description": "Account for operational expenses",
-  "is_active": true
+  "code": "CUS-001",
+  "description": "Optional description"
 }
 ```
 
-**Validation:**
-- `name`: required, string, max 255
-- `type`: optional, one of: `revenue`, `advance`, `custom` (default: `custom`)
-- `code`: optional, string, max 50, unique
-- `description`: optional, string, max 1000
-- `is_active`: optional, boolean (default: `true`)
+**Edit Account**:
+- Can edit name, code, description, and active status
+- Cannot change type or is_default for system accounts
 
-**Success Response (201):**
-```json
-{
-  "success": true,
-  "message": "Account created",
-  "data": {
-    "id": 3,
-    "name": "Operations Account",
-    "type": "custom",
-    "code": "OPS-001",
-    "description": "Account for operational expenses",
-    "balance": "0.00",
-    "is_default": false,
-    "is_active": true,
-    "created_at": "2025-11-01T10:00:00.000000Z",
-    "updated_at": "2025-11-01T10:00:00.000000Z"
-  }
-}
-```
-
----
-
-## Get Account Details
-
-**GET** `/api/accounts/{id}`
-
-Returns account with recent transactions (last 100).
-
-**Example Response:**
-```json
-{
-  "success": true,
-  "data": {
-    "id": 1,
-    "name": "Main Revenue Account",
-    "type": "revenue",
-    "code": "REV-001",
-    "balance": "125000.00",
-    "transactions": [
-      {
-        "id": 101,
-        "account_id": 1,
-        "type": "credit",
-        "amount": "5000.00",
-        "balance_after": "125000.00",
-        "reference_type": "Invoice",
-        "reference_id": 12,
-        "description": "Revenue from invoice INV-20251030-123",
-        "transaction_date": "2025-10-30T10:30:00.000000Z"
-      }
-    ]
-  }
-}
-```
-
----
-
-## Update Account
-
-**PUT** `/api/accounts/{id}`
-
-**Body:**
-```json
-{
-  "name": "Updated Account Name",
-  "code": "NEW-001",
-  "description": "Updated description",
-  "is_active": false
-}
-```
-
-**Validation:**
-- `name`: optional, string, max 255
-- `code`: optional, string, max 50, unique (excluding current account)
-- `description`: optional, string, max 1000
-- `is_active`: optional, boolean
-
-**Note:** Cannot update `type` or `is_default` for default accounts.
-
----
-
-## Delete Account
-
-**DELETE** `/api/accounts/{id}`
-
-**Rules:**
-- Cannot delete default accounts (`is_default: true`)
+**Delete Account**:
+- Cannot delete Cash (`CASH-001`) or Bank (`BANK-001`) accounts
 - Cannot delete accounts with existing transactions
+- Can delete custom accounts if they have no transactions
 
-**Success Response (200):**
+**Transfer Between Accounts**:
 ```json
-{
-  "success": true,
-  "message": "Account deleted"
-}
-```
-
----
-
-## Transfer Between Accounts
-
-**POST** `/api/accounts/transfer`
-
-Transfer funds from one account to another.
-
-**Body:**
-```json
+POST /api/accounts/transfer
 {
   "from_account_id": 1,
   "to_account_id": 2,
   "amount": 5000.00,
-  "description": "Transfer to operations account",
-  "transaction_date": "2025-11-01T10:00:00Z"
+  "description": "Transfer to operations"
 }
 ```
 
-**Validation:**
-- `from_account_id`: required, exists in accounts
-- `to_account_id`: required, exists in accounts, must be different from `from_account_id`
-- `amount`: required, numeric, min 0.01
-- `description`: optional, string, max 1000
-- `transaction_date`: optional, date (defaults to now)
+### 5. Invoice Creation API
 
-**Rules:**
-- Source account must have sufficient balance
-- Creates two transactions: debit from source, credit to destination
-- Both account balances are updated automatically
-
-**Success Response (201):**
+**Request**:
 ```json
+POST /api/invoices
 {
-  "success": true,
-  "message": "Transfer completed",
-  "data": {
-    "from_account": {
-      "id": 1,
-      "name": "Main Revenue Account",
-      "balance": "120000.00"
-    },
-    "to_account": {
-      "id": 2,
-      "name": "Advance Account",
-      "balance": "10000.00"
-    }
-  }
+  "customer_id": 1,
+  "deposit_account_id": 2,  // REQUIRED: Account to deposit payment to
+  "payment_method": "cash",
+  "paid_amount": 5000.00,   // Amount paid immediately
+  "items": [...],
+  "discount_amount": 0,
+  "hidden_costs": 0
 }
 ```
 
----
+**Processing**:
+1. If `paid_amount > 0`: Credits `paid_amount` to `deposit_account_id`
+2. Always credits invoice `total` to Revenue account
+3. Updates customer balances if customer_id provided
 
-## Get Account Transactions
+### 6. Account Summary
 
-**GET** `/api/accounts/{id}/transactions?per_page=50`
+**Endpoint**: `GET /api/accounts-summary`
 
-Returns paginated list of transactions for an account.
-
-**Query Parameters:**
-- `per_page`: Number of transactions per page (default: 50)
-
-**Example Response:**
+**Response**:
 ```json
 {
   "success": true,
   "data": {
-    "data": [
-      {
-        "id": 101,
-        "account_id": 1,
-        "type": "credit",
-        "amount": "5000.00",
-        "balance_after": "125000.00",
-        "reference_type": "Invoice",
-        "reference_id": 12,
-        "description": "Revenue from invoice INV-20251030-123",
-        "from_account_id": null,
-        "to_account_id": null,
-        "transaction_date": "2025-10-30T10:30:00.000000Z",
-        "created_at": "2025-10-30T10:30:00.000000Z"
-      }
-    ],
-    "total": 1
+    "total_revenue": "150000.00",
+    "accounts_count": 5,
+    "revenue_account": { "id": 1, "name": "Revenue", "balance": "150000.00" },
+    "cash_account": { "id": 2, "name": "Cash", "balance": "45000.00" },
+    "bank_account": { "id": 3, "name": "Bank", "balance": "105000.00" },
+    "accounts": [...]
   }
 }
 ```
 
----
+## Migration & Setup
 
-## Get Accounts Summary
+### 1. Run Migrations
 
-**GET** `/api/accounts-summary`
-
-Returns summary of all accounts with total revenue.
-
-**Example Response:**
-```json
-{
-  "success": true,
-  "data": {
-    "total_revenue": "130000.00",
-    "accounts_count": 3,
-    "revenue_account": {
-      "id": 1,
-      "name": "Main Revenue Account",
-      "type": "revenue",
-      "balance": "125000.00"
-    },
-    "advance_account": {
-      "id": 2,
-      "name": "Advance Account",
-      "type": "advance",
-      "balance": "5000.00"
-    },
-    "accounts": [
-      {
-        "id": 1,
-        "name": "Main Revenue Account",
-        "type": "revenue",
-        "balance": "125000.00"
-      },
-      {
-        "id": 2,
-        "name": "Advance Account",
-        "type": "advance",
-        "balance": "5000.00"
-      },
-      {
-        "id": 3,
-        "name": "Operations Account",
-        "type": "custom",
-        "balance": "0.00"
-      }
-    ]
-  }
-}
+```bash
+php artisan migrate
 ```
 
----
+This adds the `deposit_account_id` field to invoices table.
 
-## Automatic Account Recording
-
-The system automatically records transactions to accounts:
-
-### Invoice Revenue
-- When an invoice is created (if `skip: false`), the total amount is credited to the **revenue account**
-- Invoice revenue is recorded as: `"Revenue from invoice {invoice_number}"`
-
-### Sale Revenue
-- When a sale is created, the total amount is credited to the **revenue account**
-- Sale revenue is recorded as: `"Revenue from sale #{sale_id}"`
-
-### Customer Payments
-- **Advance payments**: Credited to **advance account**
-- **Standalone payments** (not for invoices): Credited to **revenue account**
-- Payments on invoices are NOT double-counted (revenue already recorded when invoice created)
-
-### Payment Reference Types
-- `Invoice`: Transaction from invoice creation
-- `Sale`: Transaction from sale creation
-- `CustomerTransaction`: Transaction from customer payment
-- `AccountTransfer`: Transaction from account-to-account transfer
-
----
-
-## Frontend Usage Examples
-
-### Create a New Account
-```ts
-await fetch('/api/accounts', {
-  method: 'POST',
-  headers: {
-    'Content-Type': 'application/json',
-    Authorization: `Bearer ${token}`
-  },
-  body: JSON.stringify({
-    name: 'Operations Account',
-    type: 'custom',
-    code: 'OPS-001',
-    description: 'Account for operational expenses'
-  })
-});
-```
-
-### Transfer Funds Between Accounts
-```ts
-await fetch('/api/accounts/transfer', {
-  method: 'POST',
-  headers: {
-    'Content-Type': 'application/json',
-    Authorization: `Bearer ${token}`
-  },
-  body: JSON.stringify({
-    from_account_id: 1,
-    to_account_id: 2,
-    amount: 5000.00,
-    description: 'Monthly allocation to operations'
-  })
-});
-```
-
-### Get Accounts Summary
-```ts
-const response = await fetch('/api/accounts-summary', {
-  headers: {
-    Authorization: `Bearer ${token}`
-  }
-});
-const data = await response.json();
-console.log('Total Revenue:', data.data.total_revenue);
-console.log('Accounts:', data.data.accounts);
-```
-
----
-
-## Database Structure
-
-### accounts Table
-- `id`: Primary key
-- `name`: Account name
-- `type`: Account type (`revenue`, `advance`, `custom`)
-- `code`: Unique account code (optional)
-- `description`: Account description
-- `balance`: Current account balance
-- `is_default`: Whether this is a default account
-- `is_active`: Whether account is active
-- `timestamps`
-
-### account_transactions Table
-- `id`: Primary key
-- `account_id`: Foreign key to accounts
-- `type`: Transaction type (`credit` or `debit`)
-- `amount`: Transaction amount
-- `balance_after`: Account balance after this transaction
-- `reference_type`: Type of related entity (Invoice, Sale, CustomerTransaction, AccountTransfer)
-- `reference_id`: ID of related entity
-- `description`: Transaction description
-- `from_account_id`: Source account for transfers (nullable)
-- `to_account_id`: Destination account for transfers (nullable)
-- `transaction_date`: When the transaction occurred
-- `timestamps`
-
----
-
-## Setup
-
-After running migrations, seed the default accounts:
+### 2. Seed Accounts
 
 ```bash
 php artisan db:seed --class=AccountSeeder
 ```
 
-Or add to `DatabaseSeeder`:
-```php
-$this->call([
-    AccountSeeder::class,
-]);
+This creates:
+- Cash account (`CASH-001`)
+- Bank account (`BANK-001`)
+- Revenue account (`REV-001`) if it doesn't already exist
+
+### 3. Update Existing Invoices
+
+If you have existing invoices without `deposit_account_id`, you may need to backfill this field or mark them as historical records.
+
+## Example Workflow
+
+### Scenario: Customer makes a cash purchase
+
+```bash
+# 1. Get available accounts
+GET /api/accounts
+# Returns: Cash, Bank, and any custom accounts
+
+# 2. Create invoice selecting Cash as deposit account
+POST /api/invoices
+{
+  "customer_id": 5,
+  "deposit_account_id": 2,  // Cash account ID
+  "payment_method": "cash",
+  "paid_amount": 1500.00,
+  "items": [
+    { "stock_item_id": 10, "quantity": 2, "unit_price": 750 }
+  ]
+}
+
+# What happens:
+# - 1500.00 credited to Cash account
+# - 1500.00 credited to Revenue account
+# - Customer balance updated if applicable
 ```
+
+### Scenario: Customer makes a bank transfer purchase
+
+```bash
+POST /api/invoices
+{
+  "customer_id": 5,
+  "deposit_account_id": 3,  // Bank account ID
+  "payment_method": "card",
+  "paid_amount": 5000.00,
+  "items": [...]
+}
+
+# What happens:
+# - 5000.00 credited to Bank account
+# - 5000.00 credited to Revenue account
+# - Customer balance updated
+```
+
+### Scenario: Create and use a custom account
+
+```bash
+# 1. Create custom account
+POST /api/accounts
+{
+  "name": "Operations Account",
+  "type": "custom",
+  "code": "OPS-001"
+}
+
+# 2. Use it in POS
+POST /api/invoices
+{
+  "deposit_account_id": 4,  // New Operations Account ID
+  "paid_amount": 1000.00,
+  "items": [...]
+}
+```
+
+### Scenario: Add manual transaction (inflow)
+
+```bash
+POST /api/accounts/add-transaction
+{
+  "account_id": 2,  // Cash account
+  "transaction_type": "inflow",
+  "amount": 2500.00,
+  "description": "Daily Investment",
+  "transaction_date": "2021-03-27 12:30:00"
+}
+
+# What happens:
+# - 2500.00 added to Cash account
+# - Balance updated automatically
+# - Transaction recorded
+```
+
+### Scenario: Add manual transaction (outflow)
+
+```bash
+POST /api/accounts/add-transaction
+{
+  "account_id": 2,  // Cash account
+  "transaction_type": "outflow",
+  "amount": 2500.00,
+  "description": "Store Maintenance",
+  "transaction_date": "2021-03-27 12:30:00"
+}
+
+# What happens:
+# - 2500.00 deducted from Cash account
+# - Balance updated automatically
+# - Transaction recorded
+```
+
+### Scenario: Transfer money between accounts
+
+```bash
+POST /api/accounts/transfer
+{
+  "from_account_id": 2,     // From Cash
+  "to_account_id": 3,       // To Bank
+  "amount": 10000.00,
+  "description": "Daily deposit to bank"
+}
+
+# What happens:
+# - 10,000.00 debited from Cash
+# - 10,000.00 credited to Bank
+# - Two transactions created for audit trail
+```
+
+## Benefits
+
+1. **Simplified**: No complex advance account logic
+2. **Flexible**: Can use any account for deposits
+3. **Accurate**: Total revenue always tracked correctly
+4. **Transparent**: Clear audit trail of all transactions
+5. **Scalable**: Easy to add new account types
+
+## Manual Transactions
+
+You can manually add **inflow** (money in) or **outflow** (money out) transactions to any account directly.
+
+**Endpoint**: `POST /api/accounts/add-transaction`
+
+**Request**:
+```json
+{
+  "account_id": 2,
+  "transaction_type": "inflow",  // or "outflow"
+  "amount": 5000.00,
+  "description": "Store Maintenance",
+  "transaction_date": "2021-03-27 12:30:00"  // optional, defaults to now
+}
+```
+
+**What happens**:
+- **Inflow** (`transaction_type: "inflow"`): Adds money to the account (credit)
+- **Outflow** (`transaction_type: "outflow"`): Removes money from the account (debit)
+- Account balance is updated automatically
+- Transaction is recorded for audit trail
+
+**Response**:
+```json
+{
+  "success": true,
+  "message": "Transaction added successfully",
+  "data": {
+    "id": 123,
+    "account_id": 2,
+    "type": "credit",
+    "amount": "5000.00",
+    "balance_after": "50000.00",
+    "description": "Store Maintenance",
+    "transaction_date": "2021-03-27T12:30:00.000000Z",
+    "account": {
+      "id": 2,
+      "name": "Cash",
+      "balance": "50000.00"
+    }
+  }
+}
+```
+
+**Validation**:
+- `account_id`: required, must exist
+- `transaction_type`: required, must be "inflow" or "outflow"
+- `amount`: required, must be > 0
+- `description`: required, max 500 characters
+- `transaction_date`: optional, defaults to current time
 
 ---
 
+## API Endpoints Summary
+
+### Accounts
+- `GET /api/accounts` - List all accounts
+- `POST /api/accounts` - Create account
+- `GET /api/accounts/{id}` - Get account details
+- `PUT /api/accounts/{id}` - Update account
+- `DELETE /api/accounts/{id}` - Delete account (if allowed)
+- `POST /api/accounts/transfer` - Transfer between accounts
+- `POST /api/accounts/add-transaction` - Add manual transaction (inflow/outflow)
+- `GET /api/accounts/{id}/transactions` - Get account transactions
+- `GET /api/accounts-summary` - Get summary with cash/bank/revenue
+
+### Invoices
+- `POST /api/invoices` - Create invoice (requires `deposit_account_id`)
+- `GET /api/invoices` - List invoices
+- `GET /api/invoices/{id}` - Get invoice details
+
 ## Notes
 
-1. **Default Accounts**: Cannot be deleted or have their type changed
-2. **Balance Calculation**: Account balances are automatically updated when transactions occur
-3. **Total Revenue**: Sum of all active account balances
-4. **Transfer Audit**: All transfers create two transactions (debit and credit) for audit trail
-5. **Automatic Recording**: Revenue is automatically recorded when invoices/sales are created (unless `skip: true`)
+1. **Revenue Account**: Should always exist and track cumulative revenue
+2. **Cash/Bank Protection**: Cannot be deleted, ensuring system integrity
+3. **Transaction History**: All account transactions are recorded for audit
+4. **Customer Balances**: Still tracked separately (due_balance, advance_balance) for customer management
+5. **Skip Flag**: Use `skip: true` to create invoices without affecting accounts/customers
+
+## Error Handling
+
+- **Missing deposit_account_id**: Returns 422 validation error
+- **Invalid account**: Returns 422 if account doesn't exist
+- **Delete system account**: Returns 422 if trying to delete Cash/Bank
+- **Delete account with transactions**: Returns 422 if account has transaction history
+- **Insufficient balance**: Returns 422 if transfer amount exceeds source balance
+- **Invalid transaction type**: Returns 422 if transaction_type is not "inflow" or "outflow"
+- **Missing transaction fields**: Returns 422 with validation errors
 

@@ -67,6 +67,13 @@ class AccountService {
   getAccountsSummary() {
     return this.request('/api/accounts-summary');
   }
+
+  addTransaction(payload) {
+    return this.request('/api/accounts/add-transaction', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
 }
 
 export const accountService = new AccountService();

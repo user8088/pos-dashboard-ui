@@ -1,23 +1,42 @@
 // Chakra imports
-import { Box, Flex, Grid, Icon, Text, VStack, Input, Button, useColorModeValue, Select, Spinner, useToast } from "@chakra-ui/react";
+import {
+  Box,
+  Flex,
+  Grid,
+  Icon,
+  Text,
+  VStack,
+  HStack,
+  Input,
+  Button,
+  useColorModeValue,
+  Select,
+  Spinner,
+  useToast,
+  Modal,
+  ModalOverlay,
+  ModalContent,
+  ModalHeader,
+  ModalBody,
+  ModalFooter,
+  ModalCloseButton,
+  useDisclosure,
+  FormLabel,
+} from "@chakra-ui/react";
 // Assets
 import BackgroundCard1 from "assets/img/BackgroundCard1.png";
 import { MastercardIcon, VisaIcon } from "components/Icons/Icons";
 import React from "react";
-import { FaPaypal, FaWallet } from "react-icons/fa";
+import { FaPaypal, FaWallet, FaExchangeAlt } from "react-icons/fa";
 import { RiMastercardFill } from "react-icons/ri";
 import {
   billingData,
-  invoicesData,
-  newestTransactions,
-  olderTransactions,
 } from "variables/general";
 import BillingInformation from "./components/BillingInformation";
 import CreditCard from "./components/CreditCard";
-import Invoices from "./components/Invoices";
-// import PaymentMethod from "./components/PaymentMethod";
 import PaymentStatistics from "./components/PaymentStatistics";
 import Transactions from "./components/Transactions";
+import UdhaarList from "./components/UdhaarList";
 import { accountService } from "services/accountService";
 
 function Billing() {
@@ -26,6 +45,7 @@ function Billing() {
   const headingColor = useColorModeValue("gray.700", "white");
   const labelColor = useColorModeValue("gray.600", "gray.300");
   const mutedColor = useColorModeValue("gray.400", "gray.500");
+  const [accountsSummary, setAccountsSummary] = React.useState(null);
   const [accounts, setAccounts] = React.useState([]);
   const [totalRevenue, setTotalRevenue] = React.useState("0.00");
   const [loading, setLoading] = React.useState(true);
@@ -33,21 +53,41 @@ function Billing() {
   const [accountDetails, setAccountDetails] = React.useState("");
   const [accountCode, setAccountCode] = React.useState("");
   const [accountType, setAccountType] = React.useState("custom");
+  
+  // Transfer modal states
+  const { isOpen: isTransferOpen, onOpen: onTransferOpen, onClose: onTransferClose } = useDisclosure();
+  
+  // Reload accounts when transfer modal opens
+  React.useEffect(() => {
+    if (isTransferOpen) {
+      loadAccounts();
+    }
+  }, [isTransferOpen, loadAccounts]);
+  const [transferFrom, setTransferFrom] = React.useState("");
+  const [transferTo, setTransferTo] = React.useState("");
+  const [transferAmount, setTransferAmount] = React.useState("");
+  const [transferDescription, setTransferDescription] = React.useState("");
+  
   const toast = useToast();
 
   const loadAccounts = React.useCallback(async () => {
     try {
       setLoading(true);
-      const resp = await accountService.listAccounts();
+      const resp = await accountService.getAccountsSummary();
       const data = resp?.data || resp || {};
-      const accountsList = data.accounts || [];
-      setAccounts(accountsList);
-      // Handle revenue as string (may have commas from backend) or number
+      
+      setAccountsSummary(data);
+      
+      // Set revenue
       const revenueStr = data.total_revenue || "0.00";
       const revenueClean = typeof revenueStr === 'string' 
         ? revenueStr.replace(/,/g, '') 
         : String(revenueStr);
       setTotalRevenue(revenueClean);
+      
+      // Get all accounts
+      const allAccounts = data.accounts || [];
+      setAccounts(allAccounts);
     } catch (error) {
       console.error('Failed to load accounts:', error);
       toast({
@@ -110,15 +150,118 @@ function Billing() {
     }
   };
 
+  const handleTransfer = async () => {
+    if (!transferFrom || !transferTo || !transferAmount) {
+      toast({
+        title: 'Validation error',
+        description: 'Please fill in all transfer fields',
+        status: 'error',
+        duration: 3000,
+        isClosable: true,
+      });
+      return;
+    }
+    if (transferFrom === transferTo) {
+      toast({
+        title: 'Validation error',
+        description: 'Cannot transfer to the same account',
+        status: 'error',
+        duration: 3000,
+        isClosable: true,
+      });
+      return;
+    }
+    // Check if source and destination have the same account type
+    const fromAccount = accounts.find(acc => acc.id === Number(transferFrom));
+    const toAccount = accounts.find(acc => acc.id === Number(transferTo));
+    if (fromAccount && toAccount && fromAccount.type === toAccount.type) {
+      toast({
+        title: 'Validation error',
+        description: 'Cannot transfer between accounts of the same type',
+        status: 'error',
+        duration: 3000,
+        isClosable: true,
+      });
+      return;
+    }
+    const amount = Number(transferAmount);
+    if (isNaN(amount) || amount <= 0) {
+      toast({
+        title: 'Validation error',
+        description: 'Please enter a valid amount',
+        status: 'error',
+        duration: 3000,
+        isClosable: true,
+      });
+      return;
+    }
+    try {
+      await accountService.transferFunds({
+        from_account_id: Number(transferFrom),
+        to_account_id: Number(transferTo),
+        amount: amount,
+        description: transferDescription || undefined,
+      });
+      toast({
+        title: 'Success',
+        description: 'Transfer completed successfully',
+        status: 'success',
+        duration: 3000,
+        isClosable: true,
+      });
+      setTransferFrom("");
+      setTransferTo("");
+      setTransferAmount("");
+      setTransferDescription("");
+      onTransferClose();
+      await loadAccounts();
+    } catch (error) {
+      console.error('Failed to transfer funds:', error);
+      toast({
+        title: 'Error transferring funds',
+        description: error.message || 'Failed to transfer funds',
+        status: 'error',
+        duration: 3000,
+        isClosable: true,
+      });
+    }
+  };
+
+  // Helper function to safely parse balance
+  const parseBalance = (balance) => {
+    if (balance === null || balance === undefined || balance === '') return 0;
+    const num = typeof balance === 'string' ? parseFloat(balance.replace(/,/g, '')) : Number(balance);
+    return isNaN(num) ? 0 : num;
+  };
+
+  const formatBalance = (balance) => {
+    const parsed = parseBalance(balance);
+    return parsed.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  };
+
+  const revenueAccount = accountsSummary?.revenue_account;
+  const cashAccount = accountsSummary?.cash_account;
+  const bankAccount = accountsSummary?.bank_account;
+
   return (
     <Flex direction='column' pt={{ base: "120px", md: "75px" }}>
-      <Grid templateColumns={{ sm: "1fr", lg: "2fr 1.2fr" }} templateRows='1fr'>
+      <Flex justify='flex-end' mb='20px'>
+        <Button
+          leftIcon={<Icon as={FaExchangeAlt} />}
+          bg='#FF8D28'
+          color='white'
+          _hover={{ bg: '#E67E22' }}
+          onClick={onTransferOpen}>
+          Transfer Funds
+        </Button>
+      </Flex>
+      <Grid templateColumns={{ sm: "1fr" }} gap='26px'>
         <Box>
           <Grid
             templateColumns={{
               sm: "1fr",
               md: "1fr 1fr",
-              xl: "1fr 1fr 1fr 1fr",
+              xl: "1fr 1fr 1fr 1fr 1fr",
             }}
             templateRows={{ sm: "auto auto auto", md: "1fr auto", xl: "1fr" }}
             gap='26px'>
@@ -127,7 +270,7 @@ function Billing() {
               title={"Total Revenue"}
               number={`PKR ${isNaN(Number(totalRevenue)) ? '0.00' : Number(totalRevenue).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
               validity={{
-                name: "Your Total Business & Personal Income",
+                name: "Your Total Business Revenue",
                 data: "05/24",
               }}
               cvv={{
@@ -143,40 +286,36 @@ function Billing() {
                 />
               }
             />
-            {loading ? (
-              <Box
-                bg={cardBg}
-                borderRadius='15px'
-                p='24px'
-                boxShadow={cardShadow}
-                display='flex'
-                alignItems='center'
-                justifyContent='center'>
-                <Spinner />
-              </Box>
-            ) : accounts.length === 0 ? (
-              <Box
-                bg={cardBg}
-                borderRadius='15px'
-                p='24px'
-                boxShadow={cardShadow}
-                display='flex'
-                alignItems='center'
-                justifyContent='center'>
-                <Text color={mutedColor} fontWeight='semibold'>No account added</Text>
-              </Box>
-            ) : (
-              accounts.slice(0, 3).map((acc, idx) => (
+            {cashAccount && (
+              <PaymentStatistics
+                icon={<Icon h={"24px"} w={"24px"} color='white' as={FaWallet} />}
+                title={cashAccount.name || "Cash"}
+                description={cashAccount.code || "Cash Account"}
+                amount={`PKR ${formatBalance(cashAccount.balance)}`}
+              />
+            )}
+            {bankAccount && (
+              <PaymentStatistics
+                icon={<Icon h={"24px"} w={"24px"} color='white' as={FaPaypal} />}
+                title={bankAccount.name || "Bank"}
+                description={bankAccount.code || "Bank Account"}
+                amount={`PKR ${formatBalance(bankAccount.balance)}`}
+              />
+            )}
+            {/* Display custom accounts */}
+            {accounts
+              .filter(acc => acc.type === 'custom')
+              .map((acc) => (
                 <PaymentStatistics
-                  key={acc.id || idx}
+                  key={acc.id}
                   icon={<Icon h={"24px"} w={"24px"} color='white' as={FaWallet} />}
                   title={acc.name}
-                  description={acc.code || acc.type || "Account"}
-                  amount={`PKR ${Number(acc.balance || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                  description={acc.code || acc.description || "Custom Account"}
+                  amount={`PKR ${formatBalance(acc.balance)}`}
                 />
-              ))
-            )}
+              ))}
           </Grid>
+
           {/* Add New Account */}
           <Box bg={cardBg} borderRadius='15px' p='24px' mt='26px' boxShadow={cardShadow}>
             <Text fontSize='lg' fontWeight='bold' color={headingColor} mb='18px'>
@@ -195,31 +334,133 @@ function Billing() {
                 <Text fontSize='sm' color={labelColor}>Account Type</Text>
                 <Select value={accountType} onChange={(e) => setAccountType(e.target.value)}>
                   <option value='custom'>Custom</option>
-                  <option value='revenue'>Revenue</option>
-                  <option value='advance'>Advance</option>
                 </Select>
               </VStack>
               <VStack align='start' spacing='8px'>
                 <Text fontSize='sm' color={labelColor}>Description</Text>
                 <Input placeholder='Enter description' value={accountDetails} onChange={(e) => setAccountDetails(e.target.value)} />
               </VStack>
-              <Button bg='blue.600' color='white' _hover={{ bg: 'blue.700' }} px='24px' onClick={handleAddAccount} isLoading={loading}>
-                ADD NEW ACCOUNT
+              <Button bg='#FF8D28' color='white' _hover={{ bg: '#E67E22' }} px='24px' onClick={handleAddAccount} isLoading={loading}>
+                ADD
               </Button>
             </Grid>
           </Box>
         </Box>
-        <Invoices title={"Invoices"} data={invoicesData} />
       </Grid>
-      <Grid templateColumns={{ sm: "1fr", lg: "1.6fr 1.2fr" }}>
+      <Grid templateColumns={{ sm: "1fr", lg: "1fr 1fr 1fr" }} mt='26px' gap='26px'>
         <BillingInformation title={"Bills & Rents"} data={billingData} />
-        <Transactions
-          title={"Your Transactions"}
-          date={"23 - 30 March"}
-          newestTransactions={newestTransactions}
-          olderTransactions={olderTransactions}
-        />
+        <Transactions />
+        <UdhaarList />
       </Grid>
+
+      {/* Transfer Funds Modal */}
+      <Modal isOpen={isTransferOpen} onClose={onTransferClose} size='md'>
+        <ModalOverlay />
+        <ModalContent bg={cardBg}>
+          <ModalHeader color={headingColor}>
+            <Flex align='center' gap='8px'>
+              <Icon as={FaExchangeAlt} />
+              <Text>Transfer Funds Between Accounts</Text>
+            </Flex>
+          </ModalHeader>
+          <ModalCloseButton />
+          <ModalBody>
+            <VStack spacing='20px' align='stretch'>
+              <Box>
+                <FormLabel fontSize='sm' color={labelColor}>From Account *</FormLabel>
+                {loading ? (
+                  <Select placeholder='Loading accounts...' isDisabled>
+                    <option>Loading...</option>
+                  </Select>
+                ) : accounts.length === 0 ? (
+                  <Select placeholder='No accounts available' isDisabled>
+                    <option>No accounts available</option>
+                  </Select>
+                ) : (
+                  <Select
+                    value={transferFrom}
+                    onChange={(e) => {
+                      setTransferFrom(e.target.value);
+                      setTransferTo(""); // Reset destination when source changes
+                    }}
+                    placeholder='Select source account'>
+                    {accounts.map(acc => (
+                      <option key={acc.id} value={acc.id}>
+                        {acc.name} {acc.code ? `(${acc.code})` : ''} - PKR {formatBalance(acc.balance)}
+                      </option>
+                    ))}
+                  </Select>
+                )}
+              </Box>
+              <Box>
+                <FormLabel fontSize='sm' color={labelColor}>To Account *</FormLabel>
+                {loading ? (
+                  <Select placeholder='Loading accounts...' isDisabled>
+                    <option>Loading...</option>
+                  </Select>
+                ) : !transferFrom ? (
+                  <Select placeholder='Select source account first' isDisabled>
+                    <option>Select source account first</option>
+                  </Select>
+                ) : (() => {
+                  const fromAccount = accounts.find(acc => acc.id === Number(transferFrom));
+                  const availableAccounts = accounts.filter(acc => 
+                    acc.id !== Number(transferFrom) && 
+                    acc.type !== fromAccount?.type
+                  );
+                  return availableAccounts.length === 0 ? (
+                    <Select placeholder='No accounts available with different type' isDisabled>
+                      <option>No accounts available with different type</option>
+                    </Select>
+                  ) : (
+                    <Select
+                      value={transferTo}
+                      onChange={(e) => setTransferTo(e.target.value)}
+                      placeholder='Select destination account'>
+                      {availableAccounts.map(acc => (
+                        <option key={acc.id} value={acc.id}>
+                          {acc.name} {acc.code ? `(${acc.code})` : ''} - PKR {formatBalance(acc.balance)}
+                        </option>
+                      ))}
+                    </Select>
+                  );
+                })()}
+              </Box>
+              <Box>
+                <FormLabel fontSize='sm' color={labelColor}>Amount *</FormLabel>
+                <Input
+                  type='number'
+                  step='0.01'
+                  value={transferAmount}
+                  onChange={(e) => setTransferAmount(e.target.value)}
+                  placeholder='Enter transfer amount'
+                />
+                {transferFrom && accounts.find(a => a.id === Number(transferFrom)) && (
+                  <Text fontSize='xs' color={mutedColor} mt='4px'>
+                    Available: PKR {formatBalance(accounts.find(a => a.id === Number(transferFrom))?.balance)}
+                  </Text>
+                )}
+              </Box>
+              <Box>
+                <FormLabel fontSize='sm' color={labelColor}>Description (Optional)</FormLabel>
+                <Input
+                  value={transferDescription}
+                  onChange={(e) => setTransferDescription(e.target.value)}
+                  placeholder='e.g., Daily deposit to bank'
+                />
+              </Box>
+            </VStack>
+          </ModalBody>
+          <ModalFooter>
+            <Button variant='ghost' mr={3} onClick={onTransferClose}>
+              Cancel
+            </Button>
+            <Button bg='#FF8D28' color='white' _hover={{ bg: '#E67E22' }} onClick={handleTransfer}>
+              Transfer Funds
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
     </Flex>
   );
 }

@@ -19,6 +19,7 @@ function StockTableRow(props) {
   const {
     logo,
     name,
+    quantity,
     primaryUnit,
     secondaryUnit,
     category,
@@ -67,6 +68,12 @@ function StockTableRow(props) {
            </Flex>
          </Flex>
        </Td>
+
+      <Td>
+        <Text fontSize="md" color={textColor} fontWeight="bold">
+          {quantity != null && quantity !== 0 ? Number(quantity).toLocaleString() : '-'}
+        </Text>
+      </Td>
 
       <Td>
         <Text fontSize="md" color={textColor} fontWeight="bold">

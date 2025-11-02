@@ -82,6 +82,7 @@ const SalaryTracker = () => {
     paid_on: new Date().toISOString().split('T')[0],
     method: '',
     notes: '',
+    payment_type: 'salary', // 'salary', 'udhaar', 'commission'
   });
 
   const toggleExcessView = async (payment) => {
@@ -389,6 +390,18 @@ const SalaryTracker = () => {
       notes: '',
     });
     setEditingPayment(null);
+  };
+
+  const resetQuickPayForm = () => {
+    setQuickPayForm({
+      user_id: '',
+      month: new Date().toISOString().substr(0, 7),
+      amount: '',
+      paid_on: new Date().toISOString().split('T')[0],
+      method: '',
+      notes: '',
+      payment_type: 'salary',
+    });
   };
 
   const getStaffName = (userId) => {
@@ -878,13 +891,24 @@ const SalaryTracker = () => {
       </Modal>
 
       {/* Quick Pay Modal */}
-      <Modal isOpen={isQuickPayOpen} onClose={onQuickPayClose}>
+      <Modal isOpen={isQuickPayOpen} onClose={() => { resetQuickPayForm(); onQuickPayClose(); }}>
         <ModalOverlay />
         <ModalContent>
           <ModalHeader>Quick Pay</ModalHeader>
           <ModalCloseButton />
           <ModalBody pb={6}>
             <VStack spacing={4}>
+              <FormControl isRequired>
+                <FormLabel>Payment Type</FormLabel>
+                <Select 
+                  value={quickPayForm.payment_type} 
+                  onChange={(e) => setQuickPayForm({ ...quickPayForm, payment_type: e.target.value })}
+                >
+                  <option value="salary">Salary</option>
+                  <option value="udhaar">Udhaar (Loan)</option>
+                  <option value="commission">Commission</option>
+                </Select>
+              </FormControl>
               <FormControl isRequired>
                 <FormLabel>Staff Member</FormLabel>
                 <Select value={quickPayForm.user_id} onChange={(e) => setQuickPayForm({ ...quickPayForm, user_id: e.target.value })}>
@@ -895,18 +919,24 @@ const SalaryTracker = () => {
                 </Select>
               </FormControl>
               <FormControl isRequired>
-                <FormLabel>Salary Month</FormLabel>
-                <Input type="month" value={quickPayForm.month} onChange={(e) => setQuickPayForm({ ...quickPayForm, month: e.target.value })} />
+                <FormLabel>{quickPayForm.payment_type === 'salary' ? 'Salary Month' : 'Date'}</FormLabel>
+                {quickPayForm.payment_type === 'salary' ? (
+                  <Input type="month" value={quickPayForm.month} onChange={(e) => setQuickPayForm({ ...quickPayForm, month: e.target.value })} />
+                ) : (
+                  <Input type="date" value={quickPayForm.paid_on} onChange={(e) => setQuickPayForm({ ...quickPayForm, paid_on: e.target.value })} />
+                )}
               </FormControl>
+              {quickPayForm.payment_type === 'salary' && (
+                <FormControl isRequired>
+                  <FormLabel>Paid On</FormLabel>
+                  <Input type="date" value={quickPayForm.paid_on} onChange={(e) => setQuickPayForm({ ...quickPayForm, paid_on: e.target.value })} />
+                </FormControl>
+              )}
               <FormControl isRequired>
                 <FormLabel>Amount (to pay now)</FormLabel>
                 <NumberInput value={quickPayForm.amount} onChange={(v) => setQuickPayForm({ ...quickPayForm, amount: v })} precision={2} min={0}>
                   <NumberInputField />
                 </NumberInput>
-              </FormControl>
-              <FormControl isRequired>
-                <FormLabel>Paid On</FormLabel>
-                <Input type="date" value={quickPayForm.paid_on} onChange={(e) => setQuickPayForm({ ...quickPayForm, paid_on: e.target.value })} />
               </FormControl>
               <FormControl>
                 <FormLabel>Method</FormLabel>
@@ -923,6 +953,23 @@ const SalaryTracker = () => {
                   if (!userId) { toast({ title: 'Validation', description: 'Select a staff member.', status: 'warning', duration: 3000, isClosable: true }); return; }
                   if (!amountNum || isNaN(amountNum) || amountNum <= 0) { toast({ title: 'Validation', description: 'Enter a valid amount.', status: 'warning', duration: 3000, isClosable: true }); return; }
                   setLoading(true);
+                  
+                  // Handle Udhaar (Loan)
+                  if (quickPayForm.payment_type === 'udhaar') {
+                    await staffService.createUdhaar({
+                      user_id: Number(userId),
+                      amount: amountNum,
+                      loan_date: quickPayForm.paid_on,
+                      payment_method: quickPayForm.method || '',
+                      notes: quickPayForm.notes || '',
+                    });
+                    toast({ title: 'Success', description: 'Loan recorded successfully.', status: 'success', duration: 3000, isClosable: true });
+                    resetQuickPayForm();
+                    onQuickPayClose();
+                    return;
+                  }
+                  
+                  // Handle Salary payment
                   const structure = salaryStructures.find(s => String(s.user_id) === String(userId));
                   if (!structure) { toast({ title: 'Validation', description: 'No salary structure for this staff member.', status: 'warning', duration: 3000, isClosable: true }); setLoading(false); return; }
                   const monthDate = `${(quickPayForm.month || selectedMonth)}-01`;
@@ -953,6 +1000,7 @@ const SalaryTracker = () => {
                     notes: quickPayForm.notes || '',
                   });
                   toast({ title: 'Success', description: 'Payment recorded.', status: 'success', duration: 3000, isClosable: true });
+                  resetQuickPayForm();
                   onQuickPayClose();
                   await loadSalaryPayments();
                   await loadStats();

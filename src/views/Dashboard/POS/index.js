@@ -23,6 +23,7 @@ import CardHeader from 'components/Card/CardHeader';
 import { stockService } from 'services/stockService';
 import { customerService } from 'services/customerService';
 import { invoiceService } from 'services/invoiceService';
+import { accountService } from 'services/accountService';
 import { useAuth } from 'contexts/AuthContext';
 import placeholder from 'assets/img/avatars/placeholder.png';
 import { FaPlus, FaMinus, FaTrash } from 'react-icons/fa';
@@ -47,6 +48,8 @@ export default function POS() {
   const [hiddenCosts, setHiddenCosts] = React.useState('');
   const [applyAdvance, setApplyAdvance] = React.useState(true);
   const [customerProfile, setCustomerProfile] = React.useState(null);
+  const [accounts, setAccounts] = React.useState([]);
+  const [depositAccountId, setDepositAccountId] = React.useState('');
 
   const loadCatalog = React.useCallback(async () => {
     try {
@@ -80,8 +83,22 @@ export default function POS() {
     } catch (_) {}
   }, []);
 
+  const loadAccounts = React.useCallback(async () => {
+    try {
+      const resp = await accountService.listAccounts();
+      const data = resp?.data || resp || {};
+      const accountsList = Array.isArray(data) ? data : (data.accounts || []);
+      setAccounts(accountsList);
+      // Auto-select cash account if available
+      const cashAccount = accountsList.find(acc => acc.type === 'cash');
+      if (cashAccount) {
+        setDepositAccountId(String(cashAccount.id));
+      }
+    } catch (_) {}
+  }, []);
+
   React.useEffect(() => { loadCatalog(); }, [loadCatalog]);
-  React.useEffect(() => { loadCustomers(); loadCategories(); }, [loadCustomers, loadCategories]);
+  React.useEffect(() => { loadCustomers(); loadCategories(); loadAccounts(); }, [loadCustomers, loadCategories, loadAccounts]);
   React.useEffect(() => { // load selected customer balances
     (async () => {
       if (!customerId) { setCustomerProfile(null); return; }
@@ -131,9 +148,14 @@ export default function POS() {
 
   const generateInvoice = async () => {
     if (cart.length === 0) return;
+    if (!depositAccountId) {
+      alert('Please select a deposit account');
+      return;
+    }
     try {
       const payload = {
         customer_id: customerId ? Number(customerId) : undefined,
+        deposit_account_id: Number(depositAccountId),
         payment_method: paymentMethod,
         discount_percent: discountPercent ? Number(discountPercent) : undefined,
         discount_amount: discountAmount ? Number(discountAmount) : undefined,
@@ -149,6 +171,9 @@ export default function POS() {
       // clear cart
       setCart([]);
       setDiscountAmount(''); setDiscountPercent(''); setHiddenCosts('');
+      // Notify stock table to refresh
+      window.dispatchEvent(new CustomEvent('invoice-created'));
+      window.dispatchEvent(new CustomEvent('stock-updated'));
       alert('Invoice created');
     } catch (e) { alert(e?.message || 'Failed to create invoice'); }
   };
@@ -220,6 +245,18 @@ export default function POS() {
                       <option value='bank'>Bank</option>
                     </Select>
                   </HStack>
+                  <Select 
+                    placeholder='Select deposit account *' 
+                    value={depositAccountId} 
+                    onChange={(e)=> setDepositAccountId(e.target.value)} 
+                    isRequired
+                    borderColor={!depositAccountId ? 'red.300' : undefined}>
+                    {accounts.map(acc => (
+                      <option key={acc.id} value={acc.id}>
+                        {acc.name} {acc.code ? `(${acc.code})` : ''} - PKR {Number(acc.balance || 0).toFixed(2)}
+                      </option>
+                    ))}
+                  </Select>
                   <HStack>
                     <Input placeholder='Discount %' type='number' value={discountPercent} onChange={(e)=> setDiscountPercent(e.target.value)} />
                     <Input placeholder='Discount amount' type='number' value={discountAmount} onChange={(e)=> setDiscountAmount(e.target.value)} />
