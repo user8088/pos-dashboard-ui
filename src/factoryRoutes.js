@@ -1,5 +1,5 @@
 // Factory dashboard routes
-import FactoryDashboard from "views/Factory/Dashboard/ComingSoon";
+import FactoryDashboard from "views/Factory/Dashboard";
 import ManufacturingReports from "views/Factory/ManufacturingReports";
 import RawMaterialManagement from "views/Factory/RawMaterialManagement";
 import FactoryExpensesCashflow from "views/Factory/ExpensesCashflow";

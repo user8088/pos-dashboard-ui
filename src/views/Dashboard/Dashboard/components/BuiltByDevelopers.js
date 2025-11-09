@@ -6,12 +6,11 @@ import {
   Spacer,
   Text,
   useColorModeValue,
-  useDisclosure,
 } from "@chakra-ui/react";
 // Custom components
 import Card from "components/Card/Card.js";
 import CardBody from "components/Card/CardBody.js";
-import FactoryComingSoonModal from "components/FactoryComingSoonModal.js";
+// removed FactoryComingSoonModal placeholder
 import React from "react";
 // react icons
 import { BsArrowRight } from "react-icons/bs";
@@ -23,16 +22,14 @@ const BuiltByDevelopers = ({ title, name, description, image }) => {
   const cardBg = useColorModeValue("white", "gray.700");
   const history = useHistory();
   const location = useLocation();
-  const { isOpen, onOpen, onClose } = useDisclosure();
-  
   const isFactoryDashboard = location.pathname.includes('/factory');
   
   const switchDashboard = () => {
     if (isFactoryDashboard) {
       history.push('/admin/dashboard');
     } else {
-      // Show modal instead of navigating
-      onOpen();
+      // Navigate to Factory Dashboard
+      history.push('/factory/dashboard');
     }
   };
 
@@ -171,7 +168,7 @@ const BuiltByDevelopers = ({ title, name, description, image }) => {
           </Flex>
         </Flex>
       </CardBody>
-      <FactoryComingSoonModal isOpen={isOpen} onClose={onClose} />
+      {/* placeholder modal removed */}
     </Card>
   );
 };

@@ -2,7 +2,6 @@
 import {
   Button,
   Flex,
-  Icon,
   Text,
   useColorModeValue,
   useDisclosure,
@@ -29,6 +28,12 @@ import {
   Box,
   useToast,
   Spinner,
+  Badge,
+  useBreakpointValue,
+  Menu,
+  MenuButton,
+  MenuList,
+  MenuItem,
   IconButton,
 } from "@chakra-ui/react";
 // Custom components
@@ -37,8 +42,9 @@ import CardBody from "components/Card/CardBody.js";
 import CardHeader from "components/Card/CardHeader.js";
 import TransactionRow from "components/Tables/TransactionRow";
 import React from "react";
-import { FaRegCalendarAlt, FaPlus, FaTrash, FaEdit } from "react-icons/fa";
+import { FaRegCalendarAlt, FaPlus } from "react-icons/fa";
 import { FiSearch } from "react-icons/fi";
+import { HamburgerIcon } from "@chakra-ui/icons";
 import { accountService } from "services/accountService";
 
 const Transactions = () => {
@@ -339,95 +345,63 @@ const Transactions = () => {
     return { newest, older };
   }, [filteredTransactions]);
 
+  const actionSize = useBreakpointValue({ base: "sm", md: "sm" });
+  const dividerColor = useColorModeValue('gray.100','whiteAlpha.200');
+  const { isOpen: isFilterOpen, onOpen: onFilterOpen, onClose: onFilterClose } = useDisclosure();
+
   return (
     <Card>
       <CardHeader mb='12px'>
         <Flex direction='column' w='100%'>
           <Flex
-            direction={{ sm: "column", lg: "row" }}
-            justify={{ sm: "center", lg: "space-between" }}
-            align={{ sm: "center" }}
+            direction={{ base: "column", md: "row" }}
+            justify='space-between'
+            align={{ base: "stretch", md: "center" }}
+            gap='12px'
             w='100%'
             my={{ md: "12px" }}>
-            <Text
-              color={textColor}
-              fontSize={{ sm: "lg", md: "xl", lg: "lg" }}
-              fontWeight='bold'>
-              Your Transactions
-            </Text>
-            <HStack spacing='12px' flexWrap='wrap'>
-              <Popover placement="bottom-start">
-                <PopoverTrigger>
-                  <Button
-                    leftIcon={<FaRegCalendarAlt />}
-                    variant='outline'
-                    size='sm'
-                    colorScheme='teal'
-                    borderColor='#FF8D28'
-                    color='#FF8D28'>
-                    Date Range
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent p='16px'>
-                  <PopoverArrow />
-                  <PopoverBody>
-                    <VStack spacing='12px'>
-                      <FormControl>
-                        <FormLabel fontSize='sm'>Start Date</FormLabel>
-                        <Input
-                          type='date'
-                          value={startDate}
-                          onChange={(e) => setStartDate(e.target.value)}
-                          size='sm'
-                        />
-                      </FormControl>
-                      <FormControl>
-                        <FormLabel fontSize='sm'>End Date</FormLabel>
-                        <Input
-                          type='date'
-                          value={endDate}
-                          onChange={(e) => setEndDate(e.target.value)}
-                          size='sm'
-                        />
-                      </FormControl>
-                      <Button
-                        size='sm'
-                        colorScheme='teal'
-                        bg='#FF8D28'
-                        color='white'
-                        _hover={{ bg: '#E67E22' }}
-                        onClick={() => {
-                          setStartDate("");
-                          setEndDate("");
-                        }}>
-                        Clear Filter
-                      </Button>
-                    </VStack>
-                  </PopoverBody>
-                </PopoverContent>
-              </Popover>
-              <Button
-                colorScheme='teal'
-                borderColor='#FF8D28'
-                color='#FF8D28'
-                variant='outline'
-                fontSize='xs'
-                p='8px 24px'
-                leftIcon={<FaPlus />}
-                onClick={onAddOpen}>
-                ADD NEW
-              </Button>
-              <Button
-                colorScheme='teal'
-                borderColor='#FF8D28'
-                color='#FF8D28'
-                variant='outline'
-                fontSize='xs'
-                p='8px 24px'
-                onClick={onOpen}>
-                VIEW ALL
-              </Button>
+            <HStack spacing='8px'>
+              <Text
+                color={textColor}
+                fontSize={{ base: "lg", md: "xl" }}
+                fontWeight='bold'>
+                Your Transactions
+              </Text>
+              <Badge colorScheme='orange' variant='subtle' borderRadius='8px'>
+                {transactions.length}
+              </Badge>
             </HStack>
+
+            {/* Always-visible search */}
+            <Box flex='1' maxW={{ base: '100%', md: '420px' }}>
+              <InputGroup>
+                <InputLeftElement pointerEvents='none'>
+                  <FiSearch color={useColorModeValue("#718096", "#A0AEC0")} />
+                </InputLeftElement>
+                <Input
+                  placeholder='Search...'
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  size={actionSize}
+                />
+              </InputGroup>
+            </Box>
+
+            {/* Always-on hamburger actions */}
+            <Menu>
+              <MenuButton
+                as={IconButton}
+                icon={<HamburgerIcon />}
+                aria-label='Actions'
+                display={{ base: 'inline-flex', md: 'inline-flex' }}
+                variant='outline'
+              />
+              <MenuList>
+                <MenuItem onClick={onFilterOpen}>Date Range</MenuItem>
+                <MenuItem onClick={onAddOpen}>Add New</MenuItem>
+                <MenuItem onClick={onOpen}>View All</MenuItem>
+              </MenuList>
+            </Menu>
           </Flex>
         </Flex>
       </CardHeader>
@@ -453,13 +427,14 @@ const Transactions = () => {
                   filteredTransactions.map((txn, index) => {
                     const formatted = formatTransaction(txn);
                     return (
-                      <TransactionRow
-                        key={`filtered-${txn.id || index}`}
-                        name={formatted.name}
-                        logo={null}
-                        date={formatted.date}
-                        price={formatted.price}
-                      />
+                      <Box key={`filtered-${txn.id || index}`} borderBottom='1px solid' borderColor={dividerColor} py='10px'>
+                        <TransactionRow
+                          name={formatted.name}
+                          logo={null}
+                          date={formatted.date}
+                          price={formatted.price}
+                        />
+                      </Box>
                     );
                   })
                 )}
@@ -479,13 +454,14 @@ const Transactions = () => {
                   sortedTransactions.newest.slice(0, 5).map((txn, index) => {
                     const formatted = formatTransaction(txn);
                     return (
-                      <TransactionRow
-                        key={`newest-${txn.id || index}`}
-                        name={formatted.name}
-                        logo={null}
-                        date={formatted.date}
-                        price={formatted.price}
-                      />
+                      <Box key={`newest-${txn.id || index}`} borderBottom='1px solid' borderColor={dividerColor} py='10px'>
+                        <TransactionRow
+                          name={formatted.name}
+                          logo={null}
+                          date={formatted.date}
+                          price={formatted.price}
+                        />
+                      </Box>
                     );
                   })
                 )}
@@ -502,13 +478,14 @@ const Transactions = () => {
                   sortedTransactions.older.slice(0, 5).map((txn, index) => {
                     const formatted = formatTransaction(txn);
                     return (
-                      <TransactionRow
-                        key={`older-${txn.id || index}`}
-                        name={formatted.name}
-                        logo={null}
-                        date={formatted.date}
-                        price={formatted.price}
-                      />
+                      <Box key={`older-${txn.id || index}`} borderBottom='1px solid' borderColor={dividerColor} py='10px'>
+                        <TransactionRow
+                          name={formatted.name}
+                          logo={null}
+                          date={formatted.date}
+                          price={formatted.price}
+                        />
+                      </Box>
                     );
                   })
                 )}
@@ -519,7 +496,7 @@ const Transactions = () => {
       </CardBody>
 
       {/* Glassy Modal for View All */}
-      <Modal isOpen={isOpen} onClose={onClose} size='4xl' motionPreset='slideInBottom'>
+      <Modal isOpen={isOpen} onClose={onClose} size={{ base: 'full', md: '3xl', lg: '4xl' }} motionPreset='slideInBottom'>
         <ModalOverlay bg='rgba(0,0,0,0.4)' backdropFilter='blur(6px)' />
         <ModalContent
           bg={navbarGlassBg}
@@ -540,7 +517,7 @@ const Transactions = () => {
                 onChange={(e) => setQuery(e.target.value)}
               />
             </InputGroup>
-            <Flex direction='column' w='100%' maxH='500px' overflowY='auto'>
+            <Flex direction='column' w='100%' maxH={{ base: '60vh', md: '65vh' }} overflowY='auto'>
               {loading ? (
                 <Flex justify='center' py='40px'>
                   <Spinner />
@@ -551,18 +528,44 @@ const Transactions = () => {
                 filteredTransactions.map((txn, index) => {
                   const formatted = formatTransaction(txn);
                   return (
-                    <TransactionRow
-                      key={`modal-${txn.id || index}`}
-                      name={formatted.name}
-                      logo={null}
-                      date={formatted.date}
-                      price={formatted.price}
-                    />
+                    <Box key={`modal-${txn.id || index}`} borderBottom='1px solid' borderColor={dividerColor} py='10px'>
+                      <TransactionRow
+                        name={formatted.name}
+                        logo={null}
+                        date={formatted.date}
+                        price={formatted.price}
+                      />
+                    </Box>
                   );
                 })
               )}
             </Flex>
           </ModalBody>
+        </ModalContent>
+      </Modal>
+
+      {/* Mobile Date Range Modal */}
+      <Modal isOpen={isFilterOpen} onClose={onFilterClose} size='md'>
+        <ModalOverlay />
+        <ModalContent>
+          <ModalHeader>Date Range</ModalHeader>
+          <ModalCloseButton />
+          <ModalBody>
+            <VStack spacing='12px'>
+              <FormControl>
+                <FormLabel fontSize='sm'>Start Date</FormLabel>
+                <Input type='date' value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+              </FormControl>
+              <FormControl>
+                <FormLabel fontSize='sm'>End Date</FormLabel>
+                <Input type='date' value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+              </FormControl>
+            </VStack>
+          </ModalBody>
+          <ModalFooter>
+            <Button variant='ghost' mr={3} onClick={() => { setStartDate(""); setEndDate(""); }}>Clear</Button>
+            <Button bg='#FF8D28' color='white' _hover={{ bg: '#E67E22' }} onClick={onFilterClose}>Apply</Button>
+          </ModalFooter>
         </ModalContent>
       </Modal>
 

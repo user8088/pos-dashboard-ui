@@ -1,13 +1,11 @@
 import {
   Box,
-  Button,
   Flex,
-  Icon,
   Text,
   useColorModeValue,
 } from "@chakra-ui/react";
 import React from "react";
-import { FaPencilAlt, FaTrashAlt } from "react-icons/fa";
+// No actions (Edit/Delete) per latest requirements
 
 function BillingRow(props) {
   const textColor = useColorModeValue("gray.700", "white");
@@ -41,33 +39,7 @@ function BillingRow(props) {
             </Text>
           </Text>
         </Flex>
-        <Flex
-          direction={{ sm: "column", md: "row" }}
-          align="flex-start"
-          p={{ md: "24px" }}
-        >
-          <Button
-            p="0px"
-            bg="transparent"
-            mb={{ sm: "10px", md: "0px" }}
-            me={{ md: "12px" }}
-          >
-            <Flex color="red.500" cursor="pointer" align="center" p="12px">
-              <Icon as={FaTrashAlt} me="4px" />
-              <Text fontSize="sm" fontWeight="semibold">
-                DELETE
-              </Text>
-            </Flex>
-          </Button>
-          <Button p="0px" bg="transparent">
-            <Flex color={textColor} cursor="pointer" align="center" p="12px">
-              <Icon as={FaPencilAlt} me="4px" />
-              <Text fontSize="sm" fontWeight="semibold">
-                EDIT
-              </Text>
-            </Flex>
-          </Button>
-        </Flex>
+        {/* Actions removed */}
       </Flex>
     </Box>
   );

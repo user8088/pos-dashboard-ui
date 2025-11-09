@@ -44,87 +44,34 @@ const SidebarContent = ({ logoText, routes }) => {
         return null;
       }
       if (prop.category) {
-        var st = {};
-        st[prop["state"]] = !state[prop.state];
+        const visibleViews = Array.isArray(prop.views) ? prop.views.filter(v => !v.hidden && !v.hideInSidebar) : [];
+        if (visibleViews.length === 0 || (prop.name && prop.name.toUpperCase() === 'ACCOUNT PAGES')) {
+          return null;
+        }
+        const isOpen = !!state[prop.state];
         return (
-          <div key={prop.name}>
-            <Text
-              color={activeColor}
-              fontWeight="bold"
-              mb={{
-                xl: "12px",
-              }}
-              mx="auto"
-              ps={{
-                sm: "10px",
-                xl: "16px",
-              }}
+          <Box key={prop.name}>
+            <Button
+              onClick={() => setState((s) => ({ ...s, [prop.state]: !s[prop.state] }))}
+              variant="ghost"
+              justifyContent="space-between"
+              w="100%"
+              px={{ sm: "10px", xl: "16px" }}
               py="12px"
+              mb={{ xl: "6px" }}
             >
-              {document.documentElement.dir === "rtl"
-                ? prop.rtlName
-                : prop.name}
-            </Text>
-            {createLinks(prop.views)}
-          </div>
-        );
-      }
-      // Show "Upload in Progress" for Expense Management
-      if (prop.name === "Expenses & Cashflow" || prop.path === "/expenses-cashflow") {
-        return (
-          <Button
-            key={prop.name}
-            boxSize="initial"
-            justifyContent="flex-start"
-            alignItems="center"
-            bg="transparent"
-            mb={{
-              xl: "12px",
-            }}
-            mx={{
-              xl: "auto",
-            }}
-            py="12px"
-            ps={{
-              sm: "10px",
-              xl: "16px",
-            }}
-            borderRadius="15px"
-            _hover="none"
-            w="100%"
-            isDisabled={true}
-            cursor="not-allowed"
-            opacity={0.6}
-            _active={{
-              bg: "inherit",
-              transform: "none",
-              borderColor: "transparent",
-            }}
-            _focus={{
-              boxShadow: "none",
-            }}
-          >
-            <Flex>
-              {typeof prop.icon === "string" ? (
-                <Icon>{prop.icon}</Icon>
-              ) : (
-                <IconBox
-                  bg={inactiveBg}
-                  color="#FF8D28"
-                  h="30px"
-                  w="30px"
-                  me="12px"
-                >
-                  {prop.icon}
-                </IconBox>
-              )}
-              <Text color={inactiveColor} my="auto" fontSize="sm">
-                Expense & Cash Flow (Uploading)
+              <Text color={activeColor} fontWeight="bold">
+                {document.documentElement.dir === "rtl" ? prop.rtlName : prop.name}
               </Text>
-            </Flex>
-          </Button>
+              <Box as="span" color={inactiveColor}>{isOpen ? "▾" : "▸"}</Box>
+            </Button>
+            <Box display={isOpen ? 'block' : 'none'} ps={{ sm: '18px', xl: '24px' }}>
+              {createLinks(visibleViews)}
+            </Box>
+          </Box>
         );
       }
+      // Removed temporary "Uploading" placeholder for Expenses & Cashflow to enable navigation
       return (
         <NavLink to={prop.layout + prop.path} key={prop.name}>
           {activeRoute(prop.layout + prop.path) === "active" ? (
@@ -233,7 +180,23 @@ const SidebarContent = ({ logoText, routes }) => {
     });
   };
 
-    const links = <>{createLinks(routes)}</>;
+    // Build UI-only grouped sidebar structure while keeping underlying routes unchanged
+    const posPaths = new Set(["/pos", "/customer-management", "/stock-management", "/invoices"]);
+    const staffPaths = new Set(["/staff-management", "/attendance-reports", "/salary-tracker"]);
+
+    const isRouteItem = (r) => !r.category && !r.hidden && !r.hideInSidebar && r.path;
+    const posRoutes = routes.filter((r) => isRouteItem(r) && posPaths.has(r.path));
+    const staffRoutes = routes.filter((r) => isRouteItem(r) && staffPaths.has(r.path));
+    const used = new Set([...Array.from(posPaths), ...Array.from(staffPaths)]);
+    const remaining = routes.filter((r) => !(isRouteItem(r) && used.has(r.path)));
+
+    const grouped = [
+      { name: "Point of sale", rtlName: "لوحة القيادة", category: true, state: "posCollapse", views: posRoutes },
+      { name: "Staff Management", rtlName: "لوحة القيادة", category: true, state: "staffCollapse", views: staffRoutes },
+      ...remaining,
+    ];
+
+    const links = <>{createLinks(grouped)}</>;
 
   return (
     <>

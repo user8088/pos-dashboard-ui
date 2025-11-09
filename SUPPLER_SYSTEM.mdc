@@ -1,0 +1,73 @@
+## Supplier Management API
+
+Base: `/api` (auth required)
+
+### Entities
+
+- Supplier: `name`, `address`, `phone`
+- SupplierTransaction: `supplier_id`, `serial`, `total_amount`, `transaction_date`, `note`
+- SupplierTransactionItem: `supplier_transaction_id`, `stock_item_id`, `quantity`, `purchase_price`
+
+### Core Endpoints
+
+#### Suppliers CRUD
+
+- GET `/api/suppliers?q=ali&per_page=15` — list with `transactions_count` and contact info
+- POST `/api/suppliers` — `{ "name": "Alpha Traders", "phone": "0300...", "address": "Market Rd" }`
+- GET `/api/suppliers/{id}` — includes transactions and total spent
+- PUT `/api/suppliers/{id}` — partial update
+- DELETE `/api/suppliers/{id}` — blocked if transactions exist
+
+#### Create Purchase (adds stock automatically)
+
+POST `/api/suppliers/{supplierId}/purchases`
+```json
+{
+  "serial": "INV-20251103-001", // optional; auto-generated if omitted
+  "transaction_date": "2025-11-03",
+  "note": "Monthly restock",
+  "items": [
+    // Option A: use existing stock item
+    { "stock_item_id": 12, "quantity": 50, "purchase_price": 120 },
+
+    // Option B: create a brand-new stock item inline
+    {
+      "new_item": {
+        "name": "Premium Tape",
+        "product_category_id": 3,
+        "primary_unit_id": 1,
+        "secondary_unit_id": 2,
+        "secondary_per_primary": 12,
+        "qty_per_primary_unit": 1,
+        "qty_per_secondary_unit": 1,
+        "selling_price": 250,
+        "image_url": null
+      },
+      "quantity": 24,
+      "purchase_price": 150
+    }
+  ]
+}
+```
+Behavior:
+- Creates transaction + items
+- For each item, increases `stock_items.quantity` and sets `last_purchase_price`
+- If an item includes `new_item`, a new stock item is created first (same rules as stock management), then quantity is added
+
+Response 201 includes the created transaction and items.
+
+#### List Purchases (filters)
+
+GET `/api/suppliers/{supplierId}/purchases?serial=INV-2025&start_date=2025-11-01&end_date=2025-11-30&per_page=15`
+
+#### Repeat by Serial
+
+POST `/api/suppliers/{supplierId}/purchases/{serial}/repeat`
+— Recreates the same items and updates stock. New serial is derived from the old one.
+
+### Stock UI Integration
+
+- From Stock Management: add a supplier dropdown and call the purchase endpoint using the chosen supplier.
+- From Supplier Management: create purchase directly; the stock updates automatically.
+
+

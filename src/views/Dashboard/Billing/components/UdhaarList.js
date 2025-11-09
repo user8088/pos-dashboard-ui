@@ -41,16 +41,40 @@ const UdhaarList = ({ onTotalChange }) => {
   const loadUdhaars = React.useCallback(async () => {
     try {
       setLoading(true);
-      const response = await staffService.getUdhaars();
-      if (response && response.success) {
-        const data = response.data || [];
-        setUdhaarData(data);
-      } else {
-        setUdhaarData([]);
+      // Prefer a larger page size to avoid pagination hiding data in the widget
+      const response = await staffService.getUdhaars({ per_page: 50 });
+      if (process.env.NODE_ENV !== 'production') {
+        console.debug('[Udhaar] API response', response);
       }
+      // Handle multiple possible API shapes gracefully
+      let list = [];
+      if (Array.isArray(response)) {
+        list = response;
+      } else if (Array.isArray(response?.data)) {
+        list = response.data;
+      } else if (Array.isArray(response?.data?.data)) {
+        list = response.data.data;
+      } else if (Array.isArray(response?.loans)) {
+        list = response.loans;
+      } else if (response && response.success) {
+        list = Array.isArray(response.data) ? response.data : [];
+      }
+      // Fallback: if object contains pagination and data alongside
+      if (!list.length && response && typeof response === 'object') {
+        const maybeData = Object.values(response).find((v) => Array.isArray(v));
+        if (Array.isArray(maybeData)) list = maybeData;
+      }
+      setUdhaarData(list);
     } catch (error) {
       console.error('Failed to load Udhaars:', error);
       setUdhaarData([]);
+      toast({
+        title: 'Error loading Udhaar records',
+        description: error.message || 'Server error. Please try again later.',
+        status: 'error',
+        duration: 4000,
+        isClosable: true,
+      });
     } finally {
       setLoading(false);
     }
@@ -149,6 +173,12 @@ const UdhaarList = ({ onTotalChange }) => {
                           </Badge>
                         </Flex>
                         <Text color="gray.400" fontSize="sm" fontWeight="semibold" mb="4px">
+                          ID:{" "}
+                          <Text as="span" color="gray.500">
+                            {row.id}
+                          </Text>
+                        </Text>
+                        <Text color="gray.400" fontSize="sm" fontWeight="semibold" mb="4px">
                           Amount:{" "}
                           <Text as="span" color="gray.700" fontWeight="bold">
                             {formatCurrency(row.amount)}
@@ -230,6 +260,12 @@ const UdhaarList = ({ onTotalChange }) => {
                             {row.status === 'fully_paid' ? 'Paid' : 'Active'}
                           </Badge>
                         </Flex>
+                        <Text color="gray.400" fontSize="sm" fontWeight="semibold" mb="4px">
+                          ID:{" "}
+                          <Text as="span" color="gray.500">
+                            {row.id}
+                          </Text>
+                        </Text>
                         <Text color="gray.400" fontSize="sm" fontWeight="semibold" mb="4px">
                           Amount:{" "}
                           <Text as="span" color="gray.700" fontWeight="bold">

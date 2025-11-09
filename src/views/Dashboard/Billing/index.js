@@ -38,6 +38,7 @@ import PaymentStatistics from "./components/PaymentStatistics";
 import Transactions from "./components/Transactions";
 import UdhaarList from "./components/UdhaarList";
 import { accountService } from "services/accountService";
+import { billingService } from "services/billingService";
 
 function Billing() {
   const cardBg = useColorModeValue("white", "gray.700");
@@ -67,6 +68,7 @@ function Billing() {
   const [transferTo, setTransferTo] = React.useState("");
   const [transferAmount, setTransferAmount] = React.useState("");
   const [transferDescription, setTransferDescription] = React.useState("");
+  const [bills, setBills] = React.useState([]);
   
   const toast = useToast();
 
@@ -106,6 +108,57 @@ function Billing() {
   React.useEffect(() => {
     loadAccounts();
   }, [loadAccounts]);
+
+  // Load bills list for the Bills & Rents card
+  React.useEffect(() => {
+    (async () => {
+      try {
+        const resp = await billingService.listBills({ per_page: 20 });
+        if (process.env.NODE_ENV !== 'production') {
+          console.debug('[Bills] API response', resp);
+        }
+        let list = [];
+        if (Array.isArray(resp)) {
+          list = resp;
+        } else if (Array.isArray(resp?.data)) {
+          list = resp.data;
+        } else if (Array.isArray(resp?.data?.data)) {
+          list = resp.data.data;
+        } else if (resp && resp.success && Array.isArray(resp.data)) {
+          list = resp.data;
+        }
+        setBills(list);
+      } catch (e) {
+        console.error('Failed to load bills:', e);
+        toast({ title: 'Error loading bills', description: e.message || 'Server error', status: 'error', duration: 3000, isClosable: true });
+        setBills([]);
+      }
+    })();
+  }, []);
+
+  const formatCurrency = (amount) => {
+    const num = typeof amount === 'string' ? parseFloat(amount.replace(/,/g, '')) : Number(amount);
+    const safe = isNaN(num) ? 0 : num;
+    return `PKR. ${safe.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  };
+
+  const formatDate = (dateString) => {
+    try {
+      const d = new Date(dateString);
+      return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+    } catch (_) {
+      return String(dateString || '');
+    }
+  };
+
+  const billsViewData = React.useMemo(() => {
+    return (bills || []).map((b) => ({
+      name: `${String(b.tag || 'bill').toUpperCase()} — ${formatDate(b.bill_date)}`,
+      company: b.note ? b.note : '—',
+      email: `Date: ${formatDate(b.bill_date)}`,
+      number: formatCurrency(b.amount),
+    }));
+  }, [bills]);
 
   const handleAddAccount = async () => {
     if (!accountName) {
@@ -348,7 +401,7 @@ function Billing() {
         </Box>
       </Grid>
       <Grid templateColumns={{ sm: "1fr", lg: "1fr 1fr 1fr" }} mt='26px' gap='26px'>
-        <BillingInformation title={"Bills & Rents"} data={billingData} />
+        <BillingInformation title={"Bills & Rents"} data={billsViewData} />
         <Transactions />
         <UdhaarList />
       </Grid>

@@ -17,23 +17,35 @@ class StaffService {
 
     try {
       const response = await fetch(url, config);
-      const data = await response.json();
-      
+      let data;
+      // Try to read JSON; if it fails (e.g., HTML 500 page), fall back to text
+      try {
+        data = await response.clone().json();
+      } catch (_) {
+        try {
+          const txt = await response.text();
+          data = { message: txt };
+        } catch (_) {
+          data = {};
+        }
+      }
+
       if (!response.ok) {
+        const serverMessage = (data && (data.message || data.error)) ? String(data.message || data.error) : '';
         if (response.status === 401) {
-          throw new Error('Unauthorized. Please login again.');
+          throw new Error(serverMessage || 'Unauthorized. Please login again.');
         } else if (response.status === 422) {
-          const error = new Error(data.message || 'Validation failed');
+          const error = new Error(serverMessage || 'Validation failed');
           error.errors = data.errors;
           error.status = 422;
           throw error;
         } else if (response.status === 500) {
-          throw new Error('Server error. Please try again later.');
+          throw new Error(serverMessage || 'Server error. Please try again later.');
         } else {
-          throw new Error(data.message || 'Request failed');
+          throw new Error(serverMessage || `Request failed (${response.status})`);
         }
       }
-      
+
       return data;
     } catch (error) {
       console.error('Staff API request failed:', error);

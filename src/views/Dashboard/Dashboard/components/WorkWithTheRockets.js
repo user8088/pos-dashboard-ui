@@ -7,12 +7,11 @@ import {
   Portal,
   Spacer,
   Text,
-  useDisclosure,
 } from "@chakra-ui/react";
 // Custom components
 import Card from "components/Card/Card.js";
 import CardBody from "components/Card/CardBody.js";
-import FactoryComingSoonModal from "components/FactoryComingSoonModal.js";
+// removed FactoryComingSoonModal placeholder
 import React from "react";
 // react icons
 import { BsArrowRight } from "react-icons/bs";
@@ -22,16 +21,14 @@ const WorkWithTheRockets = ({ title, description, backgroundImage }) => {
   const overlayRef = React.useRef();
   const history = useHistory();
   const location = useLocation();
-  const { isOpen, onOpen, onClose } = useDisclosure();
-  
   const isFactoryDashboard = location.pathname.includes('/factory');
   
   const switchDashboard = () => {
     if (isFactoryDashboard) {
       history.push('/admin/dashboard');
     } else {
-      // Show modal instead of navigating
-      onOpen();
+      // Navigate to Factory Dashboard
+      history.push('/factory/dashboard');
     }
   };
   return (
@@ -91,7 +88,7 @@ const WorkWithTheRockets = ({ title, description, backgroundImage }) => {
           </Flex>
         </Portal>
       </CardBody>
-      <FactoryComingSoonModal isOpen={isOpen} onClose={onClose} />
+      {/* placeholder modal removed */}
     </Card>
   );
 };

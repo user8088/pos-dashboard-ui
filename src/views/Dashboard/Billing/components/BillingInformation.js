@@ -27,6 +27,8 @@ import CardBody from "components/Card/CardBody.js";
 import CardHeader from "components/Card/CardHeader.js";
 import BillingRow from "components/Tables/BillingRow";
 import React from "react";
+import { useToast, Textarea } from "@chakra-ui/react";
+import { billingService } from "services/billingService";
 import { FiSearch } from "react-icons/fi";
 
 const BillingInformation = ({ title, data }) => {
@@ -35,12 +37,15 @@ const BillingInformation = ({ title, data }) => {
   const { isOpen: isAddOpen, onOpen: onAddOpen, onClose: onAddClose } = useDisclosure();
   const [query, setQuery] = React.useState("");
   const [newBill, setNewBill] = React.useState({
-    name: "",
-    company: "",
-    email: "",
-    number: "",
+    tag: "fuel",
+    amount: "",
+    bill_date: new Date().toISOString().slice(0,10),
+    note: "",
+    udhaar_id: "",
     type: "BILL"
   });
+  const [submitting, setSubmitting] = React.useState(false);
+  const toast = useToast();
 
   const navbarGlassBg = useColorModeValue(
     "linear-gradient(112.83deg, rgba(255, 255, 255, 0.82) 0%, rgba(255, 255, 255, 0.8) 110.84%)",
@@ -51,75 +56,40 @@ const BillingInformation = ({ title, data }) => {
     "1.5px solid rgba(255, 255, 255, 0.31)"
   );
 
-  // Extended data with more bills and rents
-  const allData = React.useMemo(() => [
-    ...data,
-    {
-      name: "BILL #123243",
-      company: "Viking Burrito",
-      email: "oliver@burrito.com",
-      number: "PKR. 50,000",
-    },
-    {
-      name: "BILL #123244",
-      company: "Stone Tech Zone",
-      email: "lucas@stone-tech.com",
-      number: "PKR. 35,000",
-    },
-    {
-      name: "RENT #123245",
-      company: "Fiber Notion",
-      email: "ethan@fiber.com",
-      number: "PKR. 80,000",
-    },
-    {
-      name: "BILL #123246",
-      company: "Creative Design Co",
-      email: "sarah@creative.com",
-      number: "PKR. 25,000",
-    },
-    {
-      name: "RENT #123247",
-      company: "Tech Solutions Ltd",
-      email: "mike@tech.com",
-      number: "PKR. 90,000",
-    },
-  ], [data]);
-
   const filteredData = React.useMemo(() => {
     const q = query.toLowerCase();
-    return allData.filter(
+    return data.filter(
       (row) =>
         row.name.toLowerCase().includes(q) ||
         row.company.toLowerCase().includes(q) ||
         row.email.toLowerCase().includes(q) ||
         row.number.toLowerCase().includes(q)
     );
-  }, [allData, query]);
+  }, [data, query]);
 
-  const handleAddBill = () => {
-    if (!newBill.name || !newBill.company || !newBill.email || !newBill.number) return;
-    
-    const billNumber = newBill.type === "BILL" ? 
-      `BILL #${Math.floor(Math.random() * 900000) + 100000}` : 
-      `RENT #${Math.floor(Math.random() * 900000) + 100000}`;
-    
-    const newBillData = {
-      name: billNumber,
-      company: newBill.company,
-      email: newBill.email,
-      number: `PKR. ${newBill.number}`,
-    };
-    
-    allData.push(newBillData);
-    setNewBill({
-      name: "",
-      company: "",
-      email: "",
-      number: "",
-      type: "BILL"
-    });
-    onAddClose();
+  const handleAddBill = async () => {
+    if (!newBill.tag || !newBill.amount || !newBill.bill_date) {
+      toast({ title: 'Validation error', description: 'Tag, amount and date are required', status: 'error', duration: 3000, isClosable: true });
+      return;
+    }
+    try {
+      setSubmitting(true);
+      const payload = {
+        tag: String(newBill.tag),
+        amount: Number(newBill.amount),
+        bill_date: newBill.bill_date,
+        note: newBill.note || undefined,
+        udhaar_id: newBill.udhaar_id ? Number(newBill.udhaar_id) : undefined,
+      };
+      const resp = await billingService.createBill(payload);
+      toast({ title: resp?.message || 'Bill recorded successfully', status: 'success', duration: 3000, isClosable: true });
+      setNewBill({ tag: 'fuel', amount: "", bill_date: new Date().toISOString().slice(0,10), note: "", udhaar_id: "", type: 'BILL' });
+      onAddClose();
+    } catch (e) {
+      toast({ title: 'Failed to record bill', description: e.message || 'Please try again', status: 'error', duration: 4000, isClosable: true });
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -156,8 +126,10 @@ const BillingInformation = ({ title, data }) => {
         </CardHeader>
         <CardBody>
           <Flex direction='column' w='100%'>
-            {data.slice(0, 3).map((row, index) => {
-              return (
+            {data.length === 0 ? (
+              <Text color='gray.500' fontSize='sm' p='12px'>No bills or rents yet. Use Add New to record your first bill.</Text>
+            ) : (
+              data.slice(0, 3).map((row, index) => (
                 <BillingRow
                   key={index}
                   name={row.name}
@@ -165,8 +137,8 @@ const BillingInformation = ({ title, data }) => {
                   email={row.email}
                   number={row.number}
                 />
-              );
-            })}
+              ))
+            )}
           </Flex>
         </CardBody>
       </Flex>
@@ -194,15 +166,19 @@ const BillingInformation = ({ title, data }) => {
               />
             </InputGroup>
             <Flex direction='column' w='100%'>
-              {filteredData.map((row, index) => (
-                <BillingRow
-                  key={`${row.name}-${index}`}
-                  name={row.name}
-                  company={row.company}
-                  email={row.email}
-                  number={row.number}
-                />
-              ))}
+              {filteredData.length === 0 ? (
+                <Text color='gray.500' fontSize='sm' p='12px' textAlign='center'>No matching bills.</Text>
+              ) : (
+                filteredData.map((row, index) => (
+                  <BillingRow
+                    key={`${row.name}-${index}`}
+                    name={row.name}
+                    company={row.company}
+                    email={row.email}
+                    number={row.number}
+                  />
+                ))
+              )}
             </Flex>
           </ModalBody>
         </ModalContent>
@@ -222,41 +198,35 @@ const BillingInformation = ({ title, data }) => {
           <ModalBody pb='24px'>
             <VStack spacing='16px'>
               <FormControl>
-                <FormLabel color={textColor}>Type</FormLabel>
-                <Select
-                  value={newBill.type}
-                  onChange={(e) => setNewBill({...newBill, type: e.target.value})}
-                  placeholder='Select type'>
-                  <option value='BILL'>Bill</option>
-                  <option value='RENT'>Rent</option>
+                <FormLabel color={textColor}>Tag</FormLabel>
+                <Select value={newBill.tag} onChange={(e) => setNewBill({ ...newBill, tag: e.target.value })}>
+                  <option value='fuel'>Fuel</option>
+                  <option value='rent'>Rent</option>
+                  <option value='utilities'>Utilities</option>
+                  <option value='maintenance'>Maintenance</option>
+                  <option value='other'>Other</option>
                 </Select>
               </FormControl>
-              
+
+              <Grid templateColumns={{ base: '1fr', md: '1fr 1fr' }} gap='12px' w='100%'>
+                <FormControl>
+                  <FormLabel color={textColor}>Amount</FormLabel>
+                  <Input type='number' step='0.01' placeholder='Enter amount' value={newBill.amount} onChange={(e) => setNewBill({ ...newBill, amount: e.target.value })} />
+                </FormControl>
+                <FormControl>
+                  <FormLabel color={textColor}>Bill Date</FormLabel>
+                  <Input type='date' value={newBill.bill_date} onChange={(e) => setNewBill({ ...newBill, bill_date: e.target.value })} />
+                </FormControl>
+              </Grid>
+
               <FormControl>
-                <FormLabel color={textColor}>Company Name</FormLabel>
-                <Input
-                  placeholder='Enter company name'
-                  value={newBill.company}
-                  onChange={(e) => setNewBill({...newBill, company: e.target.value})}
-                />
+                <FormLabel color={textColor}>Note (Optional)</FormLabel>
+                <Textarea placeholder='Add an optional note' value={newBill.note} onChange={(e) => setNewBill({ ...newBill, note: e.target.value })} />
               </FormControl>
-              
+
               <FormControl>
-                <FormLabel color={textColor}>Email Address</FormLabel>
-                <Input
-                  placeholder='Enter email address'
-                  value={newBill.email}
-                  onChange={(e) => setNewBill({...newBill, email: e.target.value})}
-                />
-              </FormControl>
-              
-              <FormControl>
-                <FormLabel color={textColor}>Amount</FormLabel>
-                <Input
-                  placeholder='Enter amount'
-                  value={newBill.number}
-                  onChange={(e) => setNewBill({...newBill, number: e.target.value})}
-                />
+                <FormLabel color={textColor}>Link to Staff Loan (Udhaar ID, optional)</FormLabel>
+                <Input placeholder='Enter Udhaar ID (optional)' value={newBill.udhaar_id} onChange={(e) => setNewBill({ ...newBill, udhaar_id: e.target.value })} />
               </FormControl>
               
               <Button
@@ -265,7 +235,8 @@ const BillingInformation = ({ title, data }) => {
                 color='white'
                 _hover={{ bg: '#E67E22' }}
                 w='100%'
-                onClick={handleAddBill}>
+                onClick={handleAddBill}
+                isLoading={submitting}>
                 ADD BILL/RENT
               </Button>
             </VStack>

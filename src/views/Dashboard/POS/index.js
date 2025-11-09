@@ -39,7 +39,7 @@ export default function POS() {
   const [paymentMethod, setPaymentMethod] = React.useState('cash');
   const [discountPercent, setDiscountPercent] = React.useState('');
   const [discountAmount, setDiscountAmount] = React.useState('');
-  const [cart, setCart] = React.useState([]); // {id, name, price, qty}
+  const [cart, setCart] = React.useState([]); // {id, name, price, basePrice, qty}
   const [categories, setCategories] = React.useState([]);
   const [categoryId, setCategoryId] = React.useState('');
   const [paidAmount, setPaidAmount] = React.useState('');
@@ -50,6 +50,18 @@ export default function POS() {
   const [customerProfile, setCustomerProfile] = React.useState(null);
   const [accounts, setAccounts] = React.useState([]);
   const [depositAccountId, setDepositAccountId] = React.useState('');
+
+  const getBasePrice = React.useCallback((line) => {
+    if (!line) return 0;
+    if (typeof line.basePrice === 'number' && !Number.isNaN(line.basePrice)) {
+      return Number(line.basePrice);
+    }
+    const catalogItem = items.find(it => it.id === line.id);
+    if (catalogItem) {
+      return Number(catalogItem.price || 0);
+    }
+    return Number(line.price || 0);
+  }, [items]);
 
   const loadCatalog = React.useCallback(async () => {
     try {
@@ -114,27 +126,39 @@ export default function POS() {
       const idx = prev.findIndex(x => x.id === p.id);
       if (idx >= 0) {
         const copy = [...prev];
-        copy[idx] = { ...copy[idx], qty: copy[idx].qty + 1 };
+        const existing = copy[idx];
+        copy[idx] = {
+          ...existing,
+          basePrice: getBasePrice(existing) || Number(p.price || 0),
+          qty: existing.qty + 1,
+        };
         return copy;
       }
-      return [...prev, { id: p.id, name: p.name, price: p.price, cost: p.cost, qty: 1 }];
+      return [...prev, { id: p.id, name: p.name, price: p.price, basePrice: p.price, cost: p.cost, qty: 1 }];
     });
   };
   const changeQty = (id, delta) => {
-    setCart(prev => prev.map(x => x.id === id ? { ...x, qty: Math.max(1, x.qty + delta) } : x));
+    setCart(prev => prev.map(x => x.id === id
+      ? { ...x, basePrice: getBasePrice(x), qty: Math.max(1, x.qty + delta) }
+      : x));
   };
   const removeLine = (id) => setCart(prev => prev.filter(x => x.id !== id));
 
+  const baseSubtotal = cart.reduce((s, l) => s + l.qty * getBasePrice(l), 0);
+  const manualDiscount = cart.reduce((s, l) => {
+    const base = getBasePrice(l);
+    const diff = base - l.price;
+    return diff > 0 ? s + diff * l.qty : s;
+  }, 0);
   const subtotal = cart.reduce((s, l) => s + l.qty * l.price, 0);
   const discountFromPercent = discountPercent ? subtotal * (Number(discountPercent) / 100) : 0;
   const discountFixed = Number(discountAmount || 0);
   const hiddenCostsAmount = Number(hiddenCosts || 0);
   const total = Math.max(0, subtotal - discountFromPercent - discountFixed + hiddenCostsAmount);
+  const totalDiscount = manualDiscount + discountFromPercent + discountFixed;
 
-  // Calculate total cost, profit/loss after discounts (including hidden costs)
-  const totalCost = cart.reduce((s, l) => s + l.qty * (l.cost || 0), 0);
-  const finalRevenue = total; // This is after all discounts and hidden costs
-  const profitLoss = finalRevenue - totalCost;
+  const totalQty = cart.reduce((s, l) => s + l.qty, 0);
+  const originalUnitPrice = totalQty ? baseSubtotal / totalQty : 0;
 
   // Advance math preview
   const existingAdvance = Number(customerProfile?.advance_balance || 0);
@@ -279,7 +303,9 @@ export default function POS() {
                         <Text color='gray.500'>Custom Price:</Text>
                         <Input width='140px' type='number' step='any' value={line.price} onChange={(e)=> {
                           const val = Number(e.target.value || 0);
-                          setCart(prev => prev.map(x => x.id===line.id ? { ...x, price: val } : x));
+                          setCart(prev => prev.map(x => x.id===line.id
+                            ? { ...x, basePrice: getBasePrice(x), price: val }
+                            : x));
                         }} placeholder='Enter custom price' />
                         <Text>PKR {(line.qty * line.price).toFixed(2)}</Text>
                       </HStack>
@@ -288,16 +314,19 @@ export default function POS() {
                 ))}
                 {cart.length === 0 && <Text color='gray.500'>Cart is empty</Text>}
                 <Box borderTopWidth='1px' pt='10px'>
-                  <Text>Subtotal: PKR {subtotal.toFixed(2)}</Text>
-                  <Text>Discount: PKR {(discountFromPercent + discountFixed).toFixed(2)}</Text>
+                  {totalQty > 0 && (
+                    <Box mb='3'>
+                      <Text fontWeight='semibold' mb='1'>Per Unit Summary</Text>
+                      <Text color='gray.600'>Original unit price: PKR {originalUnitPrice.toFixed(2)}</Text>
+                      <Text color='gray.600'>Total price (selling price × quantity): PKR {baseSubtotal.toFixed(2)}</Text>
+                    </Box>
+                  )}
+                  <Text>Discount: PKR {totalDiscount.toFixed(2)}</Text>
+                  {manualDiscount > 0 && (
+                    <Text fontSize='sm' color='gray.500'>Includes PKR {manualDiscount.toFixed(2)} from price adjustments</Text>
+                  )}
                   {hiddenCostsAmount > 0 && <Text color='orange.500' fontSize='sm'>Hidden Costs: PKR {hiddenCostsAmount.toFixed(2)}</Text>}
                   <Text fontWeight='bold'>Total: PKR {total.toFixed(2)}</Text>
-                  <Box mt='2' pt='2' borderTopWidth='1px'>
-                    <Text fontSize='sm' color='gray.600'>Total Cost: PKR {totalCost.toFixed(2)}</Text>
-                    <Text fontSize='md' fontWeight='semibold' color={profitLoss >= 0 ? 'green.500' : 'red.500'}>
-                      {profitLoss >= 0 ? 'Profit' : 'Loss'}: PKR {Math.abs(profitLoss).toFixed(2)}
-                    </Text>
-                  </Box>
                 </Box>
                 {/* Payment at checkout */}
                 <VStack align='stretch' spacing='8px'>

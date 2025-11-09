@@ -14,6 +14,8 @@ import POS from "views/Dashboard/POS";
 import Invoices from "views/Dashboard/Invoices";
 import CustomerProfile from "views/Dashboard/CustomerProfile";
 import StockItemDetail from "views/Dashboard/StockItemDetail";
+import RentalManagement from "views/Dashboard/RentalManagement";
+import SupplierManagement from "views/Dashboard/SupplierManagement";
 import SignIn from "views/Auth/SignIn.js";
 import SignUp from "views/Auth/SignUp.js";
 
@@ -100,6 +102,22 @@ var dashRoutes = [
     rtlName: "لوحة القيادة",
     icon: <CreditIcon color="inherit" />,
     component: Billing,
+    layout: "/admin",
+  },
+  {
+    path: "/rental-management",
+    name: "Rental Management",
+    rtlName: "لوحة القيادة",
+    icon: <SettingsIcon color="inherit" />,
+    component: RentalManagement,
+    layout: "/admin",
+  },
+  {
+    path: "/supplier-management",
+    name: "Supplier Management",
+    rtlName: "لوحة القيادة",
+    icon: <SettingsIcon color="inherit" />,
+    component: SupplierManagement,
     layout: "/admin",
   },
   {

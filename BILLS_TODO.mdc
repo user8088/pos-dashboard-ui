@@ -1,0 +1,81 @@
+---
+alwaysApply: true
+---
+## Bills & Rents Module
+
+### Overview
+
+Bills (expenses) reduce total revenue by creating a debit on the default revenue account. Bills can optionally link to a staff loan (Udhaar). When linked, an expense-type udhaar repayment is recorded and the loan balance is reduced.
+
+Base URL: `/api` (auth required)
+
+### Data Model
+
+- `bills`
+  - `id`, `tag`, `amount`, `bill_date`, `note`
+  - Optional: `udhaar_id`, `udhaar_repayment_id`
+- `udhaar_repayments`
+  - Added fields: `repayment_type` (`direct|expense`), `bill_id` (nullable)
+
+### Endpoints
+
+#### Create Bill
+
+POST `/api/bills`
+
+Body:
+```json
+{
+  "tag": "fuel",
+  "amount": 1200.00,
+  "bill_date": "2025-11-03",
+  "note": "Van fuel",
+  "udhaar_id": 5
+}
+```
+
+Behavior:
+- Debits default revenue account by `amount`.
+- If `udhaar_id` is provided, records a `udhaar_repayments` row with `repayment_type: "expense"`, links both ways, and reduces the loan `remaining_amount` (marking it `fully_paid` at zero).
+
+Response 201:
+```json
+{ "success": true, "message": "Bill recorded successfully", "data": { "id": 1, "tag": "fuel" } }
+```
+
+#### List Bills
+
+GET `/api/bills?tag=fuel&start_date=2025-11-01&end_date=2025-11-30&per_page=15`
+
+#### Show Bill
+
+GET `/api/bills/{id}`
+
+#### Update Bill
+
+PUT `/api/bills/{id}` (updates metadata only; accounting entries are not rebalanced)
+
+#### Delete Bill
+
+DELETE `/api/bills/{id}` (soft delete; does not reverse previous accounting entries)
+
+### Udhaar Integration
+
+Direct repayments (no bill):
+
+POST `/api/udhaars/{id}/repayments`
+```json
+{ "amount": 3000, "payment_date": "2025-11-03", "repayment_type": "direct" }
+```
+
+Expense-linked repayments (usually created via bill):
+
+- Use `POST /api/bills` with `udhaar_id`. Alternatively, you may call the udhaar endpoint directly and pass `repayment_type: "expense"` and `bill_id`, but the recommended flow is through bill creation so revenue is deducted.
+
+### Frontend Flow Example
+
+1) Create bill (optional `udhaar_id` to tie to staff loan).
+2) Refresh revenue summary via `/api/accounts-summary`.
+3) For loan details, call `/api/udhaars/{id}` to see updated remaining amount.
+
+

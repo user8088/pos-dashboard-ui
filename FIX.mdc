@@ -1,82 +1,299 @@
-# Units and Items API
+## Show Udhaar List on Frontend
 
-All endpoints require Bearer auth. Base prefix: `/api`.
+This guide shows how to fetch and render the Udhaar (loan) list in your frontend app.
 
-## Units
+### Prerequisites
 
-### List Units
-GET `/api/units?q=kg&page=1`
+- **Auth**: Use a valid Bearer token (Sanctum). Include `Authorization: Bearer <token>` in all requests.
+- **Base URL**: `/api`
+- Backend routes are already defined:
 
-### Create Unit
-POST `/api/units`
-```json
-{ "name": "Kilogram", "symbol": "kg", "description": "Weight" }
+```116:124:routes/api.php
+    // Udhaar (Loan) Routes
+    Route::apiResource('udhaars', UdhaarController::class);
+    Route::post('/udhaars/{id}/repayments', [UdhaarController::class, 'recordRepayment']);
+    Route::get('/udhaars/{id}/repayments', [UdhaarController::class, 'listRepayments']);
+    Route::put('/udhaars/repayments/{repaymentId}', [UdhaarController::class, 'updateRepayment']);
+    Route::delete('/udhaars/repayments/{repaymentId}', [UdhaarController::class, 'deleteRepayment']);
+    Route::get('/udhaars/summary', [UdhaarController::class, 'summary']);
+    Route::get('/udhaars/user/{userId}/summary', [UdhaarController::class, 'userSummary']);
 ```
 
-### Show Unit
-GET `/api/units/{id}`
+### List Endpoint
 
-### Update Unit
-PUT/PATCH `/api/units/{id}`
-```json
-{ "name": "Bag" }
-```
+- **Method**: GET `-/api/udhaars`
+- **Query params (optional)**:
+  - `user_id`: number
+  - `status`: `active | fully_paid | cancelled`
+  - `start_date`: `YYYY-MM-DD`
+  - `end_date`: `YYYY-MM-DD`
+  - `page`: number (default 1)
+  - `per_page`: number (default 15)
 
-### Delete Unit
-DELETE `/api/units/{id}`
+### Response Shape (condensed)
 
----
-
-## Items (updated)
-
-Fields:
-- `product_category_id` (required)
-- `primary_unit_id` (required) → references `units.id`
-- `secondary_unit_id` (optional) → references `units.id`
-- `secondary_per_primary` (optional, numeric > 0) → how many secondary units in one primary
-- `qty_per_primary_unit`, `qty_per_secondary_unit` (existing integer fields)
-- `last_purchase_price`, `selling_price`, `quantity`, `image_url`
-
-Rules:
-- If either `secondary_unit_id` or `secondary_per_primary` is provided, both must be provided.
-
-### List Items
-GET `/api/items?q=cement&product_category_id=1&page=1`
-- Returns items with `category`, `primaryUnit`, `secondaryUnit` relations.
-
-### Create Item
-POST `/api/items`
 ```json
 {
-  "name": "Cement",
-  "product_category_id": 1,
-  "primary_unit_id": 2,
-  "secondary_unit_id": 3,
-  "secondary_per_primary": 2.0,
-  "qty_per_primary_unit": 1,
-  "qty_per_secondary_unit": 1,
-  "last_purchase_price": 900.0,
-  "selling_price": 1000.0,
-  "quantity": 0.0,
-  "image_url": null
+  "success": true,
+  "data": [
+    {
+      "id": 1,
+      "user_id": 3,
+      "staff": { "id": 3, "name": "John Doe" },
+      "amount": "15000.00",
+      "loan_date": "2024-01-15",
+      "payment_method": "cash",
+      "notes": "...",
+      "status": "active",
+      "remaining_amount": "5000.00",
+      "total_paid": "10000.00",
+      "repayments_count": 3,
+      "last_payment_date": "2024-03-15",
+      "created_at": "...",
+      "updated_at": "..."
+    }
+  ],
+  "pagination": { "current_page": 1, "per_page": 15, "total": 2, "last_page": 1 }
 }
 ```
 
-### Show Item
-GET `/api/items/{id}`
+### Minimal Fetch Helper
 
-### Update Item
-PUT/PATCH `/api/items/{id}`
-```json
-{ "secondary_unit_id": 3, "secondary_per_primary": 2.5 }
+```javascript
+export async function fetchUdhaars({ token, params = {} }) {
+  const query = new URLSearchParams(params).toString();
+  const res = await fetch(`/api/udhaars${query ? `?${query}` : ''}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error(`Failed to load udhaars (${res.status})`);
+  return res.json();
+}
 ```
 
-### Delete Item
-DELETE `/api/items/{id}`
+### React Example (with filters + pagination)
 
----
+```javascript
+import { useEffect, useMemo, useState } from 'react';
+import { fetchUdhaars } from './api/udhaar';
 
-## Notes
-- Use `secondary_per_primary` to convert between units in your UI.
-- Old text fields `primary_unit` and `secondary_unit` are deprecated in the API.
-- The `quantity` field tracks current inventory levels. It defaults to `0` if not provided during creation. Update this field manually when items are purchased or sold.
+export default function UdhaarList({ token }) {
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [page, setPage] = useState(1);
+  const [perPage, setPerPage] = useState(15);
+  const [status, setStatus] = useState(''); // '', 'active', 'fully_paid', 'cancelled'
+  const [userId, setUserId] = useState('');
+
+  const params = useMemo(() => {
+    const p = { page, per_page: perPage };
+    if (status) p.status = status;
+    if (userId) p.user_id = userId;
+    return p;
+  }, [page, perPage, status, userId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    fetchUdhaars({ token, params })
+      .then((json) => {
+        if (cancelled) return;
+        setRows(json?.data ?? []);
+        // optionally read json.pagination to render controls
+      })
+      .catch((e) => !cancelled && setError(e.message))
+      .finally(() => !cancelled && setLoading(false));
+    return () => {
+      cancelled = true;
+    };
+  }, [token, params]);
+
+  return (
+    <div>
+      <h2>Udhaar</h2>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+        <input
+          placeholder="Filter by User ID"
+          value={userId}
+          onChange={(e) => setUserId(e.target.value)}
+        />
+        <select value={status} onChange={(e) => setStatus(e.target.value)}>
+          <option value="">All</option>
+          <option value="active">Active</option>
+          <option value="fully_paid">Fully Paid</option>
+          <option value="cancelled">Cancelled</option>
+        </select>
+      </div>
+
+      {loading && <div>Loading…</div>}
+      {error && <div style={{ color: 'red' }}>{error}</div>}
+
+      {!loading && !error && (
+        <table width="100%" cellPadding={8} style={{ borderCollapse: 'collapse' }}>
+          <thead>
+            <tr>
+              <th align="left">ID</th>
+              <th align="left">Staff</th>
+              <th align="right">Amount</th>
+              <th align="right">Paid</th>
+              <th align="right">Remaining</th>
+              <th align="left">Status</th>
+              <th align="left">Loan Date</th>
+              <th align="left">Last Payment</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.id}>
+                <td>{r.id}</td>
+                <td>{r.staff?.name ?? r.user_id}</td>
+                <td align="right">{r.amount}</td>
+                <td align="right">{r.total_paid}</td>
+                <td align="right">{r.remaining_amount}</td>
+                <td>{r.status}</td>
+                <td>{r.loan_date}</td>
+                <td>{r.last_payment_date ?? '-'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+
+      <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
+        <button disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
+          Prev
+        </button>
+        <span>Page {page}</span>
+        <button onClick={() => setPage((p) => p + 1)}>Next</button>
+        <select value={perPage} onChange={(e) => setPerPage(Number(e.target.value))}>
+          {[10, 15, 25, 50].map((n) => (
+            <option key={n} value={n}>
+              {n} / page
+            </option>
+          ))}
+        </select>
+      </div>
+    </div>
+  );
+}
+```
+
+### Vue 3 Composition API (optional)
+
+```javascript
+<script setup>
+import { ref, watch, onMounted } from 'vue';
+
+const props = defineProps({ token: { type: String, required: true } });
+const rows = ref([]);
+const loading = ref(false);
+const error = ref('');
+const page = ref(1);
+const perPage = ref(15);
+const status = ref('');
+const userId = ref('');
+
+async function load() {
+  loading.value = true;
+  error.value = '';
+  try {
+    const qs = new URLSearchParams({
+      page: String(page.value),
+      per_page: String(perPage.value),
+      ...(status.value ? { status: status.value } : {}),
+      ...(userId.value ? { user_id: userId.value } : {}),
+    }).toString();
+    const res = await fetch(`/api/udhaars?${qs}`, {
+      headers: { Authorization: `Bearer ${props.token}` },
+    });
+    if (!res.ok) throw new Error(String(res.status));
+    const json = await res.json();
+    rows.value = json?.data ?? [];
+  } catch (e) {
+    error.value = e.message || 'Failed to load';
+  } finally {
+    loading.value = false;
+  }
+}
+
+watch([page, perPage, status, userId], load);
+onMounted(load);
+</script>
+
+<template>
+  <div>
+    <h2>Udhaar</h2>
+    <div style="display:flex; gap:8px; margin-bottom:12px;">
+      <input placeholder="Filter by User ID" v-model="userId" />
+      <select v-model="status">
+        <option value="">All</option>
+        <option value="active">Active</option>
+        <option value="fully_paid">Fully Paid</option>
+        <option value="cancelled">Cancelled</option>
+      </select>
+    </div>
+
+    <div v-if="loading">Loading…</div>
+    <div v-else-if="error" style="color:red">{{ error }}</div>
+    <table v-else width="100%" cellpadding="8" style="border-collapse:collapse">
+      <thead>
+        <tr>
+          <th align="left">ID</th>
+          <th align="left">Staff</th>
+          <th align="right">Amount</th>
+          <th align="right">Paid</th>
+          <th align="right">Remaining</th>
+          <th align="left">Status</th>
+          <th align="left">Loan Date</th>
+          <th align="left">Last Payment</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr v-for="r in rows" :key="r.id">
+          <td>{{ r.id }}</td>
+          <td>{{ r.staff?.name ?? r.user_id }}</td>
+          <td align="right">{{ r.amount }}</td>
+          <td align="right">{{ r.total_paid }}</td>
+          <td align="right">{{ r.remaining_amount }}</td>
+          <td>{{ r.status }}</td>
+          <td>{{ r.loan_date }}</td>
+          <td>{{ r.last_payment_date ?? '-' }}</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div style="margin-top:12px; display:flex; gap:8px;">
+      <button :disabled="page <= 1" @click="page -= 1">Prev</button>
+      <span>Page {{ page }}</span>
+      <button @click="page += 1">Next</button>
+      <select v-model.number="perPage">
+        <option v-for="n in [10,15,25,50]" :key="n" :value="n">{{ n }} / page</option>
+      </select>
+    </div>
+  </div>
+  
+</template>
+```
+
+### Suggested Columns
+
+- **ID**: `id`
+- **Staff**: `staff.name` (fallback `user_id`)
+- **Amount**: `amount`
+- **Paid**: `total_paid`
+- **Remaining**: `remaining_amount`
+- **Status**: `status`
+- **Loan Date**: `loan_date`
+- **Last Payment**: `last_payment_date` (nullable)
+
+### Tips
+
+- **Server-side filters**: Prefer passing `status`, `user_id`, and date range to avoid overfetching.
+- **Pagination**: Use backend `pagination` fields to render page controls when available.
+- **Empty states**: Show a friendly message if `data` is empty.
+- **Errors**: Display `response.message` when `success` is false.
+
+For full API details, see `UDHAAR_LOAN_API.md`.
+
+

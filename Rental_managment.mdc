@@ -1,0 +1,71 @@
+---
+alwaysApply: true
+---
+## Rental Management API
+
+Tracks rental stock items individually with searchable unique IDs, adjustable rent by type, availability control, and transaction history.
+
+Base URL: `/api` (auth required)
+
+### Data Model
+
+- `rental_items`
+  - `id`, `unique_code` (unique), `name`
+  - `base_rent_amount`, `rent_type` (`day|week|month`), `rent_date` (nullable)
+  - `status` (`Available|Rented`)
+- `rental_item_transactions`
+  - `id`, `rental_item_id`, `action` (`rented|returned`)
+  - `rent_date`, `return_date`, `rent_type`, `rent_amount`, `note`
+
+Rent calculation: base is treated as monthly-equivalent; computed amount is:
+- day = base / 30
+- week = base / 4
+- month = base
+
+### Endpoints
+
+#### Create Item
+
+POST `/api/rental-items`
+```json
+{ "unique_code": "DRL-001", "name": "Drill Machine", "base_rent_amount": 3000, "rent_type": "month" }
+```
+
+#### List/Search
+
+GET `/api/rental-items?status=Available&unique_code=DRL`
+
+#### Show Item
+
+GET `/api/rental-items/{id}`
+
+#### Update Item
+
+PUT `/api/rental-items/{id}`
+
+#### Delete Item
+
+DELETE `/api/rental-items/{id}` (not allowed when status is `Rented`)
+
+#### Mark as Rented
+
+POST `/api/rental-items/{id}/rent`
+```json
+{ "rent_type": "week", "rent_date": "2025-11-03", "note": "Rented to client X" }
+```
+Behavior: sets status to `Rented`, stores computed `rent_amount` in transactions, hides from Available list.
+
+#### Return Item
+
+POST `/api/rental-items/{id}/return`
+```json
+{ "return_date": "2025-11-10", "note": "Returned in good condition" }
+```
+Behavior: sets status back to `Available` and logs transaction.
+
+### Tips
+
+- Search by `unique_code` substring to quickly locate an item.
+- The item detail includes recent `transactions` for quick history.
+
+
