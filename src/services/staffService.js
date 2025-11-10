@@ -196,6 +196,12 @@ class StaffService {
     return this.makeRequest(`/salary-payments/summary/${userId}${queryString ? `?${queryString}` : ''}`);
   }
 
+  // Get attendance-based salary calculation
+  async getAttendanceBasedSalary(userId, params = {}) {
+    const queryString = new URLSearchParams(params).toString();
+    return this.makeRequest(`/salary-payments/attendance-based/${userId}${queryString ? `?${queryString}` : ''}`);
+  }
+
   async updateSalaryPayment(id, paymentData) {
     return this.makeRequest(`/salary-payments/${id}`, {
       method: 'PUT',

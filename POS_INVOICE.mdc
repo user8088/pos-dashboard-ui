@@ -17,13 +17,14 @@ Example response (trimmed):
       {
         "id": 5,
         "name": "Cement",
+        "serial_id": "PROD-001",
         "selling_price": "1000.00",
         "last_purchase_price": "900.00",
         "quantity": "50.00",
         "primary_unit_id": 2,
         "secondary_unit_id": 3,
         "secondary_per_primary": "2.000",
-        "category": { "id": 1, "name": "Construction" },
+        "category": { "id": 1, "name": "Construction", "serial_alias": "PROD" },
         "primaryUnit": { "id": 2, "name": "Bag", "symbol": "bag" },
         "secondaryUnit": { "id": 3, "name": "Kilogram", "symbol": "kg" }
       }
@@ -48,7 +49,7 @@ Body
   "payment_method": "cash",
   "discount_percent": 5,
   "discount_amount": 100,
-  "hidden_costs": 50.00,            // optional; added to total after discounts, not shown on PDF
+  "hidden_costs": 50.00,            // optional invoice-level hidden cost added after discounts
   "paid_amount": 500,                // optional; see payment_as
   "payment_as": "payment",          // payment | advance
   "apply_advance": true,              // optional; if true, applies existing customer advance to invoice (default: true)
@@ -57,7 +58,7 @@ Body
   "notes": "Walk-in customer",
   "skip": false,                    // optional; if true, skips customer balance updates
   "items": [
-    { "stock_item_id": 3, "quantity": 1 },
+    { "stock_item_id": 3, "quantity": 1, "hidden_cost": 10.50 },
     { "stock_item_id": 5, "quantity": 2, "unit_price": 850 }
   ]
 }
@@ -67,9 +68,10 @@ Rules
 - `items[].unit_price` optional; defaults to the item's `selling_price`.
 - Discounts: both fixed and percent can be supplied; both are applied.
 - `hidden_costs`: Optional. Added to total AFTER discounts are applied. Included in customer balance calculations but NOT displayed on printed invoices/PDFs.
+- `items[].hidden_cost`: Optional per-line hidden cost, defaults to `0`. Summed with invoice-level `hidden_costs` when computing totals and stored on each `invoice_items` record.
 - `paid_amount` with `payment_as`:
-  - `payment`: applied to this invoice; excess goes to customer advance.
-  - `advance`: entire amount goes to advance; invoice remains fully due.
+  - `payment`: applied to this invoice; any excess beyond the remaining due is moved to customer advance.
+  - `advance`: reduces the invoice due by the paid amount **and** credits the same amount to the customer's advance balance.
 - `apply_advance`: Optional boolean (default: `true`). Controls whether to apply existing customer advance balance to the invoice:
   - `true` or omitted: automatically applies available advance balance to invoice (reduces advance, reduces invoice due)
   - `false`: does not apply existing advance balance; invoice is created with full amount due
@@ -80,6 +82,7 @@ Rules
   - Useful for draft invoices or testing without affecting balances
 - `due_date` is stored on the invoice and shown on customer profile.
 - Customer balances (`due_balance`, `advance_balance`) are updated and a `customer_transactions` entry is recorded (unless `skip: true`).
+- Response payload includes `customer_due_balance` and `customer_advance_balance` so the UI can refresh sidebar/profile figures without an extra request.
 
 Success 201 (trimmed)
 ```json
@@ -91,16 +94,53 @@ Success 201 (trimmed)
     "invoice_number": "INV-20251030-123",
     "subtotal": "2700.00",
     "discount_amount": "235.00",
-    "hidden_costs": "50.00",
-    "total": "2515.00",
+    "hidden_costs": "60.50",
+    "total": "2525.50",
     "paid_amount": "500.00",
     "advance_applied": "200.00",
-    "due_amount": "1815.00",
+    "due_amount": "1825.50",
+    "customer_due_balance": "1825.50",
+    "customer_advance_balance": "0.00",
     "due_date": "2025-11-15",
-    "created_at": "2025-10-30T10:30:00.000000Z"
+    "created_at": "2025-10-30T10:30:00.000000Z",
+    "items": [
+      {
+        "id": 201,
+        "stock_item_id": 3,
+        "name": "Cement",
+        "quantity": "1.000",
+        "unit_price": "900.00",
+        "line_total": "900.00",
+        "hidden_cost": "10.50"
+      },
+      {
+        "id": 202,
+        "stock_item_id": 5,
+        "name": "Steel Rod",
+        "quantity": "2.000",
+        "unit_price": "850.00",
+        "line_total": "1700.00",
+        "hidden_cost": "0.00"
+      }
+    ]
   }
 }
 ```
+
+### Advance payment flow example
+Posting with `"payment_as": "advance"` and `"paid_amount": 300` (no prior advance) on a `total` of `1200` will yield:
+```json
+{
+  "data": {
+    "total": "1200.00",
+    "paid_amount": "300.00",
+    "due_amount": "900.00",
+    "customer_due_balance": "900.00",
+    "customer_advance_balance": "300.00"
+  }
+}
+```
+The invoice due drops by the paid amount while the customer’s advance balance increases by the same amount.
 
 Validation errors 422
 ```json
@@ -111,7 +151,7 @@ Validation errors 422
 
 ## List Invoices (for table)
 GET `/api/invoices?per_page=20`
-- Returns paginated invoices; each row includes `customer_name` which is `Guest` when `customer_id` is null.
+- Returns paginated invoices; each row includes `customer_name` (defaults to `Guest`) and eager loads `items` so hidden costs are available per line.
 
 Example
 ```json
@@ -126,7 +166,19 @@ Example
         "customer_name": "Ali",
         "payment_method": "cash",
         "total": "2465.00",
-        "created_at": "2025-10-30T10:30:00.000000Z"
+        "hidden_costs": "25.00",
+        "created_at": "2025-10-30T10:30:00.000000Z",
+        "items": [
+          {
+            "id": 101,
+            "stock_item_id": 5,
+            "name": "Cement",
+            "quantity": "2.000",
+            "unit_price": "850.00",
+            "line_total": "1700.00",
+            "hidden_cost": "25.00"
+          }
+        ]
       }
     ],
     "total": 1
@@ -148,8 +200,8 @@ Example response:
     "customer_id": 1,
     "subtotal": "2700.00",
     "discount_amount": "235.00",
-    "hidden_costs": "50.00",
-    "total": "2515.00",
+    "hidden_costs": "60.50",
+    "total": "2525.50",
     "paid_amount": "500.00",
     "due_amount": "2015.00",
     "payment_method": "cash",
@@ -162,7 +214,8 @@ Example response:
         "name": "Cement",
         "quantity": "2.000",
         "unit_price": "850.00",
-        "line_total": "1700.00"
+        "line_total": "1700.00",
+        "hidden_cost": "10.50"
       }
     ]
   }
@@ -306,14 +359,14 @@ POST `/api/invoices`
   "discount_percent": 5,
   "hidden_costs": 50.00,
   "items": [
-    { "stock_item_id": 5, "quantity": 2 }
+    { "stock_item_id": 5, "quantity": 2, "hidden_cost": 12.25 }
   ]
 }
 ```
 Behavior:
-- `hidden_costs` is added to the total AFTER discounts are applied.
+- `hidden_costs` and all per-item `hidden_cost` values are summed and added to the total AFTER discounts are applied.
 - Hidden costs are included in customer balance calculations.
-- Hidden costs are included in API responses (for profit/loss calculations).
+- Hidden costs (invoice-level and per-item) are included in API responses (for profit/loss calculations).
 - Hidden costs are NOT displayed on printed invoice PDFs (they're included in the total but not shown as a line item).
 
 ### H) Create Invoice Without Applying Advance
@@ -374,7 +427,12 @@ await fetch('/api/invoices', {
     hidden_costs: Number(hiddenCosts) || null,
     apply_advance: applyAdvance !== false, // Default to true, set false to skip advance application
     skip: skipInvoice || false, // Set to true to skip balance updates
-    items: cart.map(l => ({ stock_item_id: l.id, quantity: l.qty, unit_price: l.customPrice || undefined }))
+    items: cart.map(l => ({
+      stock_item_id: l.id,
+      quantity: l.qty,
+      unit_price: l.customPrice || undefined,
+      hidden_cost: l.hiddenCost || undefined
+    }))
   })
 });
 ```
@@ -407,7 +465,7 @@ if (response.ok) {
 ## Important Notes
 
 ### Hidden Costs
-- **Included in:** Invoice total, customer balance calculations, API responses
+- **Included in:** Invoice total, customer balance calculations, API responses (both invoice-level and per-item values)
 - **Excluded from:** Printed invoice PDF display (shown only in total, not as a line item)
 - **Use case:** For internal costs like delivery fees, service charges, etc. that affect profitability but shouldn't be visible to customers on receipts
 

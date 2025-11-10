@@ -8,12 +8,14 @@ import { FiSearch } from 'react-icons/fi';
 import { AddIcon, RepeatIcon } from '@chakra-ui/icons';
 import { supplierService } from 'services/supplierService';
 import { stockService } from 'services/stockService';
+import { useHistory } from 'react-router-dom';
 
 const SupplierManagement = () => {
   const textColor = useColorModeValue('gray.700', 'white');
   const cardBg = useColorModeValue('white', 'gray.700');
   const borderColor = useColorModeValue('gray.200', 'gray.600');
   const toast = useToast();
+  const history = useHistory();
 
   const [suppliers, setSuppliers] = React.useState([]);
   const [loading, setLoading] = React.useState(false);
@@ -197,6 +199,13 @@ const SupplierManagement = () => {
                 </HStack>
               </Flex>
               <HStack mt='12px'>
+                <Button
+                  size='sm'
+                  variant='outline'
+                  onClick={() => history.push(`/admin/supplier-management/${s.id}`)}
+                >
+                  View Profile
+                </Button>
                 <Button size='sm' bg='#FF8D28' color='white' _hover={{ bg: '#E67E22' }} onClick={() => handleOpenPurchase(s)}>Create Purchase</Button>
               </HStack>
             </Box>

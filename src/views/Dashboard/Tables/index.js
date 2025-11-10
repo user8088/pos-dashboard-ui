@@ -10,7 +10,7 @@ function Tables() {
     <Flex direction='column' pt={{ base: "120px", md: "75px" }}>
       <Authors
         title={"Stock Management"}
-        captions={["Products", "Quantity Per Unit", "Category", "Status", "Stock Value",""]}
+        captions={["Serial ID", "Products", "Quantity Per Unit", "Category", "Status", "Stock Value",""]}
         data={tablesTableData}
       />
       {/* <Projects

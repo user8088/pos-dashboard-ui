@@ -33,14 +33,39 @@ export default function Invoices() {
       setLoading(true);
       const resp = await invoiceService.listInvoices({ per_page: 20 });
       const list = resp?.data?.data || resp?.data || resp || [];
-      setRows(list.map(r => ({
-        id: r.id,
-        number: r.invoice_number || `#${r.id}`,
-        customer: r.customer_name || (r.customer?.name) || (r.customer_id ? `#${r.customer_id}` : 'Guest'),
-        method: r.payment_method || '-',
-        total: `PKR ${Number(r.total || 0).toFixed(2)}`,
-        date: (r.created_at || '').toString().slice(0,10),
-      })));
+      setRows(list.map(r => {
+        const breakdownArray = Array.isArray(r.payment_breakdown) ? r.payment_breakdown : (
+          Array.isArray(r.payments) ? r.payments : []
+        );
+        const formatLabel = (label) => {
+          if (!label) return '-';
+          const cleaned = String(label).replace(/_/g, ' ').trim();
+          const lower = cleaned.toLowerCase();
+          if (lower === 'bank') return 'Online';
+          if (lower === 'cash') return 'Cash';
+          return cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+        };
+        const methodLabel = breakdownArray.length > 0
+          ? breakdownArray
+              .filter(item => item && (item.payment_method || item.method))
+              .map(item => {
+                const name = formatLabel(item.payment_method || item.method);
+                const amount = Number(item.amount || item.paid_amount || 0);
+                return amount > 0 ? `${name} PKR ${amount.toFixed(2)}` : name;
+              })
+              .join(' + ')
+          : (r.payment_method === 'split'
+              ? 'Cash + Online'
+              : formatLabel(r.payment_method) || '-');
+        return ({
+          id: r.id,
+          number: r.invoice_number || `#${r.id}`,
+          customer: r.customer_name || (r.customer?.name) || (r.customer_id ? `#${r.customer_id}` : 'Guest'),
+          method: methodLabel,
+          total: `PKR ${Number(r.total || 0).toFixed(2)}`,
+          date: (r.created_at || '').toString().slice(0,10),
+        });
+      }));
     } finally { setLoading(false); }
   }, []);
 

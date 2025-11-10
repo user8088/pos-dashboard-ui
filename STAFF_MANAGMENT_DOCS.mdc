@@ -227,6 +227,96 @@ UI guidance:
 **GET** `/api/salary-payments/summary/{userId}`
 - Query: `?start_date=2025-01-01&end_date=2025-12-31`
 
+### Attendance-Based Salary Recommendation (NEW)
+**GET** `/api/salary-payments/attendance-based/{userId}`
+- Query params (all lowercase):
+  - `period_type` (required): `week | month | year`
+  - `period_value` (required):
+    - week → `YYYY-MM-DD` (any date inside the target week)
+    - month → `YYYY-MM`
+    - year → `YYYY`
+  - `start_date` (optional override): `YYYY-MM-DD`
+  - `end_date` (optional override): `YYYY-MM-DD`
+- Auth: Requires the same Bearer token as other protected routes.
+
+#### Behaviour
+- If both `start_date` and `end_date` are provided the backend ignores `period_type/value` and uses the explicit range.
+- Otherwise the backend derives the inclusive range based on `period_type` + `period_value` using ISO Monday–Sunday weeks, calendar months, and calendar years.
+- Attendance statuses are mapped as:
+  - `present` + `late` → full day (1.0)
+  - `half-day` → 0.5
+  - `absent` → 0 (unpaid)
+  - `leave_count` is always `0` for now because the attendance enum does not include a `leave` status.
+- Daily rate = `base_salary / calendar_days` for the resolved period.
+- `full_salary` logic:
+  - `month` → `base_salary`
+  - `week` → `(base_salary / 30) × 7`
+  - `year` → `base_salary × 12`
+- Monetary values are returned as strings with 2 decimal places for display safety.
+
+#### Success Payload
+```json
+{
+  "success": true,
+  "data": {
+    "user_id": 7,
+    "period_type": "month",
+    "period_value": "2025-11",
+    "start_date": "2025-11-01",
+    "end_date": "2025-11-30",
+    "salary_structure": {
+      "base_salary": "30000.00",
+      "allowances": "0.00",
+      "deductions": "0.00"
+    },
+    "calendar_days": 30,
+    "daily_rate": "1000.00",
+    "attendance": {
+      "present_count": 15,
+      "late_count": 2,
+      "half_day_count": 3,
+      "leave_count": 0,
+      "absent_count": 10,
+      "total_working_days": 18.5
+    },
+    "calculated_salary": "18500.00",
+    "full_salary": "30000.00",
+    "difference": "-11500.00"
+  }
+}
+```
+
+#### Error Payloads
+- Missing `period_type` / `period_value`
+```json
+{
+  "success": false,
+  "message": "period_type and period_value are required"
+}
+```
+- Invalid date formats or unsupported `period_type`
+```json
+{
+  "success": false,
+  "message": "Invalid month format. Expected YYYY-MM format, got: 2025/11"
+}
+```
+- Missing salary structure
+```json
+{
+  "success": false,
+  "message": "No salary structure found for this user"
+}
+```
+
+#### Frontend Usage Notes
+- Ideal for the Quick Pay modal and profile dashboards to recommend how much to pay based on attendance.
+- Always guard the call with a loading state; time ranges with many attendance rows can take ~200–300 ms.
+- Display `calculated_salary` as the recommended payout and `difference` vs `full_salary` to highlight over/under payment.
+- Graphs or tooltips can use the `attendance` counts to show how the total was derived (e.g., stacked bars for present/late/half-day/absent).
+- If the API returns a 400 error, prompt the user to adjust filters; 404 should be surfaced as “no salary structure configured”.
+- Cache the last successful response per user-period pair in local state to avoid redundant refetches when reopening the modal.
+
 ### Update Payment
 **PUT** `/api/salary-payments/{id}`
 

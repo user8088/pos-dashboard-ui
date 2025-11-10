@@ -38,10 +38,12 @@ import {
   StatHelpText,
   StatArrow,
 } from '@chakra-ui/react';
-import { SearchIcon, AddIcon, EditIcon, DeleteIcon } from '@chakra-ui/icons';
+import { SearchIcon, AddIcon, EditIcon, DeleteIcon, ViewIcon } from '@chakra-ui/icons';
+import { useHistory } from 'react-router-dom';
 import { staffService } from '../../../services/staffService';
 
 const StaffManagement = () => {
+  const history = useHistory();
   const [staff, setStaff] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -464,7 +466,17 @@ const StaffManagement = () => {
             <Tbody>
               {filteredStaff.map((member) => (
                 <Tr key={member.id}>
-                  <Td fontWeight="bold">{member.name}</Td>
+                  <Td>
+                    <Button
+                      variant="link"
+                      fontWeight="bold"
+                      color="blue.500"
+                      onClick={() => history.push(`/admin/staff-management/${member.id}`)}
+                      _hover={{ textDecoration: 'underline' }}
+                    >
+                      {member.name}
+                    </Button>
+                  </Td>
                   <Td>{member.email}</Td>
                   <Td>
                     <Badge colorScheme={member.user_type === 'admin' ? 'purple' : 'blue'}>
@@ -481,6 +493,15 @@ const StaffManagement = () => {
                   </Td>
                   <Td>
                     <HStack spacing={2}>
+                      <Button
+                        size="sm"
+                        leftIcon={<ViewIcon />}
+                        colorScheme="blue"
+                        variant="outline"
+                        onClick={() => history.push(`/admin/staff-management/${member.id}`)}
+                      >
+                        Profile
+                      </Button>
                       <Button
                         size="sm"
                         colorScheme="green"

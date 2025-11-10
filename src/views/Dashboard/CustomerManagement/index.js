@@ -65,6 +65,9 @@ const CustomerTableRow = ({ customer, onEdit, onDelete, onViewProfile, onRecordP
 
   return (
     <Tr>
+      <Td>
+        <Text fontSize="md" color={textColor} fontWeight="bold">{customer.serial_id || '-'}</Text>
+      </Td>
       <Td minWidth={{ sm: "250px" }} pl="0px">
         <Flex align="center" py=".8rem" minWidth="100%" flexWrap="nowrap">
           <Image src={customer.avatar} w="30px" h="30px" me="18px" objectFit="cover" />
@@ -139,12 +142,40 @@ function CustomerManagement() {
   const [newCustomer, setNewCustomer] = useState({
     name: "",
     phone: "",
-    address: ""
+    address: "",
+    serial_id: ""
   });
   const [profileData, setProfileData] = useState(null);
   const [paymentForm, setPaymentForm] = useState({ type: 'payment', amount: '', description: '', advance_start_date: '', advance_end_date: '' });
   const [saleForm, setSaleForm] = useState({ items: [], paid_amount: '', reference: '', sale_date: '' });
   const [ratingForm, setRatingForm] = useState({ stars: 5, note: '' });
+
+  const formatPaymentSummary = React.useCallback((record) => {
+    if (!record) return '-';
+    const breakdownArray = Array.isArray(record.payment_breakdown)
+      ? record.payment_breakdown
+      : (Array.isArray(record.payments) ? record.payments : []);
+    const formatLabel = (label) => {
+      if (!label) return '-';
+      const cleaned = String(label).replace(/_/g, ' ').trim();
+      const lower = cleaned.toLowerCase();
+      if (lower === 'bank') return 'Online';
+      if (lower === 'cash') return 'Cash';
+      return cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+    };
+    if (breakdownArray.length > 0) {
+      return breakdownArray
+        .filter(item => item && (item.payment_method || item.method))
+        .map(item => {
+          const name = formatLabel(item.payment_method || item.method);
+          const amount = Number(item.amount || item.paid_amount || 0);
+          return amount > 0 ? `${name} PKR ${amount.toFixed(2)}` : name;
+        })
+        .join(' + ');
+    }
+    if (record.payment_method === 'split') return 'Cash + Online';
+    return formatLabel(record.payment_method) || '-';
+  }, []);
 
   const loadCustomers = async () => {
     try { setLoading(true); const resp = await customerService.list({}); const list = resp?.data?.data || resp?.data || resp || []; setCustomers(list); }
@@ -162,7 +193,7 @@ function CustomerManagement() {
     if (!editingCustomer) return;
     try {
       const phoneSanitized = (editingCustomer.phone || '').toString().replace(/[^0-9]/g, '');
-      await customerService.update(editingCustomer.id, { name: editingCustomer.name, phone: phoneSanitized, address: editingCustomer.address || '' });
+      await customerService.update(editingCustomer.id, { name: editingCustomer.name, phone: phoneSanitized, address: editingCustomer.address || '', serial_id: editingCustomer.serial_id || '' });
       onEditClose();
       setEditingCustomer(null);
       await loadCustomers();
@@ -173,9 +204,9 @@ function CustomerManagement() {
     if (!newCustomer.name) return;
     try {
       const phoneSanitized = (newCustomer.phone || '').toString().replace(/[^0-9]/g, '');
-      await customerService.create({ name: newCustomer.name, phone: phoneSanitized, address: newCustomer.address || '' });
+      await customerService.create({ name: newCustomer.name, phone: phoneSanitized, address: newCustomer.address || '', serial_id: newCustomer.serial_id || '' });
       onAddClose();
-      setNewCustomer({ name: "", email: "", totalDue: "", status: "Pending", amountPending: "", phone: '', address: '' });
+      setNewCustomer({ name: "", phone: '', address: '', serial_id: '' });
       await loadCustomers();
     } catch (e) { alert(e?.message || 'Failed to create customer'); }
   };
@@ -282,6 +313,7 @@ function CustomerManagement() {
           <Table variant='simple' color={textColor}>
             <Thead>
               <Tr>
+                <Th color='gray.400' fontSize='sm' fontWeight='semibold'>Serial ID</Th>
                 <Th color='gray.400' fontSize='sm' fontWeight='semibold'>Customer</Th>
                 <Th color='gray.400' fontSize='sm' fontWeight='semibold'>Phone</Th>
                 <Th color='gray.400' fontSize='sm' fontWeight='semibold'>Due Balance</Th>
@@ -293,14 +325,14 @@ function CustomerManagement() {
             <Tbody>
               {loading && (
                 <Tr>
-                  <Td colSpan={6} py='48px' textAlign='center'>
+                  <Td colSpan={7} py='48px' textAlign='center'>
                     <Spinner thickness='3px' speed='0.65s' emptyColor='gray.200' color='#FF8D28' size='lg' />
                   </Td>
                 </Tr>
               )}
               {!loading && customers.length === 0 && (
                 <Tr>
-                  <Td colSpan={6} py='48px'>
+                  <Td colSpan={7} py='48px'>
                     <Box textAlign='center' color='gray.500'>
                       <Text fontWeight='bold' mb='2'>No customers found</Text>
                       <Text fontSize='sm'>Use the Add New Customer button to create one.</Text>
@@ -315,6 +347,7 @@ function CustomerManagement() {
                     id: c.id,
                     name: c.name,
                     phone: c.phone || '',
+                    serial_id: c.serial_id || '',
                     avatar: logo,
                     due: `PKR.${Number(c.due_balance || 0).toFixed(2)}`,
                     advance: `PKR.${Number(c.advance_balance || 0).toFixed(2)}`,
@@ -355,19 +388,24 @@ function CustomerManagement() {
                 <Text fontWeight='semibold' mt='2'>Recent Invoices</Text>
                 <Box maxH='160px' overflowY='auto'>
                   {(profileData.invoices || []).slice(0,5).map((inv)=> (
-                    <HStack key={inv.id} justify='space-between'>
+                  <HStack key={inv.id} justify='space-between' align='flex-start' spacing='8px'>
+                    <VStack align='flex-start' spacing='1'>
                       <Text color='gray.600'>
                         {inv.invoice_number || `#${inv.id}`} • PKR {Number(inv.total||0).toFixed(2)}
                       </Text>
-                      <IconButton
-                        icon={<DownloadIcon />}
-                        size='xs'
-                        variant='ghost'
-                        onClick={() => handleDownloadInvoice(inv.id)}
-                        isLoading={downloadingIds.has(inv.id)}
-                        aria-label='Download invoice'
-                      />
-                    </HStack>
+                      <Text fontSize='xs' color='gray.500'>
+                        Paid via {formatPaymentSummary(inv)}
+                      </Text>
+                    </VStack>
+                    <IconButton
+                      icon={<DownloadIcon />}
+                      size='xs'
+                      variant='ghost'
+                      onClick={() => handleDownloadInvoice(inv.id)}
+                      isLoading={downloadingIds.has(inv.id)}
+                      aria-label='Download invoice'
+                    />
+                  </HStack>
                   ))}
                   {(!profileData.invoices || profileData.invoices.length===0) && (
                     <Text color='gray.500'>No invoices</Text>
@@ -488,10 +526,13 @@ function CustomerManagement() {
                 </FormLabel>
                 <Input
                   value={newCustomer.name}
-                  onChange={(e) => setNewCustomer(prev => ({
-                    ...prev,
-                    name: e.target.value
-                  }))}
+                  onChange={(e) => {
+                    const { value } = e.target;
+                    setNewCustomer(prev => ({
+                      ...prev,
+                      name: value
+                    }));
+                  }}
                   placeholder="Enter customer name"
                   size="md"
                 />
@@ -511,6 +552,15 @@ function CustomerManagement() {
                     value={newCustomer.address}
                     onChange={(e)=> { const val = e.target.value; setNewCustomer(prev=> ({...prev, address: val})); }}
                     placeholder="Address"
+                    size="md"
+                  />
+                </FormControl>
+                <FormControl>
+                  <FormLabel fontSize="sm" color="gray.500">Serial ID</FormLabel>
+                  <Input
+                    value={newCustomer.serial_id}
+                    onChange={(e)=> { const val = e.target.value; setNewCustomer(prev=> ({...prev, serial_id: val})); }}
+                    placeholder="e.g., CUST-001"
                     size="md"
                   />
                 </FormControl>
@@ -572,6 +622,15 @@ function CustomerManagement() {
                   <Input
                     value={editingCustomer.address || ''}
                     onChange={(e)=> { const val = e.target.value; setEditingCustomer(prev=> (prev ? {...prev, address: val} : { address: val })); }}
+                    size="md"
+                  />
+                </FormControl>
+                <FormControl>
+                  <FormLabel fontSize="sm" color="gray.500">Serial ID</FormLabel>
+                  <Input
+                    value={editingCustomer.serial_id || ''}
+                    onChange={(e)=> { const val = e.target.value; setEditingCustomer(prev=> (prev ? {...prev, serial_id: val} : { serial_id: val })); }}
+                    placeholder="e.g., CUST-001"
                     size="md"
                   />
                 </FormControl>

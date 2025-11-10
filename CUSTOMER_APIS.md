@@ -8,27 +8,79 @@ All endpoints require `auth:sanctum`. Use header `Authorization: Bearer <token>`
 ### List Customers
 - GET `/api/customers`
 - Query: `search`, `per_page`
+- Search: Searches across `name`, `phone`, `address`, and `serial_id` fields
 - 200 → paginated list
 
 ### Create Customer
 - POST `/api/customers`
-- Body:
+- Body (with auto-generated serial_id):
 ```json
-{ "name": "John Doe", "phone": "+15551234567", "address": "123 Main St" }
+{
+  "name": "John Doe",
+  "phone": "+15551234567",
+  "address": "123 Main St"
+}
 ```
-- 201 → customer JSON
+
+- Body (with custom serial_id):
+```json
+{
+  "serial_id": "VIP-001",
+  "name": "John Doe",
+  "phone": "+15551234567",
+  "address": "123 Main St"
+}
+```
+
+- Fields:
+  - `serial_id` (optional): Unique customer identifier (e.g., "CUST-001", "C-2024-001")
+    - **Auto-generated if not provided**: Format `CUST-001`, `CUST-002`, etc. (sequential numbering)
+    - If provided manually, must be unique across all customers
+    - Max 50 characters
+    - Alphanumeric, hyphens, underscores only (regex: `/^[A-Za-z0-9_-]+$/`)
+    - Can be omitted (will be auto-generated) or explicitly set to a custom value
+  - `name` (required): Customer name
+  - `phone` (required): Phone number (must be unique)
+  - `address` (optional): Customer address
+- 201 → customer JSON (includes `serial_id` - auto-generated if not provided)
+
+**Example Response:**
+```json
+{
+  "id": 1,
+  "serial_id": "CUST-001",
+  "name": "John Doe",
+  "phone": "+15551234567",
+  "address": "123 Main St",
+  "due_balance": "0.00",
+  "advance_balance": "0.00"
+}
+```
 
 ### Get Customer
 - GET `/api/customers/{customer}`
-- 200 → customer JSON
+- 200 → customer JSON (includes `serial_id` if set)
 
 ### Update Customer
 - PUT `/api/customers/{customer}`
 - Body (any of):
 ```json
-{ "name": "John D.", "phone": "+15557654321", "address": "456 Side St" }
+{
+  "serial_id": "CUST-002",
+  "name": "John D.",
+  "phone": "+15557654321",
+  "address": "456 Side St"
+}
 ```
-- 200 → updated customer JSON
+- Fields (all optional, only provided fields are updated):
+  - `serial_id` (optional): Unique customer identifier
+    - Same validation rules as create
+    - Can be set to `null` by sending empty string `""` or `null`
+    - Must be unique (ignoring current customer's existing `serial_id`)
+  - `name` (optional): Customer name
+  - `phone` (optional): Phone number (must be unique if changed)
+  - `address` (optional): Customer address
+- 200 → updated customer JSON (includes `serial_id`)
 
 ### Delete Customer
 - DELETE `/api/customers/{customer}`
@@ -46,7 +98,10 @@ Example (truncated):
 ```json
 {
   "id": 1,
+  "serial_id": "CUST-001",
   "name": "John Doe",
+  "phone": "+15551234567",
+  "address": "123 Main St",
   "due_balance": "150.00",
   "advance_balance": "50.00",
   "sales": [ { "id": 10, "total_amount": "200.00", "paid_amount": "50.00", "due_amount": "150.00" } ],
@@ -118,16 +173,48 @@ Example (truncated):
 ---
 
 ## Data Model Summary
-- `customers`: name, phone (unique), address, due_balance, advance_balance, advance_start_date, advance_end_date, rating_average, rating_count, timestamps, softDeletes
+- `customers`: serial_id (nullable, unique), name, phone (unique), address, due_balance, advance_balance, advance_start_date, advance_end_date, rating_average, rating_count, timestamps, softDeletes
 - `sales`: customer_id, total_amount, paid_amount, due_amount, sale_date, reference, timestamps
 - `sale_items`: sale_id, stock_item_id, quantity, unit_price, total_price, timestamps
 - `customer_transactions`: customer_id, type [sale|payment|advance|adjustment], amount, direction [debit|credit], due_balance_after, advance_balance_after, description, occurred_at, timestamps
 - `customer_ratings`: customer_id, stars, note, created_by, timestamps
 
 ## Validation Notes
-- `phone` unique
-- `stars` in 1..5
-- `items` non-empty; `stock_item_id` must exist; `quantity >= 0.001`
-- `advance_end_date >= advance_start_date` when both provided
+- `serial_id`: 
+  - **Auto-generated if not provided**: System automatically generates sequential IDs in format `CUST-001`, `CUST-002`, etc.
+  - Optional (can be omitted for auto-generation, or explicitly provided)
+  - If provided manually, must be unique across all customers
+  - Max 50 characters
+  - Allowed characters: alphanumeric (A-Z, a-z, 0-9), hyphens (-), underscores (_)
+  - Examples: "CUST-001", "C-2024-001", "C_2024_001"
+  - Empty strings are automatically converted and trigger auto-generation
+- `phone`: unique
+- `stars`: in 1..5
+- `items`: non-empty; `stock_item_id` must exist; `quantity >= 0.001`
+- `advance_end_date >= advance_start_date`: when both provided
+
+## Serial ID Usage
+
+### Auto-Generation
+The `serial_id` is **automatically generated** when creating a new customer if not explicitly provided:
+- **Format**: `CUST-001`, `CUST-002`, `CUST-003`, etc. (sequential numbering)
+- **Behavior**: System finds the highest existing `CUST-XXX` number and increments it
+- **Uniqueness**: Auto-generated IDs are guaranteed to be unique
+- **Manual Override**: You can still provide a custom `serial_id` if needed
+
+### Manual Assignment
+You can manually assign custom identifiers for:
+- External system integration
+- Human-readable customer codes
+- Custom numbering schemes (e.g., "C-2024-001", "VIP-001")
+
+**Important Notes:**
+- **Auto-generation**: If `serial_id` is omitted or empty, it will be automatically generated in format `CUST-XXX`
+- **Manual override**: You can provide a custom `serial_id` when creating a customer
+- **Uniqueness**: All `serial_id` values (auto-generated or manual) must be unique
+- **Indexed**: The field is indexed for fast lookups and searches
+- **Search**: Search functionality includes `serial_id` - customers can be found by their serial ID
+- **Updates**: When updating, you can change the `serial_id` or set it to a custom value
+- **Responses**: The `serial_id` is included in all customer API responses (list, get, profile)
 
 

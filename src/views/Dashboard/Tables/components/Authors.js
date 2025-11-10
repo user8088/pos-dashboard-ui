@@ -53,6 +53,7 @@ const Authors = ({ title, captions, data }) => {
   const { isOpen: isUnitOpen, onOpen: onUnitOpen, onClose: onUnitClose } = useDisclosure();
   const [newStock, setNewStock] = React.useState({
     name: "",
+    serial_id: "",
     product_category_id: "",
     primary_unit_id: "",
     secondary_unit_id: "",
@@ -74,7 +75,7 @@ const Authors = ({ title, captions, data }) => {
   const [categories, setCategories] = React.useState([]);
   const [catSearchInput, setCatSearchInput] = React.useState("");
   const [catLoading, setCatLoading] = React.useState(false);
-  const [catForm, setCatForm] = React.useState({ id: null, name: "", description: "" });
+  const [catForm, setCatForm] = React.useState({ id: null, name: "", description: "", serial_alias: "" });
   const [search, setSearch] = React.useState("");
   // Units
   const [units, setUnits] = React.useState([]);
@@ -106,7 +107,7 @@ const Authors = ({ title, captions, data }) => {
       const params = catSearchInput ? { search: catSearchInput } : {};
       const resp = await stockService.listCategories(params);
       const list = resp?.data?.data || resp?.data || resp || [];
-      setCategories(list.map(c => ({ id: c.id, name: c.name, description: c.description })));
+      setCategories(list.map(c => ({ id: c.id, name: c.name, description: c.description, serial_alias: c.serial_alias || '' })));
     } catch (e) {
       // non-blocking
     } finally {
@@ -124,6 +125,7 @@ const Authors = ({ title, captions, data }) => {
         id: it.id,
         logo: it.image_url || logo,
         name: it.name,
+        serialId: it.serial_id || it.serial_number || '',
         primaryUnit: (() => {
           if (it.primaryUnit && typeof it.primaryUnit === 'object') {
             return it.primaryUnit.symbol || it.primaryUnit.name || '';
@@ -220,6 +222,7 @@ const Authors = ({ title, captions, data }) => {
 
   // Stock management captions (updated for API fields)
   const stockCaptions = [
+    "Serial ID",
     "Product",
     "Quantity",
     "Sell Unit",
@@ -243,6 +246,7 @@ const Authors = ({ title, captions, data }) => {
       const secondaryUnitText = newStock.secondary_unit_id ? (getUnitLabel(newStock.secondary_unit_id) || undefined) : undefined;
       await stockService.createItem({
         name: newStock.name,
+        serial_id: newStock.serial_id || undefined,
         product_category_id: Number(newStock.product_category_id),
         primary_unit_id: Number(newStock.primary_unit_id),
         primary_unit: primaryUnitText,
@@ -260,6 +264,7 @@ const Authors = ({ title, captions, data }) => {
       await loadItems();
       setNewStock({
         name: "",
+        serial_id: "",
         product_category_id: "",
         primary_unit_id: "",
         secondary_unit_id: "",
@@ -280,6 +285,7 @@ const Authors = ({ title, captions, data }) => {
   const handleEditStock = (row, index) => {
     setEditingStock({
       name: row.name,
+      serial_id: row.serialId || "",
       product_category_id: "",
       primary_unit_id: "",
       secondary_unit_id: "",
@@ -310,6 +316,7 @@ const Authors = ({ title, captions, data }) => {
       const secondaryUnitText = editingStock.secondary_unit_id ? (getUnitLabel(editingStock.secondary_unit_id) || undefined) : undefined;
       await stockService.updateItem(id, {
         name: editingStock.name,
+        serial_id: editingStock.serial_id || undefined,
         product_category_id: editingStock.product_category_id ? Number(editingStock.product_category_id) : undefined,
         primary_unit_id: editingStock.primary_unit_id ? Number(editingStock.primary_unit_id) : undefined,
         primary_unit: primaryUnitText,
@@ -454,6 +461,7 @@ const Authors = ({ title, captions, data }) => {
                   key={`${row.id || row.name}-${index}`}
                   logo={row.logo}
                   name={row.name}
+                  serialId={row.serialId}
                   quantity={row.quantity}
                   primaryUnit={row.primaryUnit}
                   secondaryUnit={row.secondaryUnit}
@@ -486,6 +494,15 @@ const Authors = ({ title, captions, data }) => {
                   placeholder='Enter product name'
                   value={newStock.name}
                   onChange={(e) => setNewStock({...newStock, name: e.target.value})}
+                />
+              </FormControl>
+              
+              <FormControl>
+                <FormLabel color={textColor}>Serial ID (Optional - Auto-generated if category has alias)</FormLabel>
+                <Input
+                  placeholder='e.g., PROD-001 or leave empty for auto-generation'
+                  value={newStock.serial_id}
+                  onChange={(e) => setNewStock({...newStock, serial_id: e.target.value})}
                 />
               </FormControl>
               
@@ -642,7 +659,7 @@ const Authors = ({ title, captions, data }) => {
        </Modal>
 
       {/* Category CRUD Modal */}
-      <Modal isOpen={isCatOpen} onClose={() => { onCatClose(); setCatForm({ id: null, name: "", description: "" }); }} size='xl' motionPreset='slideInBottom'>
+      <Modal isOpen={isCatOpen} onClose={() => { onCatClose(); setCatForm({ id: null, name: "", description: "", serial_alias: "" }); }} size='xl' motionPreset='slideInBottom'>
         <ModalOverlay bg='rgba(0,0,0,0.4)' backdropFilter='blur(6px)' />
         <ModalContent>
           <ModalHeader color={textColor}>Manage Categories</ModalHeader>
@@ -677,7 +694,7 @@ const Authors = ({ title, captions, data }) => {
                     <Flex key={c.id} justify='space-between' align='center' p='8px' borderRadius='8px' _hover={{ bg: useColorModeValue('gray.50','gray.700') }}>
                       <Text fontWeight='semibold'>{c.name}</Text>
                       <HStack>
-                        <Button size='xs' variant='outline' onClick={() => setCatForm({ id: c.id, name: c.name, description: c.description || "" })}>Edit</Button>
+                        <Button size='xs' variant='outline' onClick={() => setCatForm({ id: c.id, name: c.name, description: c.description || "", serial_alias: c.serial_alias || "" })}>Edit</Button>
                         <Button size='xs' variant='ghost' color='red.400' onClick={async () => { if (!window.confirm(`Delete category "${c.name}"?`)) return; try { await stockService.deleteCategory(c.id); await loadCategories(); } catch (e) { alert(e?.message || 'Failed to delete category'); } }}>Delete</Button>
                       </HStack>
                     </Flex>
@@ -697,6 +714,13 @@ const Authors = ({ title, captions, data }) => {
                     <FormLabel color={textColor}>Description</FormLabel>
                     <Input value={catForm.description} onChange={(e) => setCatForm({ ...catForm, description: e.target.value })} placeholder='Optional description' />
                   </FormControl>
+                  <FormControl>
+                    <FormLabel color={textColor}>Serial Alias (Optional - Used for auto-generating product serials)</FormLabel>
+                    <Input value={catForm.serial_alias} onChange={(e) => setCatForm({ ...catForm, serial_alias: e.target.value })} placeholder='e.g., PROD, ITEM, etc.' />
+                    <Text fontSize='xs' color='gray.500' mt='1'>
+                      Products in this category will have serials like: {catForm.serial_alias || 'ALIAS'}-001, {catForm.serial_alias || 'ALIAS'}-002, etc.
+                    </Text>
+                  </FormControl>
                   <HStack>
                     <Button
                       bg='#FF8D28'
@@ -706,11 +730,11 @@ const Authors = ({ title, captions, data }) => {
                         if (!catForm.name.trim()) return;
                         try {
                           if (catForm.id) {
-                            await stockService.updateCategory(catForm.id, { name: catForm.name.trim(), description: catForm.description || undefined });
+                            await stockService.updateCategory(catForm.id, { name: catForm.name.trim(), description: catForm.description || undefined, serial_alias: catForm.serial_alias || undefined });
                           } else {
-                            await stockService.createCategory({ name: catForm.name.trim(), description: catForm.description || undefined });
+                            await stockService.createCategory({ name: catForm.name.trim(), description: catForm.description || undefined, serial_alias: catForm.serial_alias || undefined });
                           }
-                          setCatForm({ id: null, name: "", description: "" });
+                          setCatForm({ id: null, name: "", description: "", serial_alias: "" });
                           await loadCategories();
                         } catch (e) {
                           alert(e?.message || 'Failed to save category');
@@ -720,7 +744,7 @@ const Authors = ({ title, captions, data }) => {
                       {catForm.id ? 'Update' : 'Create'}
                     </Button>
                     {catForm.id && (
-                      <Button variant='outline' onClick={() => setCatForm({ id: null, name: "", description: "" })}>Cancel</Button>
+                      <Button variant='outline' onClick={() => setCatForm({ id: null, name: "", description: "", serial_alias: "" })}>Cancel</Button>
                     )}
                   </HStack>
                 </VStack>
@@ -841,6 +865,15 @@ const Authors = ({ title, captions, data }) => {
                      placeholder='Enter product name'
                      value={editingStock.name}
                      onChange={(e) => setEditingStock({...editingStock, name: e.target.value})}
+                   />
+                 </FormControl>
+                 
+                 <FormControl>
+                   <FormLabel color={textColor}>Serial ID (Optional - Auto-generated if category has alias)</FormLabel>
+                   <Input
+                     placeholder='e.g., PROD-001 or leave empty for auto-generation'
+                     value={editingStock.serial_id || ''}
+                     onChange={(e) => setEditingStock({...editingStock, serial_id: e.target.value})}
                    />
                  </FormControl>
                

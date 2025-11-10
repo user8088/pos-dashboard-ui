@@ -53,6 +53,7 @@ const FactoryStockTable = ({ title, captions }) => {
   const { isOpen: isProduceOpen, onOpen: onProduceOpen, onClose: onProduceClose } = useDisclosure();
   const [newStock, setNewStock] = React.useState({
     name: "",
+    serial_id: "",
     factory_product_category_id: "",
     primary_unit_id: "",
     secondary_unit_id: "",
@@ -75,7 +76,7 @@ const FactoryStockTable = ({ title, captions }) => {
   const [categories, setCategories] = React.useState([]);
   const [catLoading, setCatLoading] = React.useState(false);
   const [catSearchInput, setCatSearchInput] = React.useState("");
-  const [catForm, setCatForm] = React.useState({ id: null, name: "", description: "" });
+  const [catForm, setCatForm] = React.useState({ id: null, name: "", description: "", serial_alias: "" });
   const [search, setSearch] = React.useState("");
   const [units, setUnits] = React.useState([]);
   const [unitLoading, setUnitLoading] = React.useState(false);
@@ -95,7 +96,7 @@ const FactoryStockTable = ({ title, captions }) => {
       const params = catSearchInput ? { search: catSearchInput } : {};
       const resp = await factoryStockService.listCategories(params);
       const list = resp?.data?.data || resp?.data || resp || [];
-      setCategories(list.map(c => ({ id: c.id, name: c.name, description: c.description })));
+        setCategories(list.map(c => ({ id: c.id, name: c.name, description: c.description, serial_alias: c.serial_alias || '' })));
     } catch (e) {
       // non-blocking
     } finally {
@@ -113,6 +114,7 @@ const FactoryStockTable = ({ title, captions }) => {
         id: it.id,
         logo: it.image_url || logo,
         name: it.name,
+        serialId: it.serial_id || it.serial_number || '',
         primaryUnit: (() => {
           if (it.primaryUnit && typeof it.primaryUnit === 'object') {
             return it.primaryUnit.symbol || it.primaryUnit.name || '';
@@ -209,6 +211,7 @@ const FactoryStockTable = ({ title, captions }) => {
         : undefined;
       await factoryStockService.createItem({
         name: newStock.name,
+        serial_id: newStock.serial_id || undefined,
         factory_product_category_id: Number(newStock.factory_product_category_id),
         primary_unit_id: Number(newStock.primary_unit_id),
         secondary_unit_id: newStock.secondary_unit_id ? Number(newStock.secondary_unit_id) : undefined,
@@ -224,6 +227,7 @@ const FactoryStockTable = ({ title, captions }) => {
       await loadItems();
       setNewStock({
         name: "",
+        serial_id: "",
         factory_product_category_id: "",
         primary_unit_id: "",
         secondary_unit_id: "",
@@ -264,6 +268,7 @@ const FactoryStockTable = ({ title, captions }) => {
         : undefined;
       await factoryStockService.updateItem(id, {
         name: editingStock.name,
+        serial_id: editingStock.serial_id || undefined,
         factory_product_category_id: Number(editingStock.factory_product_category_id),
         primary_unit_id: Number(editingStock.primary_unit_id),
         secondary_unit_id: editingStock.secondary_unit_id ? Number(editingStock.secondary_unit_id) : undefined,
@@ -331,6 +336,7 @@ const FactoryStockTable = ({ title, captions }) => {
     const rawMaterialsFromResponse = raw.rawMaterials || raw.raw_materials || [];
     setEditingStock({
       name: row.name,
+      serial_id: raw.serial_id || raw.serial_number || "",
       factory_product_category_id: raw.factory_product_category_id || "",
       primary_unit_id: raw.primary_unit_id || "",
       secondary_unit_id: raw.secondary_unit_id || "",
@@ -496,6 +502,7 @@ const FactoryStockTable = ({ title, captions }) => {
                   key={`${row.name}-${index}`}
                   logo={row.logo}
                   name={row.name}
+                  serialId={row.serialId}
                   primaryUnit={row.primaryUnit}
                   secondaryUnit={row.secondaryUnit}
                   category={row.category}
@@ -527,6 +534,15 @@ const FactoryStockTable = ({ title, captions }) => {
                   placeholder='Enter product name'
                   value={newStock.name}
                   onChange={(e) => setNewStock({...newStock, name: e.target.value})}
+                />
+              </FormControl>
+              
+              <FormControl>
+                <FormLabel color={textColor}>Serial ID (Optional - Auto-generated if category has alias)</FormLabel>
+                <Input
+                  placeholder='e.g., PROD-001 or leave empty for auto-generation'
+                  value={newStock.serial_id}
+                  onChange={(e) => setNewStock({...newStock, serial_id: e.target.value})}
                 />
               </FormControl>
               
@@ -702,6 +718,15 @@ const FactoryStockTable = ({ title, captions }) => {
                   />
                 </FormControl>
                 
+                <FormControl>
+                  <FormLabel color={textColor}>Serial ID (Optional - Auto-generated if category has alias)</FormLabel>
+                  <Input
+                    placeholder='e.g., PROD-001 or leave empty for auto-generation'
+                    value={editingStock.serial_id || ''}
+                    onChange={(e) => setEditingStock({...editingStock, serial_id: e.target.value})}
+                  />
+                </FormControl>
+                
                 <FormControl isRequired>
                   <FormLabel color={textColor}>Category</FormLabel>
                   <Select
@@ -858,7 +883,7 @@ const FactoryStockTable = ({ title, captions }) => {
       </Modal>
 
       {/* Category CRUD Modal */}
-      <Modal isOpen={isCatOpen} onClose={() => { onCatClose(); setCatForm({ id: null, name: "", description: "" }); }} size='xl' motionPreset='slideInBottom'>
+      <Modal isOpen={isCatOpen} onClose={() => { onCatClose(); setCatForm({ id: null, name: "", description: "", serial_alias: "" }); }} size='xl' motionPreset='slideInBottom'>
         <ModalOverlay bg='rgba(0,0,0,0.4)' backdropFilter='blur(6px)' />
         <ModalContent>
           <ModalHeader color={textColor}>Manage Categories</ModalHeader>
@@ -893,7 +918,7 @@ const FactoryStockTable = ({ title, captions }) => {
                     <Flex key={c.id} justify='space-between' align='center' p='8px' borderRadius='8px' _hover={{ bg: useColorModeValue('gray.50','gray.700') }}>
                       <Text fontWeight='semibold'>{c.name}</Text>
                       <HStack>
-                        <Button size='xs' variant='outline' onClick={() => setCatForm({ id: c.id, name: c.name, description: c.description || "" })}>Edit</Button>
+                        <Button size='xs' variant='outline' onClick={() => setCatForm({ id: c.id, name: c.name, description: c.description || "", serial_alias: c.serial_alias || "" })}>Edit</Button>
                         <Button size='xs' variant='ghost' color='red.400' onClick={async () => { if (!window.confirm(`Delete category "${c.name}"?`)) return; try { await factoryStockService.deleteCategory(c.id); await loadCategories(); } catch (e) { alert(e?.message || 'Failed to delete category'); } }}>Delete</Button>
                       </HStack>
                     </Flex>
@@ -913,6 +938,13 @@ const FactoryStockTable = ({ title, captions }) => {
                     <FormLabel color={textColor}>Description</FormLabel>
                     <Input value={catForm.description} onChange={(e) => setCatForm({ ...catForm, description: e.target.value })} placeholder='Optional description' />
                   </FormControl>
+                  <FormControl>
+                    <FormLabel color={textColor}>Serial Alias (Optional - Used for auto-generating product serials)</FormLabel>
+                    <Input value={catForm.serial_alias} onChange={(e) => setCatForm({ ...catForm, serial_alias: e.target.value })} placeholder='e.g., PROD, ITEM, etc.' />
+                    <Text fontSize='xs' color='gray.500' mt='1'>
+                      Products in this category will have serials like: {catForm.serial_alias || 'ALIAS'}-001, {catForm.serial_alias || 'ALIAS'}-002, etc.
+                    </Text>
+                  </FormControl>
                   <HStack>
                     <Button
                       bg='#FF8D28'
@@ -922,11 +954,11 @@ const FactoryStockTable = ({ title, captions }) => {
                         if (!catForm.name.trim()) return;
                         try {
                           if (catForm.id) {
-                            await factoryStockService.updateCategory(catForm.id, { name: catForm.name.trim(), description: catForm.description || undefined });
+                            await factoryStockService.updateCategory(catForm.id, { name: catForm.name.trim(), description: catForm.description || undefined, serial_alias: catForm.serial_alias || undefined });
                           } else {
-                            await factoryStockService.createCategory({ name: catForm.name.trim(), description: catForm.description || undefined });
+                            await factoryStockService.createCategory({ name: catForm.name.trim(), description: catForm.description || undefined, serial_alias: catForm.serial_alias || undefined });
                           }
-                          setCatForm({ id: null, name: "", description: "" });
+                          setCatForm({ id: null, name: "", description: "", serial_alias: "" });
                           await loadCategories();
                         } catch (e) {
                           alert(e?.message || 'Failed to save category');
@@ -936,7 +968,7 @@ const FactoryStockTable = ({ title, captions }) => {
                       {catForm.id ? 'Update' : 'Create'}
                     </Button>
                     {catForm.id && (
-                      <Button variant='outline' onClick={() => setCatForm({ id: null, name: "", description: "" })}>Cancel</Button>
+                      <Button variant='outline' onClick={() => setCatForm({ id: null, name: "", description: "", serial_alias: "" })}>Cancel</Button>
                     )}
                   </HStack>
                 </VStack>

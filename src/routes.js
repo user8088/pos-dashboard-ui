@@ -13,9 +13,11 @@ import SalaryTracker from "views/Dashboard/SalaryTracker";
 import POS from "views/Dashboard/POS";
 import Invoices from "views/Dashboard/Invoices";
 import CustomerProfile from "views/Dashboard/CustomerProfile";
+import StaffProfile from "views/Dashboard/StaffProfile";
 import StockItemDetail from "views/Dashboard/StockItemDetail";
 import RentalManagement from "views/Dashboard/RentalManagement";
 import SupplierManagement from "views/Dashboard/SupplierManagement";
+import SupplierProfile from "views/Dashboard/SupplierProfile";
 import SignIn from "views/Auth/SignIn.js";
 import SignUp from "views/Auth/SignUp.js";
 
@@ -71,12 +73,28 @@ var dashRoutes = [
     layout: "/admin",
     hidden: true,
   },
+  {
+    path: "/staff-management/:id",
+    name: "Staff Profile",
+    rtlName: "لوحة القيادة",
+    component: StaffProfile,
+    layout: "/admin",
+    hidden: true,
+  },
   // Detail route placed BEFORE list route so it matches first
   {
     path: "/stock-management/:id",
     name: "Stock Item Detail",
     rtlName: "لوحة القيادة",
     component: StockItemDetail,
+    layout: "/admin",
+    hidden: true,
+  },
+  {
+    path: "/supplier-management/:id",
+    name: "Supplier Profile",
+    rtlName: "لوحة القيادة",
+    component: SupplierProfile,
     layout: "/admin",
     hidden: true,
   },

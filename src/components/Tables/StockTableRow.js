@@ -19,6 +19,7 @@ function StockTableRow(props) {
   const {
     logo,
     name,
+    serialId,
     quantity,
     primaryUnit,
     secondaryUnit,
@@ -49,6 +50,9 @@ function StockTableRow(props) {
 
   return (
     <Tr>
+      <Td>
+        <Text fontSize="md" color={textColor} fontWeight="bold">{serialId || '-'}</Text>
+      </Td>
       <Td minWidth={{ sm: "250px" }} pl="0px">
         <Flex align="center" py=".8rem" minWidth="100%" flexWrap="nowrap">
           <Image src={logo} w="30px" h="30px" borderRadius="8px" me="18px" objectFit="cover" />

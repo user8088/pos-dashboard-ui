@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   Box,
   Button,
+  ButtonGroup,
   Flex,
   Heading,
   Table,
@@ -45,8 +46,12 @@ import {
   Grid,
   GridItem,
   Divider,
+  Alert,
+  AlertIcon,
+  Tooltip,
+  SimpleGrid,
 } from '@chakra-ui/react';
-import { AddIcon, EditIcon, DeleteIcon } from '@chakra-ui/icons';
+import { AddIcon, EditIcon, DeleteIcon, InfoIcon } from '@chakra-ui/icons';
 import { staffService } from '../../../services/staffService';
 
 const SalaryTracker = () => {
@@ -83,7 +88,11 @@ const SalaryTracker = () => {
     method: '',
     notes: '',
     payment_type: 'salary', // 'salary', 'udhaar', 'commission'
+    period_type: 'month', // 'week', 'month', 'year'
+    period_value: new Date().toISOString().substr(0, 7), // YYYY-MM for month, YYYY-MM-DD for week, YYYY for year
   });
+  const [attendanceBasedSalary, setAttendanceBasedSalary] = useState(null);
+  const [loadingAttendanceCalc, setLoadingAttendanceCalc] = useState(false);
 
   const toggleExcessView = async (payment) => {
     const id = payment.id;
@@ -401,8 +410,120 @@ const SalaryTracker = () => {
       method: '',
       notes: '',
       payment_type: 'salary',
+      period_type: 'month',
+      period_value: new Date().toISOString().substr(0, 7),
     });
+    setAttendanceBasedSalary(null);
   };
+
+  // Calculate period dates based on type and value
+  const getPeriodDates = (periodType, periodValue) => {
+    if (!periodValue) return { start_date: null, end_date: null };
+    
+    let start, end;
+    
+    if (periodType === 'week') {
+      // periodValue is YYYY-MM-DD (date within the week)
+      const date = new Date(periodValue);
+      const day = date.getDay();
+      const diff = date.getDate() - day + (day === 0 ? -6 : 1); // Adjust to Monday
+      start = new Date(date.setDate(diff));
+      start.setHours(0, 0, 0, 0);
+      end = new Date(start);
+      end.setDate(start.getDate() + 6);
+      end.setHours(23, 59, 59, 999);
+    } else if (periodType === 'month') {
+      // periodValue is YYYY-MM
+      const [year, month] = periodValue.split('-');
+      start = new Date(year, month - 1, 1);
+      end = new Date(year, month, 0); // Last day of month
+      end.setHours(23, 59, 59, 999);
+    } else if (periodType === 'year') {
+      // periodValue is YYYY
+      start = new Date(periodValue, 0, 1);
+      end = new Date(periodValue, 11, 31);
+      end.setHours(23, 59, 59, 999);
+    }
+    
+    return {
+      start_date: start ? start.toISOString().split('T')[0] : null,
+      end_date: end ? end.toISOString().split('T')[0] : null,
+    };
+  };
+
+  // Fetch attendance-based salary calculation
+  const fetchAttendanceBasedSalary = async (userId, periodType, periodValue) => {
+    if (!userId || !periodType || !periodValue || quickPayForm.payment_type !== 'salary') {
+      setAttendanceBasedSalary(null);
+      return;
+    }
+
+    try {
+      setLoadingAttendanceCalc(true);
+      const { start_date, end_date } = getPeriodDates(periodType, periodValue);
+      const response = await staffService.getAttendanceBasedSalary(userId, {
+        period_type: periodType,
+        period_value: periodValue,
+        start_date,
+        end_date,
+      });
+      
+      if (response && response.success) {
+        setAttendanceBasedSalary(response.data);
+        // Pre-fill amount with calculated salary if not already set
+        if (!quickPayForm.amount && response.data.calculated_salary) {
+          setQuickPayForm(prev => ({
+            ...prev,
+            amount: parseFloat(response.data.calculated_salary).toFixed(2),
+          }));
+        }
+      } else {
+        setAttendanceBasedSalary(null);
+      }
+    } catch (error) {
+      console.error('Failed to fetch attendance-based salary:', error);
+      setAttendanceBasedSalary(null);
+    } finally {
+      setLoadingAttendanceCalc(false);
+    }
+  };
+
+  // Effect to fetch calculation when user, period type, or period value changes
+  useEffect(() => {
+    if (quickPayForm.user_id && quickPayForm.period_type && quickPayForm.period_value && quickPayForm.payment_type === 'salary') {
+      setLoadingAttendanceCalc(true);
+      const { start_date, end_date } = getPeriodDates(quickPayForm.period_type, quickPayForm.period_value);
+      staffService.getAttendanceBasedSalary(quickPayForm.user_id, {
+        period_type: quickPayForm.period_type,
+        period_value: quickPayForm.period_value,
+        start_date,
+        end_date,
+      }).then((response) => {
+        if (response && response.success && response.data) {
+          setAttendanceBasedSalary(response.data);
+          // Pre-fill amount with calculated salary if not already set
+          if (!quickPayForm.amount && response.data.calculated_salary) {
+            setQuickPayForm(prev => ({
+              ...prev,
+              amount: parseFloat(response.data.calculated_salary).toFixed(2),
+            }));
+          }
+        } else {
+          setAttendanceBasedSalary(null);
+        }
+      }).catch((error) => {
+        console.error('Failed to fetch attendance-based salary:', error);
+        setAttendanceBasedSalary(null);
+        // Don't show error toast here - it's expected that some users might not have salary structures
+        // The UI will show a warning message instead
+      }).finally(() => {
+        setLoadingAttendanceCalc(false);
+      });
+    } else {
+      setAttendanceBasedSalary(null);
+      setLoadingAttendanceCalc(false);
+    }
+  }, [quickPayForm.user_id, quickPayForm.period_type, quickPayForm.period_value, quickPayForm.payment_type]);
 
   const getStaffName = (userId) => {
     const member = staff.find(s => s.id === userId);
@@ -713,7 +834,22 @@ const SalaryTracker = () => {
                           const excessNum = Math.max(0, paidNum - amountNum);
                           return (
                             <>
-                              <Td fontWeight="bold">{formatPKR(amountNum)}</Td>
+                              <Td fontWeight="bold">
+                                <HStack spacing={2}>
+                                  <Text>{formatPKR(amountNum)}</Text>
+                                  {(() => {
+                                    const isAttendanceBased = payment.notes && (
+                                      payment.notes.toLowerCase().includes('attendance') ||
+                                      payment.notes.toLowerCase().includes('working days')
+                                    );
+                                    return isAttendanceBased ? (
+                                      <Tooltip label={payment.notes || 'Attendance-based calculation'} fontSize="sm" hasArrow>
+                                        <Badge colorScheme="blue" fontSize="xs" cursor="help">A</Badge>
+                                      </Tooltip>
+                                    ) : null;
+                                  })()}
+                                </HStack>
+                              </Td>
                               <Td>{formatPKR(paidNum)}</Td>
                               <Td>{formatPKR(remainingNum)}</Td>
                               <Td>
@@ -729,7 +865,9 @@ const SalaryTracker = () => {
                         <Td>{payment.last_paid_on ? formatHumanDate(payment.last_paid_on) : (payment.payment_date ? formatHumanDate(payment.payment_date) : '-')}</Td>
                         <Td>{formatPKR(Math.max(0, (Number(payment.paid_amount || payment.paid || 0)) - Number(payment.amount || 0)))}</Td>
                         <Td maxW="200px" isTruncated>
-                          {payment.notes || '-'}
+                          <Tooltip label={payment.notes || '-'} fontSize="sm" hasArrow>
+                            <Text>{payment.notes || '-'}</Text>
+                          </Tooltip>
                         </Td>
                         <Td>
                           <HStack spacing={2}>
@@ -918,17 +1056,164 @@ const SalaryTracker = () => {
                   ))}
                 </Select>
               </FormControl>
-              <FormControl isRequired>
-                <FormLabel>{quickPayForm.payment_type === 'salary' ? 'Salary Month' : 'Date'}</FormLabel>
-                {quickPayForm.payment_type === 'salary' ? (
-                  <Input type="month" value={quickPayForm.month} onChange={(e) => setQuickPayForm({ ...quickPayForm, month: e.target.value })} />
-                ) : (
-                  <Input type="date" value={quickPayForm.paid_on} onChange={(e) => setQuickPayForm({ ...quickPayForm, paid_on: e.target.value })} />
-                )}
-              </FormControl>
               {quickPayForm.payment_type === 'salary' && (
+                <>
+                  <FormControl isRequired>
+                    <FormLabel>Period Type</FormLabel>
+                    <Select 
+                      value={quickPayForm.period_type} 
+                      onChange={(e) => {
+                        const newPeriodType = e.target.value;
+                        let newPeriodValue = quickPayForm.period_value;
+                        
+                        // Set default period value based on type
+                        if (newPeriodType === 'week') {
+                          newPeriodValue = new Date().toISOString().split('T')[0];
+                        } else if (newPeriodType === 'month') {
+                          newPeriodValue = new Date().toISOString().substr(0, 7);
+                        } else if (newPeriodType === 'year') {
+                          newPeriodValue = new Date().getFullYear().toString();
+                        }
+                        
+                        setQuickPayForm({ 
+                          ...quickPayForm, 
+                          period_type: newPeriodType,
+                          period_value: newPeriodValue,
+                          month: newPeriodType === 'month' ? newPeriodValue : quickPayForm.month,
+                        });
+                      }}
+                    >
+                      <option value="week">Week</option>
+                      <option value="month">Month</option>
+                      <option value="year">Year</option>
+                    </Select>
+                  </FormControl>
+                  <FormControl isRequired>
+                    <FormLabel>
+                      {quickPayForm.period_type === 'week' ? 'Select Date (Week)' : 
+                       quickPayForm.period_type === 'month' ? 'Select Month' : 
+                       'Select Year'}
+                    </FormLabel>
+                    {quickPayForm.period_type === 'week' ? (
+                      <Input 
+                        type="date" 
+                        value={quickPayForm.period_value} 
+                        onChange={(e) => setQuickPayForm({ ...quickPayForm, period_value: e.target.value })} 
+                      />
+                    ) : quickPayForm.period_type === 'month' ? (
+                      <Input 
+                        type="month" 
+                        value={quickPayForm.period_value} 
+                        onChange={(e) => {
+                          setQuickPayForm({ 
+                            ...quickPayForm, 
+                            period_value: e.target.value,
+                            month: e.target.value,
+                          });
+                        }} 
+                      />
+                    ) : (
+                      <Input 
+                        type="number" 
+                        min="2020" 
+                        max="2100" 
+                        value={quickPayForm.period_value} 
+                        onChange={(e) => setQuickPayForm({ ...quickPayForm, period_value: e.target.value })} 
+                        placeholder="YYYY"
+                      />
+                    )}
+                  </FormControl>
+                  <FormControl isRequired>
+                    <FormLabel>Paid On</FormLabel>
+                    <Input type="date" value={quickPayForm.paid_on} onChange={(e) => setQuickPayForm({ ...quickPayForm, paid_on: e.target.value })} />
+                  </FormControl>
+                  
+                  {/* Attendance-Based Salary Calculation Alert */}
+                  {loadingAttendanceCalc && (
+                    <Alert status="info" borderRadius="md">
+                      <Spinner size="sm" mr={2} />
+                      <Text>Calculating salary based on attendance...</Text>
+                    </Alert>
+                  )}
+                  
+                  {attendanceBasedSalary && !loadingAttendanceCalc && (
+                    <Alert status="info" borderRadius="md" flexDirection="column" alignItems="flex-start">
+                      <Flex alignItems="center" mb={2}>
+                        <AlertIcon />
+                        <Text fontWeight="bold">Recommended Salary Based on Attendance</Text>
+                      </Flex>
+                      <VStack align="stretch" spacing={2} w="full" mt={2}>
+                        <SimpleGrid columns={2} spacing={2} w="full">
+                          <Box>
+                            <Text fontSize="xs" color="gray.600">Period</Text>
+                            <Text fontWeight="semibold">
+                              {attendanceBasedSalary.start_date && attendanceBasedSalary.end_date
+                                ? `${new Date(attendanceBasedSalary.start_date).toLocaleDateString()} - ${new Date(attendanceBasedSalary.end_date).toLocaleDateString()}`
+                                : attendanceBasedSalary.period_value}
+                            </Text>
+                          </Box>
+                          <Box>
+                            <Text fontSize="xs" color="gray.600">Daily Rate</Text>
+                            <Text fontWeight="semibold">PKR {parseFloat(attendanceBasedSalary.daily_rate || 0).toFixed(2)}</Text>
+                          </Box>
+                          <Box>
+                            <Text fontSize="xs" color="gray.600">Working Days</Text>
+                            <Text fontWeight="semibold">{attendanceBasedSalary.attendance?.total_working_days || 0} days</Text>
+                          </Box>
+                          <Box>
+                            <Text fontSize="xs" color="gray.600">Recommended Amount</Text>
+                            <Text fontWeight="bold" color="blue.500" fontSize="lg">
+                              PKR {parseFloat(attendanceBasedSalary.calculated_salary || 0).toFixed(2)}
+                            </Text>
+                          </Box>
+                        </SimpleGrid>
+                        <Divider />
+                        <Box>
+                          <Text fontSize="xs" color="gray.600" mb={1}>Attendance Breakdown</Text>
+                          <SimpleGrid columns={3} spacing={2}>
+                            <Text fontSize="sm">Present: <strong>{attendanceBasedSalary.attendance?.present_count || 0}</strong></Text>
+                            <Text fontSize="sm">Late: <strong>{attendanceBasedSalary.attendance?.late_count || 0}</strong></Text>
+                            <Text fontSize="sm">Half-day: <strong>{attendanceBasedSalary.attendance?.half_day_count || 0}</strong></Text>
+                            {attendanceBasedSalary.attendance?.leave_count > 0 && (
+                              <Text fontSize="sm">Leave: <strong>{attendanceBasedSalary.attendance?.leave_count || 0}</strong></Text>
+                            )}
+                            <Text fontSize="sm">Absent: <strong>{attendanceBasedSalary.attendance?.absent_count || 0}</strong></Text>
+                            <Text fontSize="sm">Total: <strong>{parseFloat(attendanceBasedSalary.attendance?.total_working_days || 0).toFixed(1)}</strong> days</Text>
+                          </SimpleGrid>
+                        </Box>
+                        {attendanceBasedSalary.full_salary !== undefined && attendanceBasedSalary.full_salary !== null && (
+                          <Box>
+                            <Text fontSize="xs" color="gray.600">
+                              Full Salary: PKR {parseFloat(attendanceBasedSalary.full_salary || 0).toFixed(2)} | 
+                              Difference: <strong style={{ color: parseFloat(attendanceBasedSalary.difference || 0) >= 0 ? 'green' : 'red' }}>
+                                {parseFloat(attendanceBasedSalary.difference || 0) >= 0 ? '+' : ''}PKR {parseFloat(attendanceBasedSalary.difference || 0).toFixed(2)}
+                              </strong>
+                            </Text>
+                          </Box>
+                        )}
+                      </VStack>
+                    </Alert>
+                  )}
+                  
+                  {!attendanceBasedSalary && !loadingAttendanceCalc && quickPayForm.user_id && (
+                    <Alert status="info" borderRadius="md">
+                      <AlertIcon />
+                      <Text fontSize="sm">
+                        Attendance-based calculation unavailable. This may be because:
+                        <br />• No salary structure is configured for this staff member
+                        <br />• No attendance records exist for the selected period
+                        <br />• The selected period is invalid
+                        <br />
+                        <br />You can still proceed with manual salary payment.
+                      </Text>
+                    </Alert>
+                  )}
+                </>
+              )}
+              
+              {quickPayForm.payment_type !== 'salary' && (
                 <FormControl isRequired>
-                  <FormLabel>Paid On</FormLabel>
+                  <FormLabel>Date</FormLabel>
                   <Input type="date" value={quickPayForm.paid_on} onChange={(e) => setQuickPayForm({ ...quickPayForm, paid_on: e.target.value })} />
                 </FormControl>
               )}
@@ -972,17 +1257,37 @@ const SalaryTracker = () => {
                   // Handle Salary payment
                   const structure = salaryStructures.find(s => String(s.user_id) === String(userId));
                   if (!structure) { toast({ title: 'Validation', description: 'No salary structure for this staff member.', status: 'warning', duration: 3000, isClosable: true }); setLoading(false); return; }
-                  const monthDate = `${(quickPayForm.month || selectedMonth)}-01`;
+                  
+                  // Determine month from period
+                  let monthDate;
+                  if (quickPayForm.period_type === 'month') {
+                    monthDate = `${quickPayForm.period_value}-01`;
+                  } else if (quickPayForm.period_type === 'week') {
+                    // Use the week's start date to determine month
+                    const { start_date } = getPeriodDates(quickPayForm.period_type, quickPayForm.period_value);
+                    monthDate = start_date ? `${start_date.split('-')[0]}-${start_date.split('-')[1]}-01` : `${(quickPayForm.month || selectedMonth)}-01`;
+                  } else if (quickPayForm.period_type === 'year') {
+                    // For year, use the current month or first month of year
+                    monthDate = `${quickPayForm.period_value}-01-01`;
+                  } else {
+                    monthDate = `${(quickPayForm.month || selectedMonth)}-01`;
+                  }
+                  
+                  // Determine amount - use calculated salary if available, otherwise use base salary
+                  const paymentAmount = attendanceBasedSalary?.calculated_salary 
+                    ? parseFloat(attendanceBasedSalary.calculated_salary)
+                    : Number(structure.base_salary || 0);
+                  
                   // find existing payment for this user and month
-                  let payment = salaryPayments.find(p => String(p.user_id) === String(userId));
+                  let payment = salaryPayments.find(p => String(p.user_id) === String(userId) && p.month?.startsWith(monthDate.substring(0, 7)));
                   if (!payment) {
                     const created = await staffService.createSalaryPayment({
                       user_id: Number(userId),
                       salary_structure_id: structure.id,
                       month: monthDate,
-                      amount: Number(structure.base_salary || 0),
+                      amount: paymentAmount,
                       status: 'pending',
-                      notes: quickPayForm.notes || '',
+                      notes: quickPayForm.notes || (attendanceBasedSalary ? `Attendance-based calculation for ${quickPayForm.period_type}` : ''),
                     });
                     if (created && created.success) {
                       payment = created.data || created.payment || created;
@@ -997,7 +1302,7 @@ const SalaryTracker = () => {
                     amount: amountNum,
                     paid_on: quickPayForm.paid_on,
                     method: quickPayForm.method || '',
-                    notes: quickPayForm.notes || '',
+                    notes: quickPayForm.notes || (attendanceBasedSalary ? `Attendance-based: ${attendanceBasedSalary.attendance?.total_working_days || 0} working days` : ''),
                   });
                   toast({ title: 'Success', description: 'Payment recorded.', status: 'success', duration: 3000, isClosable: true });
                   resetQuickPayForm();

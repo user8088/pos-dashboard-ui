@@ -8,7 +8,7 @@ function StockManagement() {
     <Flex direction='column' pt={{ base: "120px", md: "75px" }}>
       <FactoryStockTable
         title={"Stock Management"}
-        captions={["Products", "Sell Unit", "Inventory Unit", "Category", "Status", "Manufacturing Cost", "Selling Price", ""]}
+        captions={["Serial ID", "Products", "Sell Unit", "Inventory Unit", "Category", "Status", "Manufacturing Cost", "Selling Price", ""]}
       />
     </Flex>
   );
