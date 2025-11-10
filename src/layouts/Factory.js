@@ -124,7 +124,7 @@ export default function FactoryDashboard(props) {
 							<ProtectedRoute>
 								<Switch>
 									{getRoutes(routes)}
-									<Redirect from='/factory' to='/factory/dashboard' />
+									<Redirect from='/factory' to='/factory/manufacturing-reports' />
 								</Switch>
 							</ProtectedRoute>
 						</PanelContainer>

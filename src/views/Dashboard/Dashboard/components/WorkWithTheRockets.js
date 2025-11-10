@@ -21,14 +21,14 @@ const WorkWithTheRockets = ({ title, description, backgroundImage }) => {
   const overlayRef = React.useRef();
   const history = useHistory();
   const location = useLocation();
-  const isFactoryDashboard = location.pathname.includes('/factory');
+  const isFactoryDashboard = location.pathname.includes('/factory-dashboard') || location.pathname.includes('/factory/dashboard');
   
   const switchDashboard = () => {
     if (isFactoryDashboard) {
       history.push('/admin/dashboard');
     } else {
-      // Navigate to Factory Dashboard
-      history.push('/factory/dashboard');
+      // Navigate to Factory Dashboard (now in admin routes)
+      history.push('/admin/factory-dashboard');
     }
   };
   return (

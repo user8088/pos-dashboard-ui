@@ -18,6 +18,7 @@ import StockItemDetail from "views/Dashboard/StockItemDetail";
 import RentalManagement from "views/Dashboard/RentalManagement";
 import SupplierManagement from "views/Dashboard/SupplierManagement";
 import SupplierProfile from "views/Dashboard/SupplierProfile";
+import FactoryDashboard from "views/Factory/Dashboard";
 import SignIn from "views/Auth/SignIn.js";
 import SignUp from "views/Auth/SignUp.js";
 
@@ -40,6 +41,15 @@ var dashRoutes = [
     icon: <HomeIcon color="inherit" />,
     component: Dashboard,
     layout: "/admin",
+  },
+  {
+    path: "/factory-dashboard",
+    name: "Factory Dashboard",
+    rtlName: "لوحة القيادة",
+    icon: <HomeIcon color="inherit" />,
+    component: FactoryDashboard,
+    layout: "/admin",
+    hidden: true,
   },
   {
     path: "/sales-analytics",

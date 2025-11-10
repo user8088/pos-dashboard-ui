@@ -1,5 +1,5 @@
 // Factory dashboard routes
-import FactoryDashboard from "views/Factory/Dashboard";
+// FactoryDashboard moved to admin routes - import removed
 import ManufacturingReports from "views/Factory/ManufacturingReports";
 import RawMaterialManagement from "views/Factory/RawMaterialManagement";
 import FactoryExpensesCashflow from "views/Factory/ExpensesCashflow";
@@ -22,14 +22,15 @@ import {
 import { SettingsIcon } from "@chakra-ui/icons";
 
 var factoryRoutes = [
-  {
-    path: "/dashboard",
-    name: "Factory Dashboard",
-    rtlName: "لوحة القيادة",
-    icon: <HomeIcon color="inherit" />,
-    component: FactoryDashboard,
-    layout: "/factory",
-  },
+  // Factory Dashboard moved to admin routes to keep admin sidebar
+  // {
+  //   path: "/dashboard",
+  //   name: "Factory Dashboard",
+  //   rtlName: "لوحة القيادة",
+  //   icon: <HomeIcon color="inherit" />,
+  //   component: FactoryDashboard,
+  //   layout: "/factory",
+  // },
   {
     path: "/manufacturing-reports",
     name: "Manufacturing Reports",
