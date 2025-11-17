@@ -37,6 +37,7 @@ import CreditCard from "./components/CreditCard";
 import PaymentStatistics from "./components/PaymentStatistics";
 import Transactions from "./components/Transactions";
 import UdhaarList from "./components/UdhaarList";
+import AccountHierarchy from "./components/AccountHierarchy";
 import { accountService } from "services/accountService";
 import { billingService } from "services/billingService";
 
@@ -75,8 +76,22 @@ function Billing() {
   const loadAccounts = React.useCallback(async () => {
     try {
       setLoading(true);
-      const resp = await accountService.getAccountsSummary();
-      const data = resp?.data || resp || {};
+      // Try accounts/summary first, fallback to listAccounts if it fails
+      let resp;
+      let data = {};
+      try {
+        resp = await accountService.getAccountsSummary();
+        data = resp?.data || resp || {};
+      } catch (summaryError) {
+        // If summary endpoint fails, try listing accounts directly
+        console.warn('Summary endpoint failed, trying listAccounts:', summaryError);
+        resp = await accountService.listAccounts();
+        const accountsList = Array.isArray(resp) ? resp : (resp?.data || resp?.accounts || []);
+        data = {
+          accounts: accountsList,
+          total_revenue: "0.00",
+        };
+      }
       
       setAccountsSummary(data);
       
@@ -87,19 +102,26 @@ function Billing() {
         : String(revenueStr);
       setTotalRevenue(revenueClean);
       
-      // Get all accounts
-      const allAccounts = data.accounts || [];
+      // Get all accounts - ensure it's always an array
+      let allAccounts = [];
+      if (Array.isArray(data.accounts)) {
+        allAccounts = data.accounts;
+      } else if (data.accounts && typeof data.accounts === 'object') {
+        // If accounts is an object, try to extract array from it
+        allAccounts = Array.isArray(data.accounts.data) ? data.accounts.data : [];
+      }
       setAccounts(allAccounts);
     } catch (error) {
       console.error('Failed to load accounts:', error);
       toast({
         title: 'Error loading accounts',
-        description: error.message || 'Failed to load accounts',
+        description: error.message || 'Failed to load accounts. Please check if accounts are set up.',
         status: 'error',
-        duration: 3000,
+        duration: 5000,
         isClosable: true,
       });
       setTotalRevenue("0.00");
+      setAccounts([]);
     } finally {
       setLoading(false);
     }
@@ -296,9 +318,18 @@ function Billing() {
   const cashAccount = accountsSummary?.cash_account;
   const bankAccount = accountsSummary?.bank_account;
 
+  const handleAccountClick = (account) => {
+    // Could open a modal or navigate to account details
+    console.log("Account clicked:", account);
+  };
+
   return (
     <Flex direction='column' pt={{ base: "120px", md: "75px" }}>
-      <Flex justify='flex-end' mb='20px'>
+      {/* Header Actions */}
+      <Flex justify='space-between' align='center' mb='20px' flexWrap='wrap' gap='12px'>
+        <Text fontSize='2xl' fontWeight='bold' color={headingColor}>
+          Accounting & Billing
+        </Text>
         <Button
           leftIcon={<Icon as={FaExchangeAlt} />}
           bg='#FF8D28'
@@ -308,73 +339,77 @@ function Billing() {
           Transfer Funds
         </Button>
       </Flex>
-      <Grid templateColumns={{ sm: "1fr" }} gap='26px'>
-        <Box>
-          <Grid
-            templateColumns={{
-              sm: "1fr",
-              md: "1fr 1fr",
-              xl: "1fr 1fr 1fr 1fr 1fr",
-            }}
-            templateRows={{ sm: "auto auto auto", md: "1fr auto", xl: "1fr" }}
-            gap='26px'>
-            <CreditCard
-              backgroundImage={BackgroundCard1}
-              title={"Total Revenue"}
-              number={`PKR ${isNaN(Number(totalRevenue)) ? '0.00' : Number(totalRevenue).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-              validity={{
-                name: "Your Total Business Revenue",
-                data: "05/24",
-              }}
-              cvv={{
-                name: "Updated:",
-                code: "Today",
-              }}
-              icon={
-                <Icon
-                  as={RiMastercardFill}
-                  w='48px'
-                  h='auto'
-                  color='gray.400'
-                />
-              }
-            />
-            {cashAccount && (
-              <PaymentStatistics
-                icon={<Icon h={"24px"} w={"24px"} color='white' as={FaWallet} />}
-                title={cashAccount.name || "Cash"}
-                description={cashAccount.code || "Cash Account"}
-                amount={`PKR ${formatBalance(cashAccount.balance)}`}
-              />
-            )}
-            {bankAccount && (
-              <PaymentStatistics
-                icon={<Icon h={"24px"} w={"24px"} color='white' as={FaPaypal} />}
-                title={bankAccount.name || "Bank"}
-                description={bankAccount.code || "Bank Account"}
-                amount={`PKR ${formatBalance(bankAccount.balance)}`}
-              />
-            )}
-            {/* Display custom accounts */}
-            {accounts
-              .filter(acc => acc.type === 'custom')
-              .map((acc) => (
-                <PaymentStatistics
-                  key={acc.id}
-                  icon={<Icon h={"24px"} w={"24px"} color='white' as={FaWallet} />}
-                  title={acc.name}
-                  description={acc.code || acc.description || "Custom Account"}
-                  amount={`PKR ${formatBalance(acc.balance)}`}
-                />
-              ))}
-          </Grid>
 
+      {/* Key Metrics Cards */}
+      <Grid templateColumns={{ sm: "1fr", md: "1fr 1fr", xl: "1fr 1fr 1fr 1fr" }} gap='26px' mb='26px'>
+        <CreditCard
+          backgroundImage={BackgroundCard1}
+          title={"Total Revenue"}
+          number={`PKR ${isNaN(Number(totalRevenue)) ? '0.00' : Number(totalRevenue).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+          validity={{
+            name: "Your Total Business Revenue",
+            data: "05/24",
+          }}
+          cvv={{
+            name: "Updated:",
+            code: "Today",
+          }}
+          icon={
+            <Icon
+              as={RiMastercardFill}
+              w='48px'
+              h='auto'
+              color='gray.400'
+            />
+          }
+        />
+        {cashAccount && (
+          <PaymentStatistics
+            icon={<Icon h={"24px"} w={"24px"} color='white' as={FaWallet} />}
+            title={cashAccount.name || "Cash"}
+            description={cashAccount.code || "Cash Account"}
+            amount={`PKR ${formatBalance(cashAccount.balance)}`}
+          />
+        )}
+        {bankAccount && (
+          <PaymentStatistics
+            icon={<Icon h={"24px"} w={"24px"} color='white' as={FaPaypal} />}
+            title={bankAccount.name || "Bank"}
+            description={bankAccount.code || "Bank Account"}
+            amount={`PKR ${formatBalance(bankAccount.balance)}`}
+          />
+        )}
+        {revenueAccount && (
+          <PaymentStatistics
+            icon={<Icon h={"24px"} w={"24px"} color='white' as={RiMastercardFill} />}
+            title={revenueAccount.name || "Revenue"}
+            description={revenueAccount.code || "Revenue Account"}
+            amount={`PKR ${formatBalance(revenueAccount.balance)}`}
+          />
+        )}
+      </Grid>
+
+      {/* Main Content Grid */}
+      <Grid templateColumns={{ sm: "1fr", lg: "2fr 1fr" }} gap='26px' mb='26px'>
+        {/* Account Hierarchy - Takes 2/3 width */}
+        <Box>
+          {loading ? (
+            <Flex justify='center' align='center' minH='400px'>
+              <Spinner size='xl' />
+            </Flex>
+          ) : (
+            <AccountHierarchy accounts={accounts} onAccountClick={handleAccountClick} />
+          )}
+        </Box>
+
+        {/* Quick Actions - Takes 1/3 width */}
+        <VStack spacing='26px' align='stretch'>
           {/* Add New Account */}
-          <Box bg={cardBg} borderRadius='15px' p='24px' mt='26px' boxShadow={cardShadow}>
+          <Box bg={cardBg} borderRadius='15px' p='24px' boxShadow={cardShadow}>
             <Text fontSize='lg' fontWeight='bold' color={headingColor} mb='18px'>
               Add a New Account
             </Text>
-            <Grid templateColumns={{ sm: "1fr", md: "1fr 1fr 1fr 1fr auto" }} gap='16px' alignItems='end'>
+            <VStack spacing='16px' align='stretch'>
               <VStack align='start' spacing='8px'>
                 <Text fontSize='sm' color={labelColor}>Account Name *</Text>
                 <Input placeholder='Enter account name' value={accountName} onChange={(e) => setAccountName(e.target.value)} />
@@ -393,15 +428,17 @@ function Billing() {
                 <Text fontSize='sm' color={labelColor}>Description</Text>
                 <Input placeholder='Enter description' value={accountDetails} onChange={(e) => setAccountDetails(e.target.value)} />
               </VStack>
-              <Button bg='#FF8D28' color='white' _hover={{ bg: '#E67E22' }} px='24px' onClick={handleAddAccount} isLoading={loading}>
-                ADD
+              <Button bg='#FF8D28' color='white' _hover={{ bg: '#E67E22' }} w='100%' onClick={handleAddAccount} isLoading={loading}>
+                ADD ACCOUNT
               </Button>
-            </Grid>
+            </VStack>
           </Box>
-        </Box>
+        </VStack>
       </Grid>
-      <Grid templateColumns={{ sm: "1fr", lg: "1fr 1fr 1fr" }} mt='26px' gap='26px'>
-        <BillingInformation title={"Bills & Rents"} data={billsViewData} />
+
+      {/* Bottom Section - Bills, Transactions, Udhaar */}
+      <Grid templateColumns={{ sm: "1fr", lg: "1fr 1fr 1fr" }} gap='26px'>
+        <BillingInformation title={"Bills & Rents"} data={billsViewData} accounts={accounts} />
         <Transactions />
         <UdhaarList />
       </Grid>

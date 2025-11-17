@@ -17,6 +17,8 @@ import {
   IconButton,
   Badge,
   Checkbox,
+  Divider,
+  SimpleGrid,
 } from '@chakra-ui/react';
 import Card from 'components/Card/Card';
 import CardBody from 'components/Card/CardBody';
@@ -25,6 +27,7 @@ import { stockService } from 'services/stockService';
 import { customerService } from 'services/customerService';
 import { invoiceService } from 'services/invoiceService';
 import { accountService } from 'services/accountService';
+import { reservationService } from 'services/reservationService';
 import { useAuth } from 'contexts/AuthContext';
 import placeholder from 'assets/img/avatars/placeholder.png';
 import { FaPlus, FaMinus, FaTrash } from 'react-icons/fa';
@@ -35,6 +38,7 @@ export default function POS() {
   const { user } = useAuth();
   const [catalogSearch, setCatalogSearch] = React.useState('');
   const [items, setItems] = React.useState([]);
+  const [originalStock, setOriginalStock] = React.useState({}); // Track original stock & reservation info: {itemId: {available,onHand,reserved}}
   const [loading, setLoading] = React.useState(false);
   const [customers, setCustomers] = React.useState([]);
   const [customerId, setCustomerId] = React.useState('');
@@ -51,19 +55,211 @@ export default function POS() {
   const [paidAmount, setPaidAmount] = React.useState('');
   const [paymentAs, setPaymentAs] = React.useState('payment');
   const [dueDate, setDueDate] = React.useState('');
-  const [applyAdvance, setApplyAdvance] = React.useState(true);
   const [customerProfile, setCustomerProfile] = React.useState(null);
   const [accounts, setAccounts] = React.useState([]);
   const [depositAccountId, setDepositAccountId] = React.useState('');
+  const [reservationMode, setReservationMode] = React.useState('sale'); // sale | reserve
+  const [customerReservations, setCustomerReservations] = React.useState([]);
+  const [activeReservation, setActiveReservation] = React.useState(null);
+  const [reservationBannerDismissed, setReservationBannerDismissed] = React.useState(false);
+  const [reserveNote, setReserveNote] = React.useState('');
+  const [reservePickupDate, setReservePickupDate] = React.useState('');
+  const [checkoutLoading, setCheckoutLoading] = React.useState(false);
+  const [lastInvoiceMeta, setLastInvoiceMeta] = React.useState(null);
+  const [lastReservationMeta, setLastReservationMeta] = React.useState(null);
+  const [printLoading, setPrintLoading] = React.useState(false);
+  const [reservationPrintLoading, setReservationPrintLoading] = React.useState(false);
+  const [reservationActionLoading, setReservationActionLoading] = React.useState(false);
+  const [reservationActionId, setReservationActionId] = React.useState(null);
 
   const cashAccounts = React.useMemo(
-    () => accounts.filter(acc => (acc?.type || '').toLowerCase() === 'cash'),
+    () => accounts.filter(acc => {
+      const type = (acc?.type || '').toLowerCase();
+      return type === 'cash' || (type === 'custom' && acc.name?.toLowerCase().includes('cash'));
+    }),
     [accounts]
   );
   const onlineAccounts = React.useMemo(
-    () => accounts.filter(acc => (acc?.type || '').toLowerCase() !== 'cash'),
+    () => accounts.filter(acc => {
+      const type = (acc?.type || '').toLowerCase();
+      return type === 'bank' || (type === 'custom' && !acc.name?.toLowerCase().includes('cash'));
+    }),
     [accounts]
   );
+  
+  // Helper to format account display name
+  const formatAccountName = React.useCallback((acc) => {
+    const type = (acc?.type || '').toLowerCase();
+    const typeLabel = type === 'cash' ? 'Cash' : type === 'bank' ? 'Bank' : 'Custom';
+    const balance = Number(acc.balance || 0).toFixed(2);
+    return `${acc.name} ${acc.code ? `(${acc.code})` : ''} [${typeLabel}] - PKR ${balance}`;
+  }, []);
+
+  const extractInvoiceMeta = React.useCallback((response) => {
+    const candidates = [
+      response,
+      response?.data,
+      response?.data?.invoice,
+      response?.invoice,
+      response?.invoice?.data,
+    ];
+    for (const entry of candidates) {
+      if (!entry || typeof entry !== 'object') continue;
+      const id = entry.id
+        ?? entry.invoice_id
+        ?? entry.data?.id
+        ?? entry.invoice?.id;
+      if (!id) continue;
+      const number =
+        entry.invoice_number
+        ?? entry.number
+        ?? entry.reference
+        ?? entry.code
+        ?? entry.invoice_reference
+        ?? `#${id}`;
+      return { id, number };
+    }
+    return null;
+  }, []);
+
+  const extractReservationMeta = React.useCallback((response) => {
+    const candidates = [
+      response,
+      response?.data,
+      response?.reservation,
+      response?.reservation?.data,
+    ];
+    for (const entry of candidates) {
+      if (!entry || typeof entry !== 'object') continue;
+      const id = entry.id
+        ?? entry.reservation_id
+        ?? entry.data?.id;
+      if (!id) continue;
+      const reference =
+        entry.reference
+        ?? entry.code
+        ?? entry.reservation_reference
+        ?? `RES-${id}`;
+      return { id, reference };
+    }
+    return null;
+  }, []);
+
+  const presentBlobForPrint = React.useCallback((blob) => {
+    return new Promise((resolve, reject) => {
+      const blobUrl = window.URL.createObjectURL(blob);
+      const iframe = document.createElement('iframe');
+      iframe.style.position = 'fixed';
+      iframe.style.top = '-10000px';
+      iframe.style.left = '-10000px';
+      iframe.src = blobUrl;
+      document.body.appendChild(iframe);
+
+      const cleanup = () => {
+        if (iframe.parentNode) {
+          document.body.removeChild(iframe);
+        }
+        window.URL.revokeObjectURL(blobUrl);
+      };
+
+      const handleAfterPrint = () => {
+        clearTimeout(timeout);
+        cleanup();
+        window.removeEventListener('afterprint', handleAfterPrint);
+        iframe.contentWindow?.removeEventListener('afterprint', handleAfterPrint);
+        resolve(true);
+      };
+
+      const timeout = setTimeout(() => {
+        handleAfterPrint();
+      }, 60000);
+
+      iframe.onload = () => {
+        try {
+          window.addEventListener('afterprint', handleAfterPrint);
+          iframe.contentWindow?.addEventListener('afterprint', handleAfterPrint);
+          iframe.contentWindow?.focus();
+          iframe.contentWindow?.print();
+        } catch (error) {
+          clearTimeout(timeout);
+          cleanup();
+          reject(error);
+        }
+      };
+    });
+  }, []);
+
+  const triggerInvoicePrint = React.useCallback(async (invoiceId, { silent = false } = {}) => {
+    if (!invoiceId) return;
+    if (!silent) {
+      setPrintLoading(true);
+    }
+    try {
+      const blob = await invoiceService.fetchInvoicePdf(invoiceId);
+      await presentBlobForPrint(blob);
+      if (!silent) {
+        toast({
+          title: 'Invoice ready to print',
+          description: 'Your browser print dialog should appear shortly.',
+          status: 'success',
+          duration: 4000,
+          isClosable: true,
+        });
+      }
+    } catch (error) {
+      if (silent) {
+        console.warn('Auto print failed', error);
+      } else {
+        toast({
+          title: 'Unable to print invoice',
+          description: error?.message || 'Failed to open print preview.',
+          status: 'error',
+          duration: 5000,
+          isClosable: true,
+        });
+      }
+    } finally {
+      if (!silent) {
+        setPrintLoading(false);
+      }
+    }
+  }, [presentBlobForPrint, toast]);
+
+  const triggerReservationReceiptPrint = React.useCallback(async (reservationId, { silent = false } = {}) => {
+    if (!reservationId) return;
+    if (!silent) {
+      setReservationPrintLoading(true);
+    }
+    try {
+      const blob = await reservationService.fetchReservationReceipt(reservationId);
+      await presentBlobForPrint(blob);
+      if (!silent) {
+        toast({
+          title: 'Reservation receipt ready',
+          description: 'Printing reservation receipt.',
+          status: 'success',
+          duration: 4000,
+          isClosable: true,
+        });
+      }
+    } catch (error) {
+      if (silent) {
+        console.warn('Reservation receipt print failed', error);
+      } else {
+        toast({
+          title: 'Unable to print reservation receipt',
+          description: error?.message || 'Failed to download reservation receipt.',
+          status: 'error',
+          duration: 5000,
+          isClosable: true,
+        });
+      }
+    } finally {
+      if (!silent) {
+        setReservationPrintLoading(false);
+      }
+    }
+  }, [presentBlobForPrint, toast]);
 
   const handleSplitPaymentChange = React.useCallback((key, field, value) => {
     setSplitPayments(prev => ({
@@ -80,18 +276,33 @@ export default function POS() {
     if (nextMode === 'split') {
       setPaymentAs('payment');
       setPaidAmount('');
+    } else {
+      // Auto-select appropriate account based on payment mode
+      const normalizeType = (acc) => (acc?.type || '').toLowerCase();
+      if (nextMode === 'cash') {
+        const cashAccount = accounts.find(acc => normalizeType(acc) === 'cash');
+        if (cashAccount) {
+          setDepositAccountId(String(cashAccount.id));
+        }
+      } else if (nextMode === 'online') {
+        const bankAccount = accounts.find(acc => normalizeType(acc) === 'bank');
+        if (bankAccount) {
+          setDepositAccountId(String(bankAccount.id));
+        }
+      }
     }
-  }, []);
+  }, [accounts]);
 
   const normalizePaymentMethod = React.useCallback((method, accountId) => {
     const value = (method || '').toLowerCase();
     if (value === 'online') {
-      const account = accounts.find(acc => String(acc.id) === String(accountId));
-      const accountType = (account?.type || '').toLowerCase();
-      return accountType || 'bank';
+      // Backend accepts 'bank' for all online/digital payments
+      // Always return 'bank' regardless of account type
+      return 'bank';
     }
-    return value || 'cash';
-  }, [accounts]);
+    // For cash, always return 'cash'
+    return 'cash';
+  }, []);
 
   const getBasePrice = React.useCallback((line) => {
     if (!line) return 0;
@@ -110,15 +321,45 @@ export default function POS() {
       setLoading(true);
       const resp = await stockService.listItems({ search: catalogSearch || undefined, product_category_id: categoryId || undefined });
       const raw = resp?.data?.data || resp?.data || resp || [];
-      setItems(raw.map(it => ({
-        id: it.id,
-        name: it.name,
-        serial_id: it.serial_id || it.serial_number || '',
-        price: Number(it.selling_price || 0),
-        cost: Number(it.last_purchase_price || 0),
-        image: it.image_url || placeholder,
-        stock: it.quantity ?? it.stock_quantity ?? it.inventory_quantity ?? it.qty ?? undefined,
-      })));
+      const stockMap = {};
+      const itemsList = raw.map(it => {
+        const onHandRaw = it.quantity ?? it.stock_quantity ?? it.inventory_quantity ?? it.qty ?? null;
+        let onHand = onHandRaw !== null && onHandRaw !== undefined ? Number(onHandRaw) : null;
+        if (!Number.isFinite(onHand)) onHand = null;
+
+        let reservedRaw = it.reserved_quantity ?? it.reserved ?? 0;
+        let reservedQty = reservedRaw !== null && reservedRaw !== undefined ? Number(reservedRaw) : 0;
+        if (!Number.isFinite(reservedQty)) reservedQty = 0;
+
+        const availableField = it.available_quantity ?? it.available ?? null;
+        let availableQty = availableField !== null && availableField !== undefined ? Number(availableField) : null;
+        if (!Number.isFinite(availableQty)) {
+          availableQty = onHand !== null ? onHand - reservedQty : null;
+        }
+        if (availableQty !== null && availableQty < 0) {
+          availableQty = 0;
+        }
+
+        stockMap[it.id] = {
+          onHand,
+          reserved: reservedQty,
+          available: availableQty,
+        };
+        return {
+          id: it.id,
+          name: it.name,
+          serial_id: it.serial_id || it.serial_number || '',
+          price: Number(it.selling_price || 0),
+          cost: Number(it.last_purchase_price || 0),
+          image: it.image_url || placeholder,
+          stock: availableQty,
+          stock_on_hand: onHand,
+          reserved: reservedQty,
+          available: availableQty,
+        };
+      });
+      setOriginalStock(prev => ({ ...prev, ...stockMap })); // Merge with existing to preserve reserved stock
+      setItems(itemsList);
     } finally { setLoading(false); }
   }, [catalogSearch, categoryId]);
 
@@ -143,63 +384,326 @@ export default function POS() {
       const resp = await accountService.listAccounts();
       const data = resp?.data || resp || {};
       const accountsList = Array.isArray(data) ? data : (data.accounts || []);
-      setAccounts(accountsList);
+      // Filter only active accounts that can receive payments (cash, bank, custom)
+      const activeAccounts = accountsList.filter(acc => 
+        acc.is_active !== false && 
+        ['cash', 'bank', 'custom'].includes((acc.type || '').toLowerCase())
+      );
+      setAccounts(activeAccounts);
+      
       // Auto-select cash account if available
       const normalizeType = (acc) => (acc?.type || '').toLowerCase();
-      const cashAccount = accountsList.find(acc => normalizeType(acc) === 'cash');
-      if (cashAccount) {
+      const cashAccount = activeAccounts.find(acc => normalizeType(acc) === 'cash');
+      const bankAccount = activeAccounts.find(acc => normalizeType(acc) === 'bank');
+      
+      // Set default deposit account based on current payment mode
+      if (paymentMode === 'cash' && cashAccount) {
         setDepositAccountId(String(cashAccount.id));
-      } else if (accountsList.length > 0) {
-        setDepositAccountId(String(accountsList[0].id));
+      } else if (paymentMode === 'online' && bankAccount) {
+        setDepositAccountId(String(bankAccount.id));
+      } else if (cashAccount) {
+        setDepositAccountId(String(cashAccount.id));
+      } else if (activeAccounts.length > 0) {
+        setDepositAccountId(String(activeAccounts[0].id));
       }
-      const onlineAccount = accountsList.find(acc => normalizeType(acc) !== 'cash');
+      
+      // Set split payment defaults
       setSplitPayments(prev => ({
         cash: {
           ...prev.cash,
-          accountId: prev.cash.accountId || (cashAccount ? String(cashAccount.id) : (accountsList[0] ? String(accountsList[0].id) : '')),
+          accountId: prev.cash.accountId || (cashAccount ? String(cashAccount.id) : (activeAccounts[0] ? String(activeAccounts[0].id) : '')),
         },
         online: {
           ...prev.online,
-          accountId: prev.online.accountId || (onlineAccount ? String(onlineAccount.id) : (accountsList[0] ? String(accountsList[0].id) : '')),
+          accountId: prev.online.accountId || (bankAccount ? String(bankAccount.id) : (activeAccounts[0] ? String(activeAccounts[0].id) : '')),
         },
       }));
     } catch (_) {}
-  }, []);
+  }, [paymentMode]);
 
   React.useEffect(() => { loadCatalog(); }, [loadCatalog]);
   const loadCustomerProfile = React.useCallback(async (id) => {
-    if (!id) { setCustomerProfile(null); return null; }
+    if (!id) { 
+      setCustomerProfile(null); 
+      setCustomerReservations([]);
+      setActiveReservation(null);
+      return null; 
+    }
     try {
       const resp = await customerService.profile(id);
-      setCustomerProfile(resp?.data || resp);
-      return resp?.data || resp || null;
-    } catch (_) { setCustomerProfile(null); return null; }
+      const profile = resp?.data || resp || {};
+      setCustomerProfile(profile);
+      const reservationsPayload = profile?.reservations 
+        || profile?.pending_reservations 
+        || profile?.active_reservations 
+        || profile?.reservation_preview 
+        || [];
+      setCustomerReservations(Array.isArray(reservationsPayload) ? reservationsPayload : []);
+      setActiveReservation(null);
+      setReservationBannerDismissed(false);
+      return profile;
+    } catch (_) { 
+      setCustomerProfile(null); 
+      setCustomerReservations([]);
+      return null; 
+    }
   }, []);
 
-  React.useEffect(() => { loadCustomers(); loadCategories(); loadAccounts(); }, [loadCustomers, loadCategories, loadAccounts]);
+  React.useEffect(() => { loadCustomers(); loadCategories(); }, [loadCustomers, loadCategories]);
+  React.useEffect(() => { loadAccounts(); }, [loadAccounts]);
   React.useEffect(() => { loadCustomerProfile(customerId); }, [customerId, loadCustomerProfile]);
 
+  const reservationsList = React.useMemo(() => {
+    return (customerReservations || []).map((res, idx) => ({
+      ...res,
+      id: res.id || res.reservation_id || `reservation-${idx + 1}`,
+      status: res.status || res.state || 'pending',
+      items: Array.isArray(res.items) ? res.items : (Array.isArray(res.lines) ? res.lines : []),
+    }));
+  }, [customerReservations]);
+
+  const hasReservations = reservationsList.length > 0;
+
+  const reservationStatusColor = React.useCallback((status) => {
+    const normalized = (status || '').toLowerCase();
+    if (normalized.includes('ready')) return 'green';
+    if (normalized.includes('expired')) return 'red';
+    if (normalized.includes('hold')) return 'purple';
+    return 'orange';
+  }, []);
+
+  const handleReservationLoad = React.useCallback((reservation) => {
+    if (!reservation) return;
+    if (!Array.isArray(reservation.items) || reservation.items.length === 0) {
+      toast({
+        title: 'Reservation items missing',
+        description: 'This reservation did not return any item lines from the API.',
+        status: 'warning',
+        duration: 4000,
+        isClosable: true,
+      });
+      return;
+    }
+    const hydratedLines = reservation.items.map((item, idx) => {
+      const product = items.find(prod => Number(prod.id) === Number(item.stock_item_id));
+      const unitPrice = Number(item.unit_price || item.price || product?.price || 0);
+      const quantity = Number(item.qty || item.quantity || 1);
+      return {
+        id: item.stock_item_id || product?.id || `reserved-${idx}`,
+        name: product?.name || item.name || `Reserved Item ${idx + 1}`,
+        serial_id: product?.serial_id || '',
+        price: unitPrice,
+        basePrice: product?.price || unitPrice,
+        cost: product?.cost || 0,
+        qty: quantity,
+        reservedQty: quantity,
+        hiddenCost: 0,
+      };
+    });
+
+    if (!hydratedLines.length) {
+      toast({
+        title: 'Unable to load reservation items',
+        status: 'error',
+        duration: 4000,
+        isClosable: true,
+      });
+      return;
+    }
+
+    setCart(hydratedLines);
+    setActiveReservation(reservation);
+    setReservationMode('sale');
+    setReservationBannerDismissed(true);
+    toast({
+      title: 'Reservation loaded',
+      description: `Loaded ${hydratedLines.length} reserved item(s) for ${customerProfile?.name || 'customer'}.`,
+      status: 'success',
+      duration: 3000,
+      isClosable: true,
+    });
+  }, [items, customerProfile, toast]);
+
+  const handleReservationRelease = React.useCallback(async (reservation) => {
+    if (!reservation?.id) return;
+    const reason = window.prompt(
+      'Add a release note (optional):',
+      `Released from POS on ${new Date().toLocaleDateString()}`
+    );
+    setReservationActionLoading(true);
+    setReservationActionId(reservation.id);
+    try {
+      const payload = removeUndefined({
+        reason: reason || 'Released from POS',
+      });
+      await reservationService.releaseReservation(reservation.id, payload);
+      toast({
+        title: 'Reservation released',
+        description: `Reservation ${reservation.reference || reservation.id} has been released.`,
+        status: 'success',
+        duration: 4000,
+        isClosable: true,
+      });
+      if (customerId) {
+        await loadCustomerProfile(customerId);
+      }
+      loadCatalog();
+    } catch (error) {
+      const errorMessages = error?.errors
+        ? Object.values(error.errors).flat().join('\n')
+        : '';
+      toast({
+        title: 'Failed to release reservation',
+        description: errorMessages || error?.message || 'Unexpected error while releasing reservation.',
+        status: 'error',
+        duration: 5000,
+        isClosable: true,
+      });
+    } finally {
+      setReservationActionLoading(false);
+      setReservationActionId(null);
+    }
+  }, [customerId, loadCustomerProfile, loadCatalog, toast]);
+
+
+  // Calculate additional stock (beyond reservation) from cart
+  const reservedStock = React.useMemo(() => {
+    const reserved = {};
+    cart.forEach(item => {
+      const reservedQty = Math.max(0, item.reservedQty || 0);
+      const extraNeeded = Math.max(0, Number(item.qty || 0) - reservedQty);
+      if (extraNeeded > 0) {
+        reserved[item.id] = (reserved[item.id] || 0) + extraNeeded;
+      }
+    });
+    return reserved;
+  }, [cart]);
+
+  // Update items with available stock (original - reserved)
+  React.useEffect(() => {
+    setItems(prev => prev.map(item => {
+      const ledger = originalStock[item.id];
+      const baseAvailable = ledger && typeof ledger === 'object'
+        ? ledger.available
+        : ledger;
+      const onHand = ledger && typeof ledger === 'object'
+        ? ledger.onHand
+        : ledger;
+      const backendReserved = ledger && typeof ledger === 'object'
+        ? ledger.reserved || 0
+        : 0;
+      const reserved = reservedStock[item.id] || 0;
+      const available = baseAvailable !== null && baseAvailable !== undefined
+        ? Math.max(0, baseAvailable - reserved)
+        : null;
+      return {
+        ...item,
+        stock: available,
+        available,
+        stock_on_hand: onHand,
+        reserved: backendReserved + reserved,
+      };
+    }));
+  }, [originalStock, reservedStock]);
+
   const addToCart = (p) => {
+    // Get original stock and calculate available (original - already reserved)
+    const ledger = originalStock[p.id];
+    const original = ledger && typeof ledger === 'object'
+      ? ledger.available
+      : ledger;
+    const reserved = reservedStock[p.id] || 0;
+    const available = original !== null && original !== undefined 
+      ? Math.max(0, original - reserved) 
+      : null;
+    
+    // Check if stock is available
+    if (available !== null && available <= 0) {
+      toast({
+        title: 'Out of stock',
+        description: `${p.name} is out of stock.`,
+        status: 'warning',
+        duration: 3000,
+        isClosable: true,
+      });
+      return;
+    }
+
     setCart(prev => {
       const idx = prev.findIndex(x => x.id === p.id);
       if (idx >= 0) {
         const copy = [...prev];
         const existing = copy[idx];
+        const newQty = existing.qty + 1;
+        
+        // Double-check stock availability against original stock
+        if (original !== null && original !== undefined && newQty > original) {
+          const remaining = original - existing.qty;
+          toast({
+            title: 'Insufficient stock',
+            description: `Only ${remaining} more units available for ${p.name} (${original} total).`,
+            status: 'warning',
+            duration: 3000,
+            isClosable: true,
+          });
+          return prev;
+        }
+        
+        const reservedQty = Math.min(existing.reservedQty || 0, newQty);
         copy[idx] = {
           ...existing,
           basePrice: getBasePrice(existing) || Number(p.price || 0),
-          qty: existing.qty + 1,
+          qty: newQty,
+          reservedQty,
         };
         return copy;
       }
-      return [...prev, { id: p.id, name: p.name, serial_id: p.serial_id || '', price: p.price, basePrice: p.price, cost: p.cost, qty: 1, hiddenCost: 0 }];
+      return [...prev, { id: p.id, name: p.name, serial_id: p.serial_id || '', price: p.price, basePrice: p.price, cost: p.cost, qty: 1, reservedQty: 0, hiddenCost: 0 }];
     });
   };
+  
   const changeQty = (id, delta) => {
-    setCart(prev => prev.map(x => x.id === id
-      ? { ...x, basePrice: getBasePrice(x), qty: Math.max(1, x.qty + delta) }
-      : x));
+    const item = items.find(it => it.id === id);
+    if (!item) return;
+    
+    const cartItem = cart.find(x => x.id === id);
+    if (!cartItem) return;
+    
+    const ledger = originalStock[id];
+    const original = ledger && typeof ledger === 'object'
+      ? ledger.available
+      : ledger;
+    const currentQty = cartItem.qty;
+    const newQty = currentQty + delta;
+    
+    // Check stock availability when increasing quantity
+    if (delta > 0 && original !== null && original !== undefined) {
+      if (newQty > original) {
+        const available = original - currentQty;
+        toast({
+          title: 'Insufficient stock',
+          description: `Only ${available} more units available for ${item.name} (${original} total).`,
+          status: 'warning',
+          duration: 3000,
+          isClosable: true,
+        });
+        return;
+      }
+    }
+    
+    setCart(prev => prev.map(x => {
+      if (x.id !== id) return x;
+      const updatedQty = Math.max(1, x.qty + delta);
+      const reservedQty = Math.min(x.reservedQty || 0, updatedQty);
+      return {
+        ...x,
+        basePrice: getBasePrice(x),
+        qty: updatedQty,
+        reservedQty,
+      };
+    }));
   };
+  
   const removeLine = (id) => setCart(prev => prev.filter(x => x.id !== id));
 
   const baseSubtotal = cart.reduce((s, l) => s + l.qty * getBasePrice(l), 0);
@@ -220,8 +724,28 @@ export default function POS() {
 
   // Advance math preview
   const existingAdvance = Number(customerProfile?.advance_balance || 0);
-  const applyAdvanceEffective = paymentAs === 'advance' ? false : applyAdvance;
-  const applyFromAdvance = applyAdvanceEffective ? Math.min(existingAdvance, total) : 0;
+  const outstandingDue = Number(customerProfile?.due_balance || customerProfile?.total_due || 0);
+  const reservedValue = Number(customerProfile?.reserved_value || 0);
+  const reservationAdvanceAvailableRaw = Number(
+    activeReservation?.advance_remaining ??
+    activeReservation?.advance_applied ??
+    activeReservation?.advance_amount ??
+    0
+  );
+  const reservationAdvanceAvailable = Number.isFinite(reservationAdvanceAvailableRaw)
+    ? Math.max(0, reservationAdvanceAvailableRaw)
+    : 0;
+  const applyAdvanceEffective =
+    Boolean(activeReservation) &&
+    paymentAs !== 'advance' &&
+    reservationAdvanceAvailable > 0;
+  const customerAdvanceAvailable = Math.max(0, existingAdvance);
+  const advancePool = customerAdvanceAvailable > 0
+    ? Math.min(customerAdvanceAvailable, reservationAdvanceAvailable || customerAdvanceAvailable)
+    : reservationAdvanceAvailable;
+  const applyFromAdvance = applyAdvanceEffective
+    ? Math.min(total, advancePool)
+    : 0;
   const remainingAfterAdvance = Math.max(0, total - applyFromAdvance);
   const splitPaidTotal = Number(splitPayments.cash.amount || 0) + Number(splitPayments.online.amount || 0);
   const payNow = paymentMode === 'split'
@@ -234,8 +758,124 @@ export default function POS() {
   const estimatedDue = paymentAs === 'advance' ? remainingAfterAdvance : remainingAfterPay;
   const estimatedNewAdvance = paymentAs === 'advance' ? existingAdvance + payNow : newAdvance;
 
-  const generateInvoice = async () => {
+  // Helper function to remove undefined values from payload
+  const removeUndefined = (obj) => {
+    if (Array.isArray(obj)) {
+      return obj.map(item => removeUndefined(item)).filter(item => item !== undefined);
+    } else if (obj !== null && typeof obj === 'object') {
+      const cleaned = {};
+      for (const key in obj) {
+        if (obj[key] !== undefined) {
+          cleaned[key] = removeUndefined(obj[key]);
+        }
+      }
+      return cleaned;
+    }
+    return obj;
+  };
+  const createReservationFlow = async () => {
     if (cart.length === 0) return;
+    if (!customerId) {
+      toast({
+        title: 'Select a customer',
+        description: 'Reservations require a customer profile. Please choose a customer before reserving stock.',
+        status: 'warning',
+        duration: 4000,
+        isClosable: true,
+      });
+      return;
+    }
+    if (paymentMode === 'split') {
+      toast({
+        title: 'Split advance not supported (yet)',
+        description: 'Please choose Cash or Online to record the advance for this reservation.',
+        status: 'info',
+        duration: 4000,
+        isClosable: true,
+      });
+      return;
+    }
+    const advanceAmountNumeric = Number(paidAmount || 0);
+    if (advanceAmountNumeric > 0 && !depositAccountId) {
+      toast({
+        title: 'Select a deposit account',
+        description: 'Choose the account where the advance will be deposited.',
+        status: 'warning',
+        duration: 4000,
+        isClosable: true,
+      });
+      return;
+    }
+    setCheckoutLoading(true);
+    try {
+      const advancePayment =
+        advanceAmountNumeric > 0
+          ? {
+              amount: advanceAmountNumeric,
+              deposit_account_id: Number(depositAccountId),
+              method: paymentMode === 'online' ? 'bank' : 'cash',
+            }
+          : undefined;
+      const payload = {
+        customer_id: Number(customerId),
+        pickup_date: reservePickupDate || undefined,
+        note: reserveNote || undefined,
+        items: cart.map(l => ({
+          stock_item_id: l.id,
+          quantity: l.qty,
+          unit_price: l.price,
+          hidden_cost: l.hiddenCost !== undefined ? Number(l.hiddenCost || 0) : undefined,
+        })),
+        advance_payment: advancePayment,
+      };
+      const cleanedPayload = removeUndefined(payload);
+      const response = await reservationService.createReservation(cleanedPayload);
+      const reservationMeta = extractReservationMeta(response);
+      if (reservationMeta?.id) {
+        setLastReservationMeta(reservationMeta);
+        triggerReservationReceiptPrint(reservationMeta.id, { silent: true });
+      }
+      setCart([]);
+      setDiscountAmount('');
+      setDiscountPercent('');
+      setReserveNote('');
+      setReservePickupDate('');
+      setActiveReservation(null);
+      setReservationMode('sale');
+      loadCatalog();
+      if (customerId) {
+        await loadCustomerProfile(customerId);
+      }
+      window.dispatchEvent(new CustomEvent('stock-updated'));
+      toast({
+        title: 'Reservation recorded',
+        description: `Reservation ${response?.reference || response?.data?.reference || ''} saved with ${cart.length} item(s).`,
+        status: 'success',
+        duration: 4000,
+        isClosable: true,
+      });
+    } catch (error) {
+      const errorMessages = error?.errors
+        ? Object.values(error.errors).flat().join('\n')
+        : '';
+      toast({
+        title: 'Failed to reserve stock',
+        description: errorMessages || error?.message || 'Unexpected error while creating reservation.',
+        status: 'error',
+        duration: 6000,
+        isClosable: true,
+      });
+    } finally {
+      setCheckoutLoading(false);
+    }
+  };
+
+  const generateInvoice = async () => {
+    if (cart.length === 0 || checkoutLoading) return;
+    if (reservationMode === 'reserve') {
+      await createReservationFlow();
+      return;
+    }
     if (paymentMode !== 'split' && !depositAccountId) {
       toast({
         title: 'Missing deposit account',
@@ -246,16 +886,21 @@ export default function POS() {
       });
       return;
     }
+    setCheckoutLoading(true);
     try {
       const payload = {
         customer_id: customerId ? Number(customerId) : undefined,
-        payment_mode: paymentMode,
-        paymentMode: paymentMode,
         discount_percent: discountPercent ? Number(discountPercent) : undefined,
         discount_amount: discountAmount ? Number(discountAmount) : undefined,
         due_date: dueDate || undefined,
+        pickup_date: reservePickupDate || undefined,
         salesperson_user_id: user?.id ? Number(user.id) : undefined,
         apply_advance: applyAdvanceEffective,
+        advance_amount_hint: applyFromAdvance > 0 ? Number(applyFromAdvance.toFixed(2)) : undefined,
+        advance_to_apply: applyFromAdvance > 0 ? Number(applyFromAdvance.toFixed(2)) : undefined,
+        reservation_id: activeReservation?.id,
+        reservation_reference: activeReservation?.reference || activeReservation?.code,
+        reservation_note: reserveNote || undefined,
         items: cart.map(l => ({
           stock_item_id: l.id,
           quantity: l.qty,
@@ -282,7 +927,7 @@ export default function POS() {
             return;
           }
           breakdown.push({
-            payment_method: normalizePaymentMethod('cash', cashAccountId),
+            payment_method: 'cash',
             amount: cashAmount,
             deposit_account_id: Number(cashAccountId),
           });
@@ -299,8 +944,9 @@ export default function POS() {
             });
             return;
           }
+          // Backend accepts 'bank' for all online/digital payments
           breakdown.push({
-            payment_method: normalizePaymentMethod('online', onlineAccountId),
+            payment_method: 'bank',
             amount: onlineAmount,
             deposit_account_id: Number(onlineAccountId),
           });
@@ -315,30 +961,86 @@ export default function POS() {
           });
           return;
         }
-        payload.payment_method = breakdown[0]?.payment_method || 'cash';
+        // For split payments, use the first payment method as the main payment_method
+        // The backend will use payment_breakdown to process the split
+        const firstPayment = breakdown[0];
+        payload.payment_method = firstPayment?.payment_method || 'cash';
         payload.payment_breakdown = breakdown;
-        if (breakdown[0]?.deposit_account_id) {
-          payload.deposit_account_id = Number(breakdown[0].deposit_account_id);
+        if (firstPayment?.deposit_account_id) {
+          payload.deposit_account_id = Number(firstPayment.deposit_account_id);
         }
         payload.payment_as = 'payment';
         if (payAmountValue) {
           payload.paid_amount = payAmountValue;
         }
       } else {
-        const normalizedPaymentMethod = normalizePaymentMethod(paymentMode, depositAccountId);
+        // For cash or online payment
+        // Check account type to determine correct payment method
+        const selectedAccount = accounts.find(acc => String(acc.id) === String(depositAccountId));
+        const accountType = (selectedAccount?.type || '').toLowerCase();
+        
+        let paymentMethodValue;
+        if (paymentMode === 'cash') {
+          paymentMethodValue = 'cash';
+        } else if (paymentMode === 'online') {
+          // Backend might validate that payment_method matches account type
+          // If account is bank type, use 'bank', otherwise might need 'card' or other
+          paymentMethodValue = accountType === 'bank' ? 'bank' : 'card';
+        } else {
+          paymentMethodValue = 'cash'; // fallback
+        }
+        
+        payload.payment_method = paymentMethodValue;
         payload.deposit_account_id = Number(depositAccountId);
-        payload.payment_method = normalizedPaymentMethod;
         if (payAmountValue) {
           payload.paid_amount = payAmountValue;
           payload.payment_as = paymentAs === 'advance' ? 'advance' : paymentAs;
-        } else if (paymentAs === 'advance') {
-          payload.payment_as = 'advance';
+        } else {
+          // When customer is selected, always set payment_as to help backend calculate final due amount
+          // For guest, only set if payment_as is 'advance'
+          if (customerId) {
+            payload.payment_as = paymentAs === 'advance' ? 'advance' : 'payment';
+          } else if (paymentAs === 'advance') {
+            payload.payment_as = 'advance';
+          }
         }
       }
-      const response = await invoiceService.createInvoice(payload);
-      // clear cart
+      // Remove all undefined values from payload before sending
+      const cleanedPayload = removeUndefined(payload);
+      
+      // Log the payload for debugging
+      console.log('=== POS Invoice Payload ===');
+      console.log('Customer ID:', customerId);
+      console.log('Payment Mode:', paymentMode);
+      console.log('Deposit Account ID:', depositAccountId);
+      console.log('Selected Account:', accounts.find(acc => String(acc.id) === String(depositAccountId)));
+      console.log('Pay Amount Value:', payAmountValue);
+      console.log('Payment As:', paymentAs);
+      console.log('Apply Advance:', applyAdvanceEffective);
+      console.log('Advance To Apply (slider):', applyFromAdvance);
+      console.log('Reservation Mode:', reservationMode);
+      console.log('Active Reservation:', activeReservation?.id || 'none');
+      console.log('Payment Method in Payload:', cleanedPayload.payment_method);
+      console.log('Full Payload:', JSON.stringify(cleanedPayload, null, 2));
+      console.log('==========================');
+      
+      const response = activeReservation?.id
+        ? await reservationService.completeReservation(activeReservation.id, cleanedPayload)
+        : await invoiceService.createInvoice(cleanedPayload);
+      const invoiceMeta = extractInvoiceMeta(response);
+      if (invoiceMeta?.id) {
+        setLastInvoiceMeta(invoiceMeta);
+        triggerInvoicePrint(invoiceMeta.id, { silent: true });
+      }
+      // clear cart and reset reserved stock
       setCart([]);
       setDiscountAmount(''); setDiscountPercent('');
+      setActiveReservation(null);
+      setReservationMode('sale');
+      setReserveNote('');
+      setReservePickupDate('');
+      // Reload catalog to get updated stock from backend
+      loadCatalog();
       if (customerId) {
         setCustomerProfile(prev => ({
           ...(prev || {}),
@@ -384,6 +1086,8 @@ export default function POS() {
         duration: 6000,
         isClosable: true,
       });
+    } finally {
+      setCheckoutLoading(false);
     }
   };
 
@@ -490,37 +1194,245 @@ export default function POS() {
             <CardHeader>
               <HStack justify='space-between'>
                 <Text color={textColor} fontWeight='bold'>Cart ({cart.length} items)</Text>
-                {cart.length>0 && <Button size='sm' variant='ghost' color='red.400' onClick={()=> setCart([])}>Clear</Button>}
+                {cart.length>0 && (
+                  <Button 
+                    size='sm' 
+                    variant='ghost' 
+                    color='red.400' 
+                    onClick={()=> {
+                      setCart([]);
+                      setActiveReservation(null);
+                      setReservationMode('sale');
+                      // Stock will automatically update via reservedStock useEffect
+                    }}
+                  >
+                    Clear
+                  </Button>
+                )}
               </HStack>
             </CardHeader>
             <CardBody>
-              <VStack align='stretch' spacing='10px'>
-                {/* Checkout controls (duplicated for convenience) */}
-                <VStack align='stretch' spacing='8px'>
-                  <HStack align='stretch' spacing='10px'>
-                    <Select placeholder='Select customer' value={customerId} onChange={(e)=> setCustomerId(e.target.value)} width='100%'>
+              <VStack align='stretch' spacing='16px'>
+                {/* Checkout controls */}
+                <VStack align='stretch' spacing='12px'>
+                  <HStack align='stretch' spacing='12px'>
+                    <Select 
+                      placeholder='Select customer' 
+                      value={customerId} 
+                      onChange={(e)=> setCustomerId(e.target.value)} 
+                      width='100%'
+                      size='md'>
                       {customers.map(c => <option key={c.id} value={c.id}>{c.name} {c.phone ? `(${c.phone})` : ''}</option>)}
                     </Select>
-                    <Select value={paymentMode} onChange={(e)=> handlePaymentModeChange(e.target.value)} width='220px'>
+                    <Select 
+                      value={paymentMode} 
+                      onChange={(e)=> handlePaymentModeChange(e.target.value)} 
+                      width='220px'
+                      size='md'>
                       <option value='cash'>Cash</option>
                       <option value='online'>Online</option>
                       <option value='split'>Split (Cash + Online)</option>
                     </Select>
                   </HStack>
-                  {paymentMode === 'split' ? (
-                    <Box borderWidth='1px' borderRadius='8px' p='12px'>
-                      <Text fontWeight='semibold' fontSize='sm' mb='2'>Split payment (cash + online)</Text>
-                      <VStack align='stretch' spacing='8px'>
+                  {customerId && hasReservations && !activeReservation && !reservationBannerDismissed && (
+                    <Box
+                      borderWidth='1px'
+                      borderRadius='12px'
+                      p='12px'
+                      bg={useColorModeValue('orange.50', 'orange.900')}
+                    >
+                      <HStack justify='space-between' align='flex-start'>
                         <Box>
-                          <Text fontSize='sm' color='gray.600' mb='1'>Cash amount</Text>
-                          <HStack align='flex-start' spacing='10px'>
+                          <Text fontWeight='semibold' color='orange.700' fontSize='sm'>
+                            {customerProfile?.name || 'This customer'} has pending reservations
+                          </Text>
+                          <Text fontSize='xs' color='orange.600'>
+                            Load the latest reservation to auto-fill the cart and lock in previously paid advance.
+                          </Text>
+                        </Box>
+                        <HStack spacing='8px'>
+                          <Button size='xs' colorScheme='orange' onClick={()=> handleReservationLoad(reservationsList[0])}>
+                            Load
+                          </Button>
+                          <Button size='xs' variant='ghost' onClick={()=> setReservationBannerDismissed(true)}>
+                            Dismiss
+                          </Button>
+                        </HStack>
+                      </HStack>
+                    </Box>
+                  )}
+                  {customerId && (existingAdvance > 0 || outstandingDue !== 0 || hasReservations) && (
+                    <Box borderWidth='1px' borderRadius='12px' p='16px' bg={useColorModeValue('gray.50', 'gray.900')}>
+                      <Flex justify='space-between' align={{ base: 'flex-start', md: 'center' }} direction={{ base: 'column', md: 'row' }} gap='6px'>
+                        <Box>
+                          <Text fontWeight='semibold'>Customer overview</Text>
+                          <Text fontSize='xs' color='gray.500'>
+                            Wallet, dues, and any reserved stock at a glance.
+                          </Text>
+                        </Box>
+                        {activeReservation && (
+                          <Badge colorScheme='green' borderRadius='full'>
+                            Completing reservation #{activeReservation.reference || activeReservation.id}
+                          </Badge>
+                        )}
+                      </Flex>
+                      <SimpleGrid columns={{ base: 1, md: 3 }} spacing='10px' mt='12px'>
+                        <Box borderWidth='1px' borderRadius='10px' p='10px' bg={useColorModeValue('white', 'gray.800')}>
+                          <Text fontSize='xs' color='gray.500'>Advance wallet</Text>
+                          <Text fontWeight='bold' fontSize='lg'>PKR {existingAdvance.toFixed(2)}</Text>
+                        </Box>
+                        <Box borderWidth='1px' borderRadius='10px' p='10px' bg={useColorModeValue('white', 'gray.800')}>
+                          <Text fontSize='xs' color='gray.500'>Outstanding due</Text>
+                          <Text fontWeight='bold' fontSize='lg' color={outstandingDue > 0 ? 'red.500' : 'green.500'}>
+                            PKR {outstandingDue.toFixed(2)}
+                          </Text>
+                        </Box>
+                        <Box borderWidth='1px' borderRadius='10px' p='10px' bg={useColorModeValue('white', 'gray.800')}>
+                          <Text fontSize='xs' color='gray.500'>Reserved value</Text>
+                          <Text fontWeight='bold' fontSize='lg'>PKR {reservedValue.toFixed(2)}</Text>
+                        </Box>
+                      </SimpleGrid>
+                      {hasReservations ? (
+                        <VStack align='stretch' spacing='10px' mt='14px'>
+                          <Text fontSize='xs' color='gray.500'>Reservations & held stock</Text>
+                          {reservationsList.map((reservation) => (
+                            <Box key={reservation.id} borderWidth='1px' borderRadius='10px' p='10px' bg={useColorModeValue('white', 'gray.800')}>
+                              <HStack justify='space-between' align='flex-start'>
+                                <Box>
+                                  <Text fontSize='sm' fontWeight='semibold'>
+                                    #{reservation.reference || reservation.id}
+                                  </Text>
+                                  <Text fontSize='xs' color='gray.500'>
+                                    {reservation.items?.length || 0} item(s) • Advance PKR {Number(reservation.advance_applied || reservation.advance_amount || 0).toFixed(2)}
+                                  </Text>
+                                </Box>
+                                <Badge colorScheme={reservationStatusColor(reservation.status)}>
+                                  {reservation.status || 'pending'}
+                                </Badge>
+                              </HStack>
+                              {reservation.items?.length ? (
+                                <VStack align='stretch' spacing='4px' mt='8px'>
+                                  {reservation.items.slice(0, 3).map((item, idx) => (
+                                    <HStack key={`${reservation.id}-item-${idx}`} justify='space-between' fontSize='xs'>
+                                      <Text noOfLines={1}>{item.name || `Item ${idx + 1}`}</Text>
+                                      <Text color='gray.600'>Qty {item.qty || item.quantity || 1}</Text>
+                                    </HStack>
+                                  ))}
+                                  {reservation.items.length > 3 && (
+                                    <Text fontSize='xs' color='gray.500'>+ {reservation.items.length - 3} more item(s)</Text>
+                                  )}
+                                </VStack>
+                              ) : (
+                                <Text fontSize='xs' color='gray.500' mt='6px'>No items returned for this reservation.</Text>
+                              )}
+                              <HStack justify='flex-end' spacing='8px' mt='10px'>
+                                <Button size='sm' colorScheme='orange' onClick={()=> handleReservationLoad(reservation)}>
+                                  Load items
+                                </Button>
+                                <Button
+                                  size='sm'
+                                  variant='ghost'
+                                  onClick={()=> handleReservationRelease(reservation)}
+                                  isLoading={reservationActionLoading && reservationActionId === reservation.id}
+                                  loadingText='Releasing...'
+                                >
+                                  Release
+                                </Button>
+                              </HStack>
+                            </Box>
+                          ))}
+                        </VStack>
+                      ) : (
+                        <Text fontSize='xs' color='gray.500' mt='12px'>
+                          No reservations recorded for this customer yet.
+                        </Text>
+                      )}
+                    </Box>
+                  )}
+                  <Box borderWidth='1px' borderRadius='12px' p='14px' bg={useColorModeValue('white', 'gray.900')}>
+                    <Flex justify='space-between' align='center'>
+                      <Box>
+                        <Text fontWeight='semibold'>Fulfilment mode</Text>
+                        <Text fontSize='xs' color='gray.500'>
+                          Decide whether this interaction is an immediate sale or a reservation.
+                        </Text>
+                      </Box>
+                      <Badge colorScheme={reservationMode === 'sale' ? 'green' : 'purple'}>
+                        {reservationMode === 'sale' ? 'Immediate Sale' : 'Reserve Stock'}
+                      </Badge>
+                    </Flex>
+                    <HStack mt='10px' spacing='8px'>
+                      <Button
+                        flex='1'
+                        variant={reservationMode === 'sale' ? 'solid' : 'outline'}
+                        colorScheme='green'
+                        onClick={()=> setReservationMode('sale')}
+                      >
+                        Immediate Sale
+                      </Button>
+                      <Button
+                        flex='1'
+                        variant={reservationMode === 'reserve' ? 'solid' : 'outline'}
+                        colorScheme='purple'
+                        onClick={()=> setReservationMode('reserve')}
+                      >
+                        Reserve + Advance
+                      </Button>
+                    </HStack>
+                    {reservationMode === 'reserve' && (
+                      <VStack align='stretch' spacing='10px' mt='10px'>
+                        <Text fontSize='xs' color='gray.500'>
+                          Capture advance now and hold items until pickup. Checkout button is disabled until backend endpoints are wired.
+                        </Text>
+                        <Input
+                          type='date'
+                          value={reservePickupDate}
+                          onChange={(e)=> setReservePickupDate(e.target.value)}
+                          placeholder='Pickup date'
+                          size='sm'
+                        />
+                        <Input
+                          value={reserveNote}
+                          onChange={(e)=> setReserveNote(e.target.value)}
+                          placeholder='Reservation note / reference'
+                          size='sm'
+                        />
+                      </VStack>
+                    )}
+                    {activeReservation && (
+                      <Box
+                        mt='10px'
+                        p='10px'
+                        borderRadius='10px'
+                        bg={useColorModeValue('green.50', 'green.900')}
+                      >
+                        <Text fontSize='sm' fontWeight='semibold' color='green.700'>
+                          Completing reservation #{activeReservation.reference || activeReservation.id}
+                        </Text>
+                        <Text fontSize='xs' color='green.700'>
+                          Cart was pre-filled with reserved items. Adjust quantities if the customer changed their order.
+                        </Text>
+                      </Box>
+                    )}
+                  </Box>
+                  {paymentMode === 'split' ? (
+                    <Box borderWidth='1px' borderRadius='10px' p='16px' bg={useColorModeValue('gray.50', 'gray.800')}>
+                      <Text fontWeight='semibold' fontSize='sm' mb='12px' color={textColor}>
+                        Split Payment (Cash + Online)
+                      </Text>
+                      <VStack align='stretch' spacing='14px'>
+                        <Box>
+                          <Text fontSize='sm' fontWeight='medium' color='gray.700' mb='8px'>Cash Amount</Text>
+                          <HStack align='flex-start' spacing='12px'>
                             <Input
                               width='160px'
                               type='number'
                               min='0'
+                              step='0.01'
                               value={splitPayments.cash.amount}
                               onChange={(e)=> handleSplitPaymentChange('cash', 'amount', e.target.value)}
                               placeholder='0.00'
+                              size='md'
                             />
                             <Select
                               flex='1'
@@ -528,25 +1440,49 @@ export default function POS() {
                               value={splitPayments.cash.accountId}
                               onChange={(e)=> handleSplitPaymentChange('cash', 'accountId', e.target.value)}
                               borderColor={!splitPayments.cash.accountId && Number(splitPayments.cash.amount || 0) > 0 ? 'red.300' : undefined}
+                              size='md'
                             >
-                              {(cashAccounts.length ? cashAccounts : accounts).map(acc => (
-                                <option key={`cash-${acc.id}`} value={acc.id}>
-                                  {acc.name} {acc.code ? `(${acc.code})` : ''} - PKR {Number(acc.balance || 0).toFixed(2)}
-                                </option>
-                              ))}
+                              {cashAccounts.length > 0 ? (
+                                <>
+                                  <optgroup label="Cash Accounts">
+                                    {cashAccounts.map(acc => (
+                                      <option key={`cash-${acc.id}`} value={acc.id}>
+                                        {formatAccountName(acc)}
+                                      </option>
+                                    ))}
+                                  </optgroup>
+                                  {accounts.filter(acc => !cashAccounts.find(ca => ca.id === acc.id)).length > 0 && (
+                                    <optgroup label="Other Accounts">
+                                      {accounts.filter(acc => !cashAccounts.find(ca => ca.id === acc.id)).map(acc => (
+                                        <option key={`cash-other-${acc.id}`} value={acc.id}>
+                                          {formatAccountName(acc)}
+                                        </option>
+                                      ))}
+                                    </optgroup>
+                                  )}
+                                </>
+                              ) : (
+                                accounts.map(acc => (
+                                  <option key={`cash-${acc.id}`} value={acc.id}>
+                                    {formatAccountName(acc)}
+                                  </option>
+                                ))
+                              )}
                             </Select>
                           </HStack>
                         </Box>
                         <Box>
-                          <Text fontSize='sm' color='gray.600' mb='1'>Online amount</Text>
-                          <HStack align='flex-start' spacing='10px'>
+                          <Text fontSize='sm' fontWeight='medium' color='gray.700' mb='8px'>Online Amount</Text>
+                          <HStack align='flex-start' spacing='12px'>
                             <Input
                               width='160px'
                               type='number'
                               min='0'
+                              step='0.01'
                               value={splitPayments.online.amount}
                               onChange={(e)=> handleSplitPaymentChange('online', 'amount', e.target.value)}
                               placeholder='0.00'
+                              size='md'
                             />
                             <Select
                               flex='1'
@@ -554,154 +1490,410 @@ export default function POS() {
                               value={splitPayments.online.accountId}
                               onChange={(e)=> handleSplitPaymentChange('online', 'accountId', e.target.value)}
                               borderColor={!splitPayments.online.accountId && Number(splitPayments.online.amount || 0) > 0 ? 'red.300' : undefined}
+                              size='md'
                             >
-                              {(onlineAccounts.length ? onlineAccounts : accounts).map(acc => (
-                                <option key={`online-${acc.id}`} value={acc.id}>
-                                  {acc.name} {acc.code ? `(${acc.code})` : ''} - PKR {Number(acc.balance || 0).toFixed(2)}
-                                </option>
-                              ))}
+                              {onlineAccounts.length > 0 ? (
+                                <>
+                                  <optgroup label="Bank/Online Accounts">
+                                    {onlineAccounts.map(acc => (
+                                      <option key={`online-${acc.id}`} value={acc.id}>
+                                        {formatAccountName(acc)}
+                                      </option>
+                                    ))}
+                                  </optgroup>
+                                  {accounts.filter(acc => !onlineAccounts.find(oa => oa.id === acc.id)).length > 0 && (
+                                    <optgroup label="Other Accounts">
+                                      {accounts.filter(acc => !onlineAccounts.find(oa => oa.id === acc.id)).map(acc => (
+                                        <option key={`online-other-${acc.id}`} value={acc.id}>
+                                          {formatAccountName(acc)}
+                                        </option>
+                                      ))}
+                                    </optgroup>
+                                  )}
+                                </>
+                              ) : (
+                                accounts.map(acc => (
+                                  <option key={`online-${acc.id}`} value={acc.id}>
+                                    {formatAccountName(acc)}
+                                  </option>
+                                ))
+                              )}
                             </Select>
                           </HStack>
                         </Box>
-                        <Text fontSize='sm' color='gray.600'>Total paid now: PKR {splitPaidTotal.toFixed(2)}</Text>
+                        <Box pt='8px' borderTopWidth='1px' borderColor={useColorModeValue('gray.200', 'gray.600')}>
+                          <Text fontSize='sm' fontWeight='semibold' color='gray.700'>
+                            Total Paid Now: PKR {splitPaidTotal.toFixed(2)}
+                          </Text>
+                        </Box>
                       </VStack>
                     </Box>
                   ) : (
-                    <Select 
-                      placeholder='Select deposit account *' 
-                      value={depositAccountId} 
-                      onChange={(e)=> setDepositAccountId(e.target.value)} 
-                      isRequired
-                      borderColor={!depositAccountId ? 'red.300' : undefined}>
-                      {accounts.map(acc => (
-                        <option key={acc.id} value={acc.id}>
-                          {acc.name} {acc.code ? `(${acc.code})` : ''} - PKR {Number(acc.balance || 0).toFixed(2)}
-                        </option>
-                      ))}
-                    </Select>
+                    <Box>
+                      <Text fontSize='sm' fontWeight='semibold' color='gray.700' mb='8px'>
+                        Deposit Account *
+                      </Text>
+                      <Select 
+                        placeholder={`Select ${paymentMode === 'cash' ? 'cash' : paymentMode === 'online' ? 'bank/online' : 'deposit'} account *`} 
+                        value={depositAccountId} 
+                        onChange={(e)=> setDepositAccountId(e.target.value)} 
+                        isRequired
+                        borderColor={!depositAccountId ? 'red.300' : undefined}
+                        size='md'>
+                        {paymentMode === 'cash' && cashAccounts.length > 0 ? (
+                          <>
+                            <optgroup label="Cash Accounts">
+                              {cashAccounts.map(acc => (
+                                <option key={acc.id} value={acc.id}>
+                                  {formatAccountName(acc)}
+                                </option>
+                              ))}
+                            </optgroup>
+                            {accounts.filter(acc => !cashAccounts.find(ca => ca.id === acc.id)).length > 0 && (
+                              <optgroup label="Other Accounts">
+                                {accounts.filter(acc => !cashAccounts.find(ca => ca.id === acc.id)).map(acc => (
+                                  <option key={acc.id} value={acc.id}>
+                                    {formatAccountName(acc)}
+                                  </option>
+                                ))}
+                              </optgroup>
+                            )}
+                          </>
+                        ) : paymentMode === 'online' && onlineAccounts.length > 0 ? (
+                          <>
+                            <optgroup label="Bank/Online Accounts">
+                              {onlineAccounts.map(acc => (
+                                <option key={acc.id} value={acc.id}>
+                                  {formatAccountName(acc)}
+                                </option>
+                              ))}
+                            </optgroup>
+                            {accounts.filter(acc => !onlineAccounts.find(oa => oa.id === acc.id)).length > 0 && (
+                              <optgroup label="Other Accounts">
+                                {accounts.filter(acc => !onlineAccounts.find(oa => oa.id === acc.id)).map(acc => (
+                                  <option key={acc.id} value={acc.id}>
+                                    {formatAccountName(acc)}
+                                  </option>
+                                ))}
+                              </optgroup>
+                            )}
+                          </>
+                        ) : (
+                          accounts.map(acc => (
+                            <option key={acc.id} value={acc.id}>
+                              {formatAccountName(acc)}
+                            </option>
+                          ))
+                        )}
+                      </Select>
+                      {depositAccountId && (() => {
+                        const selectedAcc = accounts.find(a => String(a.id) === depositAccountId);
+                        if (selectedAcc) {
+                          const type = (selectedAcc.type || '').toLowerCase();
+                          return (
+                            <Text fontSize='xs' color='gray.500' mt='8px'>
+                              Selected: {selectedAcc.name} {selectedAcc.code ? `(${selectedAcc.code})` : ''} • 
+                              Balance: PKR {Number(selectedAcc.balance || 0).toFixed(2)} • 
+                              Type: {type === 'cash' ? 'Cash' : type === 'bank' ? 'Bank' : 'Custom'}
+                            </Text>
+                          );
+                        }
+                        return null;
+                      })()}
+                    </Box>
                   )}
-                  <HStack>
-                    <Input placeholder='Discount %' type='number' value={discountPercent} onChange={(e)=> setDiscountPercent(e.target.value)} />
-                    <Input placeholder='Discount amount' type='number' value={discountAmount} onChange={(e)=> setDiscountAmount(e.target.value)} />
+                  <HStack spacing='12px'>
+                    <Box flex='1'>
+                      <Text fontSize='xs' color='gray.600' mb='4px'>Discount %</Text>
+                      <Input 
+                        placeholder='0' 
+                        type='number' 
+                        value={discountPercent} 
+                        onChange={(e)=> setDiscountPercent(e.target.value)} 
+                        size='md'
+                      />
+                    </Box>
+                    <Box flex='1'>
+                      <Text fontSize='xs' color='gray.600' mb='4px'>Discount Amount</Text>
+                      <Input 
+                        placeholder='0.00' 
+                        type='number' 
+                        value={discountAmount} 
+                        onChange={(e)=> setDiscountAmount(e.target.value)} 
+                        size='md'
+                      />
+                    </Box>
                   </HStack>
                 </VStack>
                 {cart.map(line => (
-                  <Box key={line.id} borderWidth='1px' borderRadius='10px' p='10px'>
-                    <HStack justify='space-between'>
-                      <VStack align='flex-start' spacing='0'>
-                        <Text fontWeight='semibold'>{line.name}</Text>
+                  <Box key={line.id} borderWidth='1px' borderRadius='10px' p='14px' bg={useColorModeValue('gray.50', 'gray.800')}>
+                    <HStack justify='space-between' mb='12px'>
+                      <VStack align='flex-start' spacing='4px' flex='1'>
+                        <Text fontWeight='semibold' fontSize='sm'>{line.name}</Text>
                         {line.serial_id && (
                           <Text fontSize='xs' color='gray.500'>Serial: {line.serial_id}</Text>
                         )}
                       </VStack>
-                      <IconButton size='sm' aria-label='remove' icon={<FaTrash />} variant='ghost' color='red.400' onClick={()=> removeLine(line.id)} />
+                      <IconButton 
+                        size='sm' 
+                        aria-label='remove' 
+                        icon={<FaTrash />} 
+                        variant='ghost' 
+                        color='red.400' 
+                        onClick={()=> removeLine(line.id)} 
+                      />
                     </HStack>
-                    <HStack justify='space-between' mt='2'>
-                      <HStack>
+                    <HStack justify='space-between' mb='12px' spacing='12px'>
+                      <HStack spacing='8px'>
+                        <Text fontSize='xs' color='gray.600' minW='60px'>Quantity:</Text>
                         <IconButton size='sm' icon={<FaMinus />} onClick={()=> changeQty(line.id, -1)} />
-                        <Text minW='24px' textAlign='center'>{line.qty}</Text>
+                        <Text minW='32px' textAlign='center' fontWeight='semibold'>{line.qty}</Text>
                         <IconButton size='sm' icon={<FaPlus />} onClick={()=> changeQty(line.id, 1)} />
                       </HStack>
-                      <HStack>
-                        <Text color='gray.500'>Custom Price:</Text>
-                        <Input width='140px' type='number' step='any' value={line.price} onChange={(e)=> {
-                          const val = Number(e.target.value || 0);
-                          setCart(prev => prev.map(x => x.id===line.id
-                            ? { ...x, basePrice: getBasePrice(x), price: val }
-                            : x));
-                        }} placeholder='Enter custom price' />
-                        <Text>PKR {(line.qty * line.price).toFixed(2)}</Text>
-                      </HStack>
+                      <VStack align='flex-end' spacing='4px' flex='1'>
+                        <HStack spacing='8px' justify='flex-end' w='100%'>
+                          <Text fontSize='xs' color='gray.600' whiteSpace='nowrap'>Unit Price:</Text>
+                          <Input 
+                            width='120px' 
+                            type='number' 
+                            step='0.01' 
+                            value={line.price} 
+                            onChange={(e)=> {
+                              const val = Number(e.target.value || 0);
+                              setCart(prev => prev.map(x => x.id===line.id
+                                ? { ...x, basePrice: getBasePrice(x), price: val }
+                                : x));
+                            }} 
+                            placeholder='0.00' 
+                            size='sm'
+                          />
+                          <Text fontWeight='semibold' minW='80px' textAlign='right'>
+                            PKR {(line.qty * line.price).toFixed(2)}
+                          </Text>
+                        </HStack>
+                        {(() => {
+                          const basePrice = getBasePrice(line);
+                          const hasDiscount = basePrice > line.price;
+                          if (hasDiscount) {
+                            const discountPerUnit = basePrice - line.price;
+                            const totalDiscount = discountPerUnit * line.qty;
+                            return (
+                              <HStack spacing='4px' fontSize='xs' color='gray.500'>
+                                <Text>Original:</Text>
+                                <Text textDecoration='line-through'>PKR {basePrice.toFixed(2)}</Text>
+                                <Text>•</Text>
+                                <Text color='red.500' fontWeight='medium'>Loss: PKR {totalDiscount.toFixed(2)}</Text>
+                              </HStack>
+                            );
+                          }
+                          return null;
+                        })()}
+                      </VStack>
                     </HStack>
-                    <HStack justify='space-between' mt='3'>
-                      <Text color='gray.500'>Hidden cost for this item:</Text>
-                      <Input
-                        width='140px'
-                        type='number'
-                        step='any'
-                        value={line.hiddenCost ?? ''}
-                        onChange={(e)=> {
-                          const val = Number(e.target.value || 0);
-                          setCart(prev => prev.map(x => x.id===line.id
-                            ? { ...x, hiddenCost: val }
-                            : x));
-                        }}
-                        placeholder='0'
-                      />
-                      <Text color='orange.500'>+ PKR {Number(line.hiddenCost || 0).toFixed(2)}</Text>
+                    <HStack justify='space-between' pt='8px' borderTopWidth='1px' borderColor={useColorModeValue('gray.200', 'gray.600')}>
+                      <Text fontSize='xs' color='gray.600' whiteSpace='nowrap'>Hidden Cost:</Text>
+                      <HStack spacing='8px'>
+                        <Input
+                          width='120px'
+                          type='number'
+                          step='0.01'
+                          value={line.hiddenCost ?? ''}
+                          onChange={(e)=> {
+                            const val = Number(e.target.value || 0);
+                            setCart(prev => prev.map(x => x.id===line.id
+                              ? { ...x, hiddenCost: val }
+                              : x));
+                          }}
+                          placeholder='0.00'
+                          size='sm'
+                        />
+                        <Text color='orange.500' fontWeight='medium' minW='80px' textAlign='right'>
+                          + PKR {Number(line.hiddenCost || 0).toFixed(2)}
+                        </Text>
+                      </HStack>
                     </HStack>
                   </Box>
                 ))}
-                {cart.length === 0 && <Text color='gray.500'>Cart is empty</Text>}
-                <Box borderTopWidth='1px' pt='10px'>
-                  {totalQty > 0 && (
-                    <Box mb='3'>
-                      <Text fontWeight='semibold' mb='1'>Per Unit Summary</Text>
-                      <Text color='gray.600'>Original unit price: PKR {originalUnitPrice.toFixed(2)}</Text>
-                      <Text color='gray.600'>Total price (selling price × quantity): PKR {baseSubtotal.toFixed(2)}</Text>
+                {cart.length === 0 && (
+                  <Box textAlign='center' py='40px'>
+                    <Text color='gray.500' fontSize='sm'>Cart is empty</Text>
+                  </Box>
+                )}
+                {cart.length > 0 && (
+                  <Box borderTopWidth='2px' borderColor={useColorModeValue('gray.200', 'gray.600')} pt='16px'>
+                    <VStack align='stretch' spacing='8px' mb='12px'>
+                      <HStack justify='space-between'>
+                        <Text fontSize='sm' color='gray.600'>Discount:</Text>
+                        <Text fontSize='sm' color='gray.600' fontWeight='medium'>PKR {totalDiscount.toFixed(2)}</Text>
+                      </HStack>
+                      {manualDiscount > 0 && (
+                        <Text fontSize='xs' color='gray.500' pl='16px'>
+                          (Includes PKR {manualDiscount.toFixed(2)} from price adjustments)
+                        </Text>
+                      )}
+                      {hiddenCostsAmount > 0 && (
+                        <HStack justify='space-between'>
+                          <Text color='orange.500' fontSize='sm'>Hidden Costs:</Text>
+                          <Text color='orange.500' fontSize='sm' fontWeight='medium'>PKR {hiddenCostsAmount.toFixed(2)}</Text>
+                        </HStack>
+                      )}
+                    </VStack>
+                    <Box pt='12px' borderTopWidth='1px' borderColor={useColorModeValue('gray.200', 'gray.600')}>
+                      <HStack justify='space-between'>
+                        <Text fontWeight='bold' fontSize='lg' color={textColor}>Total:</Text>
+                        <Text fontWeight='bold' fontSize='lg' color={textColor}>PKR {total.toFixed(2)}</Text>
+                      </HStack>
                     </Box>
-                  )}
-                  <Text>Discount: PKR {totalDiscount.toFixed(2)}</Text>
-                  {manualDiscount > 0 && (
-                    <Text fontSize='sm' color='gray.500'>Includes PKR {manualDiscount.toFixed(2)} from price adjustments</Text>
-                  )}
-                  {hiddenCostsAmount > 0 && <Text color='orange.500' fontSize='sm'>Hidden Costs: PKR {hiddenCostsAmount.toFixed(2)}</Text>}
-                  <Text fontWeight='bold'>Total: PKR {total.toFixed(2)}</Text>
-                </Box>
+                  </Box>
+                )}
                 {/* Payment at checkout */}
-                <VStack align='stretch' spacing='8px'>
-                  {paymentMode === 'split' ? (
-                    <Box fontSize='sm' color='gray.600'>
-                      <Text>Split payment total for this invoice: PKR {splitPaidTotal.toFixed(2)}</Text>
-                      <Text fontSize='xs' color='gray.500'>Split payments are applied immediately to this invoice.</Text>
-                      {splitPaidTotal < remainingAfterAdvance && (
-                        <Text color='orange.500'>Remaining balance will stay as due until settled.</Text>
-                      )}
+                {cart.length > 0 && (
+                  <VStack align='stretch' spacing='14px' pt='8px' borderTopWidth='2px' borderColor={useColorModeValue('gray.200', 'gray.600')}>
+                    {paymentMode === 'split' ? (
+                      <Box fontSize='sm' color='gray.600' p='12px' bg={useColorModeValue('blue.50', 'blue.900')} borderRadius='8px'>
+                        <Text fontWeight='medium' mb='4px'>Split Payment Total: PKR {splitPaidTotal.toFixed(2)}</Text>
+                        <Text fontSize='xs' color='gray.500'>Split payments are applied immediately to this invoice.</Text>
+                        {splitPaidTotal < remainingAfterAdvance && (
+                          <Text color='orange.500' fontSize='xs' mt='4px'>Remaining balance will stay as due until settled.</Text>
+                        )}
+                      </Box>
+                    ) : (
+                      <Box>
+                        <Text fontSize='xs' color='gray.600' mb='4px'>Paid Amount (optional)</Text>
+                        <Input 
+                          placeholder='0.00' 
+                          type='number' 
+                          step='0.01'
+                          value={paidAmount} 
+                          onChange={(e)=> setPaidAmount(e.target.value)} 
+                          size='md'
+                        />
+                        <Checkbox
+                          mt='3'
+                          colorScheme='orange'
+                          isChecked={paymentAs === 'advance'}
+                          onChange={(e)=> setPaymentAs(e.target.checked ? 'advance' : 'payment')}
+                        >
+                          Store this paid amount as customer advance
+                        </Checkbox>
+                        {paymentAs === 'advance' ? (
+                          <Text fontSize='xs' color='gray.500' mt='1'>
+                            Invoice will remain due until the advance is applied later.
+                          </Text>
+                        ) : (
+                          <Text fontSize='xs' color='gray.500' mt='1'>
+                            Leave unchecked to settle this invoice immediately with the entered amount.
+                          </Text>
+                        )}
+                      </Box>
+                    )}
+                    <Box>
+                      <Text fontSize='xs' color='gray.600' mb='4px'>Due Date (Optional)</Text>
+                      <Input
+                        type='date'
+                        placeholder='Due date'
+                        value={dueDate}
+                        onChange={(e)=> setDueDate(e.target.value)}
+                        size='md'
+                      />
                     </Box>
-                  ) : (
-                    <HStack>
-                      <Input placeholder='Paid amount (optional)' type='number' value={paidAmount} onChange={(e)=> setPaidAmount(e.target.value)} />
-                      <Select value={paymentAs} onChange={(e)=> setPaymentAs(e.target.value)} width='220px'>
-                        <option value='payment'>Apply to this invoice</option>
-                        <option value='advance'>Store as customer advance</option>
-                      </Select>
-                    </HStack>
-                  )}
-                  <Input
-                    type='date'
-                    placeholder='Due date'
-                    value={dueDate}
-                    onChange={(e)=> setDueDate(e.target.value)}
-                  />
-                  {customerId && existingAdvance > 0 && (
-                    <Checkbox
-                      isChecked={applyAdvanceEffective}
-                      isDisabled={paymentAs === 'advance' && paymentMode !== 'split'}
-                      onChange={(e)=> setApplyAdvance(e.target.checked)}
-                      fontSize='sm'
-                    >
-                      Apply customer advance (PKR {existingAdvance.toFixed(2)})
-                    </Checkbox>
-                  )}
-                  {customerId && (
-                    <Box fontSize='sm' color='gray.600'>
-                      {existingAdvance > 0 && <Text>Customer advance: PKR {existingAdvance.toFixed(2)}</Text>}
-                      <Text>Will apply from advance: PKR {applyFromAdvance.toFixed(2)}</Text>
-                      {paymentMode === 'split' ? (
-                        <Text>Split applied now: Cash PKR {Number(splitPayments.cash.amount || 0).toFixed(2)} + Online PKR {Number(splitPayments.online.amount || 0).toFixed(2)}</Text>
-                      ) : paymentAs === 'payment' ? (
-                        <Text>Paid now applied to invoice: PKR {Math.min(payNow, remainingAfterAdvance).toFixed(2)} • Excess to advance: PKR {Math.max(0, payNow - remainingAfterAdvance).toFixed(2)}</Text>
-                      ) : (
-                        <Text>Paid now stored as advance: PKR {payNow.toFixed(2)}</Text>
+                    {customerId && (
+                      <Box fontSize='sm' color='gray.600' p='12px' bg={useColorModeValue('gray.50', 'gray.800')} borderRadius='8px'>
+                        <VStack align='stretch' spacing='6px'>
+                          {existingAdvance > 0 && (
+                            <HStack justify='space-between'>
+                              <Text fontSize='xs'>Customer Advance:</Text>
+                              <Text fontSize='xs' fontWeight='medium'>PKR {existingAdvance.toFixed(2)}</Text>
+                            </HStack>
+                          )}
+                          <HStack justify='space-between'>
+                            <Text fontSize='xs'>Will Apply from Advance:</Text>
+                            <Text fontSize='xs' fontWeight='medium'>PKR {applyFromAdvance.toFixed(2)}</Text>
+                          </HStack>
+                          {paymentMode === 'split' ? (
+                            <HStack justify='space-between'>
+                              <Text fontSize='xs'>Split Applied Now:</Text>
+                              <Text fontSize='xs' fontWeight='medium'>
+                                Cash PKR {Number(splitPayments.cash.amount || 0).toFixed(2)} + Online PKR {Number(splitPayments.online.amount || 0).toFixed(2)}
+                              </Text>
+                            </HStack>
+                          ) : paymentAs === 'payment' ? (
+                            <>
+                              <HStack justify='space-between'>
+                                <Text fontSize='xs'>Paid to Invoice:</Text>
+                                <Text fontSize='xs' fontWeight='medium'>PKR {Math.min(payNow, remainingAfterAdvance).toFixed(2)}</Text>
+                              </HStack>
+                              {payNow > remainingAfterAdvance && (
+                                <HStack justify='space-between'>
+                                  <Text fontSize='xs'>Excess to Advance:</Text>
+                                  <Text fontSize='xs' fontWeight='medium' color='orange.500'>PKR {Math.max(0, payNow - remainingAfterAdvance).toFixed(2)}</Text>
+                                </HStack>
+                              )}
+                            </>
+                          ) : (
+                            <HStack justify='space-between'>
+                              <Text fontSize='xs'>Stored as Advance:</Text>
+                              <Text fontSize='xs' fontWeight='medium'>PKR {payNow.toFixed(2)}</Text>
+                            </HStack>
+                          )}
+                          {paymentAs === 'advance' && paymentMode !== 'split' && (
+                            <Text fontSize='xs' color='gray.500' fontStyle='italic'>
+                              Invoice remains due until the stored advance is applied later.
+                            </Text>
+                          )}
+                          <Box pt='8px' borderTopWidth='1px' borderColor={useColorModeValue('gray.200', 'gray.600')}>
+                            <HStack justify='space-between' mb='4px'>
+                              <Text fontSize='sm' fontWeight='semibold'>Estimated Due:</Text>
+                              <Text fontSize='sm' fontWeight='semibold' color='red.500'>PKR {estimatedDue.toFixed(2)}</Text>
+                            </HStack>
+                            <HStack justify='space-between'>
+                              <Text fontSize='sm' fontWeight='semibold'>Estimated New Advance:</Text>
+                              <Text fontSize='sm' fontWeight='semibold' color='green.500'>PKR {estimatedNewAdvance.toFixed(2)}</Text>
+                            </HStack>
+                          </Box>
+                        </VStack>
+                      </Box>
+                    )}
+                    <VStack spacing='8px' align='stretch'>
+                      <Button 
+                        bg='#FF8D28' 
+                        color='white' 
+                        _hover={{ bg: '#E67E22' }} 
+                        onClick={generateInvoice} 
+                        isDisabled={cart.length===0 || checkoutLoading}
+                        isLoading={checkoutLoading}
+                        loadingText={reservationMode === 'reserve' ? 'Saving reservation...' : 'Processing...'}
+                        size='lg'
+                        height='48px'
+                        fontSize='md'
+                        fontWeight='bold'>
+                        {reservationMode === 'reserve' ? 'Reserve Stock & Record Advance' : `Checkout - PKR ${total.toFixed(2)}`}
+                      </Button>
+                      {lastReservationMeta?.id && (
+                        <Button
+                          variant='outline'
+                          colorScheme='purple'
+                          onClick={()=> triggerReservationReceiptPrint(lastReservationMeta.id)}
+                          isLoading={reservationPrintLoading}
+                          loadingText='Preparing receipt...'
+                        >
+                          {`Print reservation receipt ${lastReservationMeta.reference ? `(${lastReservationMeta.reference})` : ''}`}
+                        </Button>
                       )}
-                      {paymentAs === 'advance' && paymentMode !== 'split' && (
-                        <Text fontSize='sm' color='gray.500'>Invoice remains due until the stored advance is applied later.</Text>
+                      {lastInvoiceMeta?.id && (
+                        <Button
+                          variant='outline'
+                          colorScheme='gray'
+                          onClick={()=> triggerInvoicePrint(lastInvoiceMeta.id)}
+                          isLoading={printLoading}
+                          loadingText='Preparing print...'
+                        >
+                          {`Print invoice ${lastInvoiceMeta.number ? `(${lastInvoiceMeta.number})` : ''}`}
+                        </Button>
                       )}
-                      <Text fontWeight='semibold'>Estimated due: PKR {estimatedDue.toFixed(2)} • Estimated new advance: PKR {estimatedNewAdvance.toFixed(2)}</Text>
-                    </Box>
-                  )}
-                </VStack>
-                <Button bg='#FF8D28' color='white' _hover={{ bg: '#E67E22' }} onClick={generateInvoice} isDisabled={cart.length===0}>Checkout - PKR {total.toFixed(0)}</Button>
+                    </VStack>
+                  </VStack>
+                )}
               </VStack>
             </CardBody>
           </Card>

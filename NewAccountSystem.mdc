@@ -1,0 +1,438 @@
+---
+alwaysApply: true
+---
+# Accounting System Documentation
+
+## Overview
+
+This document describes the 11-account double-entry bookkeeping system implemented in the POS backend. All financial transactions flow through the `account_transactions` table for complete audit trail.
+
+## System Accounts
+
+The system uses 11 dedicated accounts, each with a specific purpose:
+
+### 1. Cash Account (CASH-001)
+- **Type**: `cash`
+- **Purpose**: Tracks physical cash on hand
+- **Usage**: Every cash payment from customers or cash expense goes through this account
+- **When to use**:
+  - Customer pays in cash
+  - Paying supplier in cash
+  - Giving staff advances in cash
+  - Paying petty cash expenses (fuel, tea, maintenance)
+
+### 2. Bank Account (BANK-001)
+- **Type**: `bank`
+- **Purpose**: Tracks all bank transactions (online payments, bank transfers)
+- **Usage**: Any digital transaction goes through this account
+- **When to use**:
+  - Customer pays online
+  - Paying supplier via bank transfer
+  - Receiving loan repayment from staff online
+
+### 3. Accounts Receivable (AR-001)
+- **Type**: `receivable`
+- **Purpose**: Tracks customer dues when they buy on credit
+- **Usage**: Keeps track of who owes what
+- **When to use**:
+  - Sale made but customer hasn't paid yet
+  - Customer partially paid and owes remainder
+- **Backend**: Links AR transactions to specific customer IDs
+
+### 4. Customer Advance Payments (ADV-001)
+- **Type**: `advance`
+- **Purpose**: Tracks prepayments from customers before selling stock
+- **Usage**: When customer pays before receiving stock
+- **When to use**:
+  - Customer pays before receiving stock
+  - Later, amount is applied to sale
+- **Backend**: Must ensure Revenue account reflects only actual earned revenue, not raw prepayment
+
+### 5. Revenue Account (REV-001)
+- **Type**: `revenue`
+- **Purpose**: Tracks total income earned from sales and invoices
+- **Usage**: On sale (full or partial)
+- **When to use**:
+  - On sale (full or partial)
+  - On converting customer advance to revenue
+- **Backend**: Must be independent of Cash/Bank — Revenue shows earned money, Cash/Bank shows received money
+
+### 6. Udhaar / Staff Loans (UD-001)
+- **Type**: `udhaar`
+- **Purpose**: Tracks money lent to staff (salary advances or loans)
+- **Usage**: Giving staff advance or loan
+- **When to use**:
+  - Giving staff advance or loan
+  - Staff repayment
+  - Adjusting salary against advance
+- **Backend**: Needs to keep staff ID link to track individual loans/advances
+
+### 7. Stock Purchase / COGS (EXP-001)
+- **Type**: `expense`
+- **Purpose**: Tracks money spent buying stock from suppliers
+- **Usage**: Used to calculate profit later
+- **When to use**:
+  - Buying stock from supplier (cash/bank)
+- **Backend**: Optional: link purchase to supplier ID for reporting
+
+### 8. Staff Salary / Expenses (EXP-002)
+- **Type**: `expense`
+- **Purpose**: Tracks all salary payments and adjustments
+- **Usage**: Monthly salary payments
+- **When to use**:
+  - Monthly salary payments
+  - Advance salary adjustments
+- **Backend**: Adjust Udhaar if advance salary exists
+
+### 9. Operational Expenses (EXP-003)
+- **Type**: `expense`
+- **Purpose**: Tracks all other daily business expenses (rent, utilities, fuel, miscellaneous)
+- **Usage**: Daily operational costs
+- **When to use**:
+  - Rent payments
+  - Utility bills
+  - Fuel expenses
+  - Miscellaneous expenses
+- **Backend**: Can categorize by type for reporting
+
+### 10. Loss / Write-Offs (LOSS-001)
+- **Type**: `loss`
+- **Purpose**: Captures bad debts or damaged stock
+- **Usage**: When customer defaults or stock is damaged
+- **When to use**:
+  - Customer defaults → debit Loss, credit AR
+  - Stock damaged → debit Loss, credit Inventory (if tracked)
+- **Backend**: Should allow staff to mark reason for transparency
+
+### 11. Owner Investment / Equity (EQ-001)
+- **Type**: `equity`
+- **Purpose**: Tracks owner deposits or withdrawals
+- **Usage**: Owner capital in/out
+- **When to use**:
+  - Owner deposits money
+  - Owner withdraws money
+- **Backend**: Shows capital position clearly
+
+## Transaction Flows
+
+### Invoice Creation (Credit Sale)
+
+When creating an invoice with a customer on credit:
+
+1. **Revenue Recognition**: Credit REV-001 with invoice total
+2. **Accounts Receivable**: Credit AR-001 with due amount
+3. **Customer Advance**: If advance applied, Debit ADV-001
+4. **Cash/Bank**: If payment received, Credit CASH-001 or BANK-001
+
+**API Endpoint**: `POST /api/invoices`
+
+**Request Example**:
+```json
+{
+  "customer_id": 1,
+  "items": [...],
+  "paid_amount": 500,
+  "payment_as": "payment",
+  "apply_advance": true
+}
+```
+
+**Account Transactions Created**:
+- Credit REV-001: Invoice total
+- Credit AR-001: Due amount (if any)
+- Debit ADV-001: Advance applied (if any)
+- Credit CASH-001/BANK-001: Payment received (if any)
+
+### Invoice Payment
+
+When customer pays their due amount:
+
+1. **Accounts Receivable**: Debit AR-001
+2. **Cash/Bank**: Credit CASH-001 or BANK-001
+
+**Account Transactions Created**:
+- Debit AR-001: Payment amount
+- Credit CASH-001/BANK-001: Payment amount
+
+### Customer Advance Payment
+
+When customer makes advance payment:
+
+1. **Customer Advance**: Credit ADV-001
+2. **Cash/Bank**: Credit CASH-001 or BANK-001
+
+**Account Transactions Created**:
+- Credit ADV-001: Advance amount
+- Credit CASH-001/BANK-001: Advance amount
+
+### Udhaar Loan Creation
+
+When giving money to staff:
+
+1. **Udhaar**: Credit UD-001
+2. **Cash/Bank**: Debit CASH-001 or BANK-001
+
+**API Endpoint**: `POST /api/udhaars`
+
+**Request Example**:
+```json
+{
+  "user_id": 1,
+  "amount": 5000,
+  "loan_date": "2025-11-16",
+  "payment_method": "cash",
+  "notes": "Salary advance"
+}
+```
+
+**Account Transactions Created**:
+- Credit UD-001: Loan amount
+- Debit CASH-001/BANK-001: Loan amount
+
+### Udhaar Repayment
+
+When staff repays loan:
+
+1. **Udhaar**: Debit UD-001
+2. **Cash/Bank**: Credit CASH-001 or BANK-001
+
+**API Endpoint**: `POST /api/udhaars/{id}/repayments`
+
+**Account Transactions Created**:
+- Debit UD-001: Repayment amount
+- Credit CASH-001/BANK-001: Repayment amount
+
+### Bill Creation (Operational Expense)
+
+When recording a bill/expense:
+
+1. **Operational Expenses**: Debit EXP-003
+2. **Cash/Bank**: Debit CASH-001 or BANK-001
+
+**API Endpoint**: `POST /api/bills`
+
+**Request Example**:
+```json
+{
+  "tag": "Rent",
+  "amount": 10000,
+  "bill_date": "2025-11-16",
+  "payment_method": "bank",
+  "note": "Monthly rent payment"
+}
+```
+
+**Account Transactions Created**:
+- Debit EXP-003: Bill amount
+- Debit CASH-001/BANK-001: Bill amount
+
+**Note**: If bill is linked to udhaar (`udhaar_id` provided), the expense is paid by reducing the udhaar (no cash movement):
+- Debit EXP-003: Bill amount
+- Debit UD-001: Bill amount
+
+### Salary Payment
+
+When paying staff salary:
+
+1. **Staff Salary**: Debit EXP-002
+2. **Cash/Bank**: Debit CASH-001 or BANK-001
+3. **Udhaar Adjustment** (if applicable): Debit UD-001, Credit CASH-001/BANK-001
+
+**API Endpoint**: `POST /api/salary-payments/{id}/mark-paid`
+
+**Request Example**:
+```json
+{
+  "amount": 50000,
+  "paid_on": "2025-11-16",
+  "method": "bank",
+  "account_id": 2,
+  "adjust_udhaar": true,
+  "notes": "November salary"
+}
+```
+
+**Account Transactions Created**:
+- Debit EXP-002: Salary amount (after udhaar adjustment)
+- Debit CASH-001/BANK-001: Salary amount
+- If `adjust_udhaar: true` and staff has active udhaar:
+  - Debit UD-001: Adjustment amount
+  - Credit CASH-001/BANK-001: Adjustment amount
+
+### Stock Purchase
+
+When buying stock from supplier:
+
+1. **Stock Purchase/COGS**: Debit EXP-001
+2. **Cash/Bank**: Debit CASH-001 or BANK-001
+
+**API Endpoint**: `POST /api/suppliers/{supplierId}/purchases`
+
+**Request Example**:
+```json
+{
+  "transaction_date": "2025-11-16",
+  "payment_method": "cash",
+  "record_payment": true,
+  "items": [...]
+}
+```
+
+**Account Transactions Created**:
+- Debit EXP-001: Purchase total
+- Debit CASH-001/BANK-001: Purchase total
+
+## API Changes
+
+### Invoice Controller
+
+**No breaking changes** - All existing endpoints work as before. The system now additionally records AR and ADV movements in accounts.
+
+### Udhaar Controller
+
+**No breaking changes** - All existing endpoints work as before. The system now records UD-001 and Cash/Bank movements.
+
+### Bill Controller
+
+**New optional fields**:
+- `payment_method` (string): Payment method (cash, bank, online, etc.)
+- `account_id` (integer): Specific account ID to use for payment
+
+**Behavior**: Bills now record to EXP-003 instead of debiting Revenue account.
+
+### Salary Payment Controller
+
+**New optional fields**:
+- `account_id` (integer): Specific account ID to use for payment
+- `adjust_udhaar` (boolean): Whether to adjust udhaar loans with this payment
+
+### Supplier Controller
+
+**New optional fields**:
+- `payment_method` (string): Payment method (cash, bank, online, etc.)
+- `account_id` (integer): Specific account ID to use for payment
+- `record_payment` (boolean): Whether to record payment immediately (default: true)
+
+### Account Controller
+
+**New account types**: The `type` field now accepts:
+- `receivable`
+- `advance`
+- `udhaar`
+- `expense`
+- `loss`
+- `equity`
+
+**System accounts protection**: The following accounts cannot be deleted:
+- CASH-001, BANK-001, REV-001, AR-001, ADV-001, UD-001, EXP-001, EXP-002, EXP-003, LOSS-001, EQ-001
+
+## Account Balance Querying
+
+### Get All Accounts
+
+**Endpoint**: `GET /api/accounts`
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": {
+    "accounts": [
+      {
+        "id": 1,
+        "name": "Cash",
+        "type": "cash",
+        "code": "CASH-001",
+        "balance": "50000.00",
+        "is_active": true
+      },
+      ...
+    ],
+    "total_revenue": "150000.00"
+  }
+}
+```
+
+### Get Account Transactions
+
+**Endpoint**: `GET /api/accounts/{id}/transactions`
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": {
+    "data": [
+      {
+        "id": 1,
+        "type": "credit",
+        "amount": "1000.00",
+        "balance_after": "51000.00",
+        "description": "Payment received for invoice INV-001",
+        "reference_type": "Invoice",
+        "reference_id": 1,
+        "transaction_date": "2025-11-16 10:00:00"
+      },
+      ...
+    ]
+  }
+}
+```
+
+### Get Account Summary
+
+**Endpoint**: `GET /api/accounts/summary`
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": {
+    "total_revenue": "150000.00",
+    "accounts_count": 11,
+    "revenue_account": {...},
+    "cash_account": {...},
+    "bank_account": {...},
+    "accounts": [...]
+  }
+}
+```
+
+## Backward Compatibility
+
+The system maintains full backward compatibility:
+
+1. **Customer balances**: `customer.due_balance` and `customer.advance_balance` are still updated and returned in API responses
+2. **Existing endpoints**: All existing API endpoints work without changes
+3. **Account transactions**: New account transactions are created alongside existing customer transaction records
+
+## Migration
+
+After deploying the code changes:
+
+1. **Run migrations**: `php artisan migrate`
+2. **Seed accounts**: `php artisan db:seed --class=AccountSeeder`
+3. **Migrate existing balances**: The migration `migrate_customer_balances_to_accounts` will automatically backfill existing customer balances to AR-001 and ADV-001 accounts
+
+## Testing Checklist
+
+- [ ] Invoice creation with credit sale records AR correctly
+- [ ] Invoice payment reduces AR and increases Cash/Bank
+- [ ] Customer advance application reduces ADV and increases AR
+- [ ] Udhaar loan creation increases UD and decreases Cash/Bank
+- [ ] Udhaar repayment decreases UD and increases Cash/Bank
+- [ ] Bill creation decreases EXP-003 and Cash/Bank
+- [ ] Salary payment decreases EXP-002 and Cash/Bank, adjusts UD if applicable
+- [ ] Supplier purchase payment decreases EXP-001 and Cash/Bank
+- [ ] All account balances are accurate
+- [ ] Backward compatibility: customer balances still returned in API responses
+
+## Notes
+
+1. **Double-Entry Bookkeeping**: Every transaction creates at least two account entries (debit and credit) to maintain balance
+2. **Audit Trail**: All transactions are recorded in `account_transactions` table with reference to the source entity
+3. **Account Balances**: Account balances are automatically calculated and updated when transactions occur
+4. **System Accounts**: System accounts (CASH-001, BANK-001, etc.) are created by the seeder and cannot be deleted
+5. **Revenue Recognition**: Revenue is recognized when sale occurs (invoice created), not when payment is received
+6. **Expense Recognition**: Expenses are recognized when payment is made, not when bill is created
+

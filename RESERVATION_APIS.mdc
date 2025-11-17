@@ -1,0 +1,136 @@
+## Reservation & Advance API
+
+### 1. Customer Profile Extras
+- `GET /api/customers/{id}/profile`
+  - Always returns `advance_balance` and `due_balance` (existing fields).
+  - New `reservations` array (latest 20 by default) with:
+    - `id`, `reference`, `status`, `pickup_date`, `note`
+    - `advance_amount`, `advance_applied_amount`, `advance_refunded_amount`
+    - `advance_remaining` (computed): amount still available to apply/refund
+    - `items[]`: `stock_item_id`, `quantity`, `unit_price`, plus optional `stock_item` snapshot
+
+Use this payload to populate the POS sidebar when a customer is selected (advance slider, outstanding reservations, etc.).
+
+### 2. Reservation Lifecycle
+
+#### Create
+- `POST /api/reservations`
+- Body:
+```jsonc
+{
+  "customer_id": 12,
+  "pickup_date": "2025-11-20",
+  "note": "Pickup after 5pm",
+  "items": [
+    { "stock_item_id": 3, "quantity": 2, "unit_price": 150 },
+    { "stock_item_id": 8, "quantity": 1.5, "unit_price": 90 }
+  ],
+  "advance_payment": {
+    "amount": 500,
+    "deposit_account_id": 2,   // cash/bank account
+    "method": "cash"           // cash | bank | online | bank transfer | online transfer
+  }
+}
+```
+- Effects:
+  - Validates on-hand vs reserved stock (`available = quantity - reserved_quantity`).
+  - Adds `reserved_quantity` against each stock item (exposed via stock APIs).
+  - If `advance_payment` supplied:
+    - Credits the deposit account (Cash/Bank).
+    - Credits `ADV-001` via `recordAdvanceIncrease`.
+    - Updates `customer.advance_balance` and adds a `customer_transactions` row.
+  - Returns the reservation (+ `advance_remaining`) so UI can show summary.
+
+#### Complete → Invoice
+- `POST /api/reservations/{reservation}/complete`
+- Body: **same as POS invoice payload** (items, payment mode/breakdown, etc.) plus:
+  - `advance_to_apply` (slider value – validated against available reservation advance)
+  - Optional `advance_amount_hint`, `pickup_date`, `reservation_note` overrides
+- Behaviour:
+  - The controller pipes the payload into `POST /api/invoices`.
+  - `InvoiceController` now understands:
+    - `reservation_id`
+    - `reservation_reference`
+    - `advance_amount_hint`
+    - `pickup_date`
+    - `reservation_note`
+    - `generate_invoice` (boolean, default `true`)
+  - When an invoice is linked to a reservation:
+    - Reserved stock is released (only for that reservation’s quantities).
+    - Reservation status→`completed`, `completed_invoice_id` stored.
+    - `advance_applied_amount` incremented by the invoice’s `advance_applied`.
+    - Remaining advance stays in liability/customer balance.
+  - If `generate_invoice: false`, the reservation is marked completed without creating an invoice entry (used for advance-only reservations or internal stock holds).
+
+Use the invoice response (already includes updated `customer_due_balance` and `customer_advance_balance`) to refresh UI totals.
+
+#### Release / Cancel
+- `POST /api/reservations/{reservation}/release`
+- Body:
+```jsonc
+{
+  "reason": "Customer cancelled",
+  "refund": {
+    "amount": 300,
+    "deposit_account_id": 1,
+    "method": "cash"
+  }
+}
+```
+- Behaviour:
+  - Releases reserved stock back to availability.
+  - If a refund is provided:
+    - Debits the specified Cash/Bank account.
+    - Debits `ADV-001` (`recordAdvanceDecrease`).
+    - Decreases `customer.advance_balance` and records a `customer_transactions` row.
+  - Reservation status→`released`, `released_at` + `release_reason` stored.
+  - If no refund is provided the advance remains with the business (still part of ADV-001).
+
+#### Download Reservation Receipt
+- `GET /api/reservations/{reservation}/receipt`
+- Returns a PDF receipt summarizing:
+  - Customer info, reservation status, pickup date
+  - Full item list with quantities/prices
+  - Advance received, remaining advance, amount due on pickup
+  - Deposit account + payment method used for the advance
+- Use this immediately after creating a reservation so customers get a written acknowledgement of their advance without generating an invoice yet.
+
+### 3. Stock Inventory Changes
+- `stock_items` now have `reserved_quantity` (decimal, default 0) and derived `available_quantity = quantity - reserved_quantity`.
+- Every stock response (`GET /api/items`, etc.) includes both values so frontend can show:
+  - On-hand: `quantity`
+  - Reserved: `reserved_quantity`
+  - Available for sale: `available_quantity`
+- POS validation uses `available_quantity` to stop selling stock that’s held for other reservations.
+
+### 4. Invoice API Additions
+- Optional request fields:
+  - `reservation_id`
+  - `reservation_reference`
+  - `advance_amount_hint`
+  - `pickup_date`
+  - `reservation_note`
+- Optional response fields (already part of the `data` block):
+  - `reservation_id`, `reservation_reference`, `pickup_date`, `reservation_note`
+  - `advance_amount_hint`
+  - `customer_due_balance`, `customer_advance_balance` (existing)
+- When `reservation_id` is supplied directly (without calling the reservation endpoint) the same reservation completion logic runs (status update, stock release, advance tracking).
+
+### 5. Accounting Summary
+| Action | Cash/Bank | ADV-001 | Notes |
+|--------|-----------|---------|-------|
+| Reservation advance received | **Credit** (increase) | **Credit** via `recordAdvanceIncrease` | Customer advance liability grows |
+| Reservation completion (advance applied) | – | **Debit** via existing invoice logic | Revenue only recognized for actual cash received |
+| Reservation release refund | **Debit** (cash out) | **Debit** via `recordAdvanceDecrease` | Advance liability reduced |
+
+All entries run through `account_transactions` for audit. Frontend does not need extra accounting calls; just use the existing balance numbers returned by invoice/reservation responses.
+
+### 6. Invoice PDF Enhancements
+- `GET /api/invoices/{id}/download` now includes:
+  - Reservation metadata (reference, pickup date, reservation note) when applicable
+  - Detailed product rows (SKU, unit, qty × rate)
+  - Advance summary (applied amount, remaining customer advance, requested advance)
+  - Customer running balances post-sale (due + advance)
+  - Payment breakdown with deposit accounts
+- Hidden costs remain internal and are not displayed on the PDF.
+

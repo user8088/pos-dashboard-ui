@@ -31,17 +31,28 @@ import { useToast, Textarea } from "@chakra-ui/react";
 import { billingService } from "services/billingService";
 import { FiSearch } from "react-icons/fi";
 
-const BillingInformation = ({ title, data }) => {
+const BillingInformation = ({ title, data, accounts = [] }) => {
   const textColor = useColorModeValue("gray.700", "white");
   const { isOpen, onOpen, onClose } = useDisclosure();
   const { isOpen: isAddOpen, onOpen: onAddOpen, onClose: onAddClose } = useDisclosure();
   const [query, setQuery] = React.useState("");
+  
+  // Ensure accounts is always an array
+  const accountsList = React.useMemo(() => {
+    if (!accounts) return [];
+    if (Array.isArray(accounts)) return accounts;
+    if (accounts.accounts && Array.isArray(accounts.accounts)) return accounts.accounts;
+    if (accounts.data && Array.isArray(accounts.data)) return accounts.data;
+    return [];
+  }, [accounts]);
   const [newBill, setNewBill] = React.useState({
     tag: "fuel",
     amount: "",
     bill_date: new Date().toISOString().slice(0,10),
     note: "",
     udhaar_id: "",
+    payment_method: "cash",
+    account_id: "",
     type: "BILL"
   });
   const [submitting, setSubmitting] = React.useState(false);
@@ -80,17 +91,47 @@ const BillingInformation = ({ title, data }) => {
         bill_date: newBill.bill_date,
         note: newBill.note || undefined,
         udhaar_id: newBill.udhaar_id ? Number(newBill.udhaar_id) : undefined,
+        payment_method: newBill.payment_method || undefined,
+        account_id: newBill.account_id ? Number(newBill.account_id) : undefined,
       };
       const resp = await billingService.createBill(payload);
       toast({ title: resp?.message || 'Bill recorded successfully', status: 'success', duration: 3000, isClosable: true });
-      setNewBill({ tag: 'fuel', amount: "", bill_date: new Date().toISOString().slice(0,10), note: "", udhaar_id: "", type: 'BILL' });
+      setNewBill({ 
+        tag: 'fuel', 
+        amount: "", 
+        bill_date: new Date().toISOString().slice(0,10), 
+        note: "", 
+        udhaar_id: "", 
+        payment_method: "cash",
+        account_id: "",
+        type: 'BILL' 
+      });
       onAddClose();
+      // Trigger a page refresh to show the new bill
+      setTimeout(() => {
+        window.location.reload();
+      }, 500);
     } catch (e) {
       toast({ title: 'Failed to record bill', description: e.message || 'Please try again', status: 'error', duration: 4000, isClosable: true });
     } finally {
       setSubmitting(false);
     }
   };
+
+  // Auto-select cash account when payment method is cash
+  React.useEffect(() => {
+    if (newBill.payment_method === 'cash' && accountsList.length > 0) {
+      const cashAccount = accountsList.find(acc => (acc.type || '').toLowerCase() === 'cash');
+      if (cashAccount && !newBill.account_id) {
+        setNewBill(prev => ({ ...prev, account_id: String(cashAccount.id) }));
+      }
+    } else if (newBill.payment_method === 'bank' && accountsList.length > 0) {
+      const bankAccount = accountsList.find(acc => (acc.type || '').toLowerCase() === 'bank');
+      if (bankAccount && !newBill.account_id) {
+        setNewBill(prev => ({ ...prev, account_id: String(bankAccount.id) }));
+      }
+    }
+  }, [newBill.payment_method, accountsList]);
 
   return (
     <Card>
@@ -210,12 +251,39 @@ const BillingInformation = ({ title, data }) => {
 
               <Grid templateColumns={{ base: '1fr', md: '1fr 1fr' }} gap='12px' w='100%'>
                 <FormControl>
-                  <FormLabel color={textColor}>Amount</FormLabel>
+                  <FormLabel color={textColor}>Amount *</FormLabel>
                   <Input type='number' step='0.01' placeholder='Enter amount' value={newBill.amount} onChange={(e) => setNewBill({ ...newBill, amount: e.target.value })} />
                 </FormControl>
                 <FormControl>
-                  <FormLabel color={textColor}>Bill Date</FormLabel>
+                  <FormLabel color={textColor}>Bill Date *</FormLabel>
                   <Input type='date' value={newBill.bill_date} onChange={(e) => setNewBill({ ...newBill, bill_date: e.target.value })} />
+                </FormControl>
+              </Grid>
+
+              <Grid templateColumns={{ base: '1fr', md: '1fr 1fr' }} gap='12px' w='100%'>
+                <FormControl>
+                  <FormLabel color={textColor}>Payment Method</FormLabel>
+                  <Select value={newBill.payment_method} onChange={(e) => setNewBill({ ...newBill, payment_method: e.target.value, account_id: "" })}>
+                    <option value='cash'>Cash</option>
+                    <option value='bank'>Bank Transfer</option>
+                    <option value='online'>Online Payment</option>
+                    <option value='other'>Other</option>
+                  </Select>
+                </FormControl>
+                <FormControl>
+                  <FormLabel color={textColor}>Payment Account (Optional)</FormLabel>
+                  <Select 
+                    placeholder='Select account (auto-selected based on payment method)'
+                    value={newBill.account_id} 
+                    onChange={(e) => setNewBill({ ...newBill, account_id: e.target.value })}>
+                    {accountsList
+                      .filter(acc => acc && acc.is_active !== false)
+                      .map(acc => (
+                        <option key={acc.id} value={acc.id}>
+                          {acc.name} {acc.code ? `(${acc.code})` : ''} - PKR {parseFloat(acc.balance || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </option>
+                      ))}
+                  </Select>
                 </FormControl>
               </Grid>
 
@@ -226,7 +294,15 @@ const BillingInformation = ({ title, data }) => {
 
               <FormControl>
                 <FormLabel color={textColor}>Link to Staff Loan (Udhaar ID, optional)</FormLabel>
-                <Input placeholder='Enter Udhaar ID (optional)' value={newBill.udhaar_id} onChange={(e) => setNewBill({ ...newBill, udhaar_id: e.target.value })} />
+                <Input 
+                  type='number'
+                  placeholder='Enter Udhaar ID (optional)' 
+                  value={newBill.udhaar_id} 
+                  onChange={(e) => setNewBill({ ...newBill, udhaar_id: e.target.value })} 
+                />
+                <Text fontSize='xs' color='gray.500' mt='4px'>
+                  If provided, the expense will be paid by reducing the udhaar balance (no cash movement)
+                </Text>
               </FormControl>
               
               <Button

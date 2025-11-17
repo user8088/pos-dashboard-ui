@@ -70,6 +70,21 @@ class InvoiceService {
     
     return { success: true };
   }
+
+  async fetchInvoicePdf(id) {
+    const token = localStorage.getItem('token');
+    const url = `${WEB_BASE_URL}/api/invoices/${id}/download`;
+    const headers = {
+      'Accept': 'application/pdf',
+      ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+    };
+    const res = await fetch(url, { headers });
+    if (!res.ok) {
+      const error = await res.json().catch(() => ({}));
+      throw new Error(error?.message || 'Failed to fetch invoice PDF');
+    }
+    return res.blob();
+  }
 }
 
 export const invoiceService = new InvoiceService();

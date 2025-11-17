@@ -68,17 +68,28 @@ const UdhaarList = ({ onTotalChange }) => {
     } catch (error) {
       console.error('Failed to load Udhaars:', error);
       setUdhaarData([]);
-      toast({
-        title: 'Error loading Udhaar records',
-        description: error.message || 'Server error. Please try again later.',
-        status: 'error',
-        duration: 4000,
-        isClosable: true,
-      });
+      // Check if it's a backend syntax error (PHP issue)
+      const errorMsg = error.message || '';
+      const isBackendSyntaxError = errorMsg.includes('syntax error') || errorMsg.includes('unexpected token');
+      
+      // Only show toast for non-syntax errors to avoid spam
+      // Backend syntax errors need to be fixed on the server side
+      if (!isBackendSyntaxError) {
+        toast({
+          title: 'Error loading Udhaar records',
+          description: errorMsg || 'Server error. Please try again later.',
+          status: 'error',
+          duration: 5000,
+          isClosable: true,
+        });
+      } else {
+        // For backend syntax errors, just log silently and show empty state
+        console.warn('Backend syntax error in Udhaar endpoint - this needs to be fixed on the server');
+      }
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [toast]);
 
   // Load data on mount
   React.useEffect(() => {
@@ -149,9 +160,14 @@ const UdhaarList = ({ onTotalChange }) => {
                 <Spinner size="lg" />
               </Flex>
             ) : udhaarData.length === 0 ? (
-              <Text color="gray.500" fontSize="sm" p="24px">
-                No Udhaar records found
-              </Text>
+              <Box p="24px" textAlign="center">
+                <Text color="gray.500" fontSize="sm" mb="8px">
+                  No Udhaar records found
+                </Text>
+                <Text color="gray.400" fontSize="xs">
+                  Staff loans will appear here when created
+                </Text>
+              </Box>
             ) : (
               udhaarData.slice(0, 3).map((row) => {
                 return (
