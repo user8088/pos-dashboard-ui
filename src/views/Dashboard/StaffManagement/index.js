@@ -68,8 +68,35 @@ const StaffManagement = () => {
     setAttendanceData({});
     loadStaff();
     loadAttendanceData();
-    loadStats();
   }, [selectedDate]);
+
+  // Recalculate stats whenever staff or attendanceData changes
+  useEffect(() => {
+    // Calculate stats from loaded staff and attendance data
+    const totalStaff = staff.length;
+    
+    // Count attendance statuses for the selected date
+    let presentToday = 0;
+    let absentToday = 0;
+    let onLeaveToday = 0;
+    
+    Object.values(attendanceData).forEach(record => {
+      if (record.status === 'present' || record.status === 'late' || record.status === 'half-day') {
+        presentToday++;
+      } else if (record.status === 'absent') {
+        absentToday++;
+      } else if (record.status === 'leave') {
+        onLeaveToday++;
+      }
+    });
+    
+    setStats({
+      total_staff: totalStaff,
+      present_today: presentToday,
+      absent_today: absentToday,
+      on_leave_today: onLeaveToday,
+    });
+  }, [staff, attendanceData]);
 
   const handleDateChange = (value) => {
     setAttendanceData({});
@@ -130,16 +157,6 @@ const StaffManagement = () => {
     }
   };
 
-  const loadStats = async () => {
-    try {
-      const response = await staffService.getUserStats();
-      if (response.success) {
-        setStats(response.data);
-      }
-    } catch (error) {
-      console.error('Failed to load stats:', error);
-    }
-  };
 
   const markAttendance = async (userId, status, customRemarks = '') => {
     try {
@@ -180,7 +197,6 @@ const StaffManagement = () => {
       });
 
       onClose();
-      loadStats();
     } catch (error) {
       toast({
         title: 'Error',
@@ -225,8 +241,6 @@ const StaffManagement = () => {
         duration: 3000,
         isClosable: true,
       });
-
-      loadStats();
     } catch (error) {
       toast({
         title: 'Error',
@@ -291,7 +305,6 @@ const StaffManagement = () => {
         });
         onAddStaffClose();
         loadStaff();
-        loadStats();
       } else {
         // Handle case where response doesn't have success property
         toast({

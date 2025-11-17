@@ -27,7 +27,7 @@ import {
 import BackgroundCard1 from "assets/img/BackgroundCard1.png";
 import { MastercardIcon, VisaIcon } from "components/Icons/Icons";
 import React from "react";
-import { FaPaypal, FaWallet, FaExchangeAlt } from "react-icons/fa";
+import { FaPaypal, FaWallet, FaExchangeAlt, FaChartBar, FaMoneyBillWave, FaHandHoldingUsd, FaBalanceScale } from "react-icons/fa";
 import { RiMastercardFill } from "react-icons/ri";
 import {
   billingData,
@@ -318,9 +318,72 @@ function Billing() {
   const cashAccount = accountsSummary?.cash_account;
   const bankAccount = accountsSummary?.bank_account;
 
+  const [accountToView, setAccountToView] = React.useState(null);
+
+  // Calculate overall account statistics
+  const accountStats = React.useMemo(() => {
+    if (!accounts || accounts.length === 0) {
+      return {
+        totalAssets: 0,
+        totalLiabilities: 0,
+        totalExpenses: 0,
+        totalRevenue: 0,
+        netWorth: 0,
+        totalAccounts: 0,
+      };
+    }
+
+    let totalAssets = 0; // Cash + Bank + Receivables
+    let totalLiabilities = 0; // Advances + Udhaar
+    let totalExpenses = 0; // All expense accounts
+    let totalRevenue = 0; // Revenue accounts
+    let totalEquity = 0; // Equity accounts
+    let totalLosses = 0; // Loss accounts
+
+    accounts.forEach((account) => {
+      const balance = parseBalance(account.balance);
+      const type = (account.type || "custom").toLowerCase();
+
+      if (type === "cash" || type === "bank" || type === "receivable") {
+        totalAssets += balance;
+      } else if (type === "advance" || type === "udhaar") {
+        totalLiabilities += Math.abs(balance); // Liabilities are typically positive in accounting
+      } else if (type === "expense") {
+        totalExpenses += Math.abs(balance);
+      } else if (type === "revenue") {
+        totalRevenue += balance;
+      } else if (type === "equity") {
+        totalEquity += balance;
+      } else if (type === "loss") {
+        totalLosses += Math.abs(balance);
+      }
+    });
+
+    // Net Worth = Assets - Liabilities + Equity - Losses
+    const netWorth = totalAssets - totalLiabilities + totalEquity - totalLosses;
+
+    return {
+      totalAssets,
+      totalLiabilities,
+      totalExpenses,
+      totalRevenue,
+      totalEquity,
+      totalLosses,
+      netWorth,
+      totalAccounts: accounts.length,
+    };
+  }, [accounts]);
+
   const handleAccountClick = (account) => {
-    // Could open a modal or navigate to account details
+    // This will be handled by AccountHierarchy component
     console.log("Account clicked:", account);
+  };
+
+  // Handler for PaymentStatistics cards
+  const handlePaymentStatClick = (account) => {
+    if (account && account.id) {
+      setAccountToView(account);
+    }
   };
 
   return (
@@ -340,8 +403,36 @@ function Billing() {
         </Button>
       </Flex>
 
+      {/* Overall Account Statistics */}
+      <Grid templateColumns={{ sm: "1fr", md: "1fr 1fr", lg: "1fr 1fr 1fr 1fr" }} gap='26px' mb='26px'>
+        <PaymentStatistics
+          icon={<Icon h={"24px"} w={"24px"} color='white' as={FaChartBar} />}
+          title="Total Assets"
+          description="Cash + Bank + Receivables"
+          amount={`PKR ${formatBalance(accountStats.totalAssets)}`}
+        />
+        <PaymentStatistics
+          icon={<Icon h={"24px"} w={"24px"} color='white' as={FaHandHoldingUsd} />}
+          title="Total Liabilities"
+          description="Advances + Staff Loans"
+          amount={`PKR ${formatBalance(accountStats.totalLiabilities)}`}
+        />
+        <PaymentStatistics
+          icon={<Icon h={"24px"} w={"24px"} color='white' as={FaMoneyBillWave} />}
+          title="Total Expenses"
+          description="All Expense Accounts"
+          amount={`PKR ${formatBalance(accountStats.totalExpenses)}`}
+        />
+        <PaymentStatistics
+          icon={<Icon h={"24px"} w={"24px"} color='white' as={FaBalanceScale} />}
+          title="Net Worth"
+          description="Assets - Liabilities"
+          amount={`PKR ${formatBalance(accountStats.netWorth)}`}
+        />
+      </Grid>
+
       {/* Key Metrics Cards */}
-      <Grid templateColumns={{ sm: "1fr", md: "1fr 1fr", xl: "1fr 1fr 1fr 1fr" }} gap='26px' mb='26px'>
+      <Grid templateColumns={{ sm: "1fr", lg: "1fr 1fr" , xl: "1fr 1fr 1fr 1fr" }} gap='26px' mb='26px'>
         <CreditCard
           backgroundImage={BackgroundCard1}
           title={"Total Revenue"}
@@ -363,30 +454,28 @@ function Billing() {
             />
           }
         />
-        {cashAccount && (
-          <PaymentStatistics
-            icon={<Icon h={"24px"} w={"24px"} color='white' as={FaWallet} />}
-            title={cashAccount.name || "Cash"}
-            description={cashAccount.code || "Cash Account"}
-            amount={`PKR ${formatBalance(cashAccount.balance)}`}
-          />
-        )}
-        {bankAccount && (
-          <PaymentStatistics
-            icon={<Icon h={"24px"} w={"24px"} color='white' as={FaPaypal} />}
-            title={bankAccount.name || "Bank"}
-            description={bankAccount.code || "Bank Account"}
-            amount={`PKR ${formatBalance(bankAccount.balance)}`}
-          />
-        )}
-        {revenueAccount && (
-          <PaymentStatistics
-            icon={<Icon h={"24px"} w={"24px"} color='white' as={RiMastercardFill} />}
-            title={revenueAccount.name || "Revenue"}
-            description={revenueAccount.code || "Revenue Account"}
-            amount={`PKR ${formatBalance(revenueAccount.balance)}`}
-          />
-        )}
+        <Grid templateColumns={{ sm: "1fr", md: "1fr 1fr" }} gap='26px' mb='26px'>
+          {cashAccount && (
+            <PaymentStatistics
+              icon={<Icon h={"24px"} w={"24px"} color='white' as={FaWallet} />}
+              title={cashAccount.name || "Cash"}
+              description={cashAccount.code || "Cash Account"}
+              amount={`PKR ${formatBalance(cashAccount.balance)}`}
+              account={cashAccount}
+              onClick={() => handlePaymentStatClick(cashAccount)}
+            />
+          )}
+          {bankAccount && (
+            <PaymentStatistics
+              icon={<Icon h={"24px"} w={"24px"} color='white' as={FaPaypal} />}
+              title={bankAccount.name || "Bank"}
+              description={bankAccount.code || "Bank Account"}
+              amount={`PKR ${formatBalance(bankAccount.balance)}`}
+              account={bankAccount}
+              onClick={() => handlePaymentStatClick(bankAccount)}
+            />
+          )}
+        </Grid>
       </Grid>
 
       {/* Main Content Grid */}
@@ -398,7 +487,12 @@ function Billing() {
               <Spinner size='xl' />
             </Flex>
           ) : (
-            <AccountHierarchy accounts={accounts} onAccountClick={handleAccountClick} />
+            <AccountHierarchy 
+              accounts={accounts} 
+              onAccountClick={handleAccountClick}
+              accountToView={accountToView}
+              onAccountViewed={() => setAccountToView(null)}
+            />
           )}
         </Box>
 

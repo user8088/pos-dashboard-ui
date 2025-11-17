@@ -53,12 +53,14 @@ import {
 } from '@chakra-ui/react';
 import { AddIcon, EditIcon, DeleteIcon, InfoIcon } from '@chakra-ui/icons';
 import { staffService } from '../../../services/staffService';
+import { accountService } from '../../../services/accountService';
 
 const SalaryTracker = () => {
   const [loading, setLoading] = useState(false);
   const [salaryStructures, setSalaryStructures] = useState([]);
   const [salaryPayments, setSalaryPayments] = useState([]);
   const [staff, setStaff] = useState([]);
+  const [accounts, setAccounts] = useState([]);
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().substr(0, 7));
   const [stats, setStats] = useState({});
   
@@ -71,9 +73,10 @@ const SalaryTracker = () => {
   const [editingPayment, setEditingPayment] = useState(null);
   const [markPaidPayment, setMarkPaidPayment] = useState(null);
   const [markPaidDate, setMarkPaidDate] = useState(new Date().toISOString().split('T')[0]);
+  const [markPaidAccountId, setMarkPaidAccountId] = useState('');
   const { isOpen: isTxnOpen, onOpen: onTxnOpen, onClose: onTxnClose } = useDisclosure();
   const [txnPayment, setTxnPayment] = useState(null);
-  const [txnForm, setTxnForm] = useState({ amount: '', paid_on: new Date().toISOString().split('T')[0], method: '', notes: '' });
+  const [txnForm, setTxnForm] = useState({ amount: '', paid_on: new Date().toISOString().split('T')[0], method: '', notes: '', account_id: '' });
   const [expandedPaymentId, setExpandedPaymentId] = useState(null);
   const [transactionsByPayment, setTransactionsByPayment] = useState({});
   const [txnsLoadingId, setTxnsLoadingId] = useState(null);
@@ -87,6 +90,7 @@ const SalaryTracker = () => {
     paid_on: new Date().toISOString().split('T')[0],
     method: '',
     notes: '',
+    account_id: '',
     payment_type: 'salary', // 'salary', 'udhaar', 'commission'
     period_type: 'month', // 'week', 'month', 'year'
     period_value: new Date().toISOString().substr(0, 7), // YYYY-MM for month, YYYY-MM-DD for week, YYYY for year
@@ -167,8 +171,26 @@ const SalaryTracker = () => {
       loadStaff(),
       loadSalaryStructures(),
       loadSalaryPayments(),
-      loadStats(),
+      loadAccounts(),
     ]);
+  };
+
+  const loadAccounts = async () => {
+    try {
+      const response = await accountService.listAccounts();
+      if (response && response.success) {
+        const accountsList = Array.isArray(response.data) 
+          ? response.data 
+          : Array.isArray(response.data?.accounts)
+          ? response.data.accounts
+          : Array.isArray(response.data?.data)
+          ? response.data.data
+          : [];
+        setAccounts(accountsList.filter(acc => acc && acc.is_active !== false));
+      }
+    } catch (error) {
+      console.error('Failed to load accounts:', error);
+    }
   };
 
   const loadStaff = async () => {
@@ -225,12 +247,17 @@ const SalaryTracker = () => {
     }
   };
 
-  const loadStats = async () => {
+  // Recalculate stats whenever staff or salaryPayments changes
+  useEffect(() => {
     try {
       // Calculate stats from current data
-      const totalPayments = salaryPayments.reduce((sum, payment) => sum + parseFloat(payment.amount || 0), 0);
+      // Total Payments should show the actual amount paid, not the salary amount
+      const totalPayments = salaryPayments.reduce((sum, payment) => {
+        const paidAmount = parseFloat(payment.paid_amount || payment.paid || 0);
+        return sum + paidAmount;
+      }, 0);
       const pendingPayments = salaryPayments.filter(payment => payment.status === 'pending').length;
-      const paidPayments = salaryPayments.filter(payment => payment.status === 'paid').length;
+      const paidPayments = salaryPayments.filter(payment => payment.status === 'paid' || payment.status === 'partial').length;
       
       setStats({
         totalPayments,
@@ -240,8 +267,15 @@ const SalaryTracker = () => {
       });
     } catch (error) {
       console.error('Failed to calculate stats:', error);
+      // Set default stats on error
+      setStats({
+        totalPayments: 0,
+        pendingPayments: 0,
+        paidPayments: 0,
+        totalStaff: staff.length || 0,
+      });
     }
-  };
+  }, [staff, salaryPayments]);
 
   const handleCreateStructure = async () => {
     try {
@@ -341,12 +375,11 @@ const SalaryTracker = () => {
           isClosable: true,
         });
         loadSalaryPayments();
-        loadStats();
       }
     } catch (error) {
-      toast({
-        title: 'Error',
-        description: 'Failed to generate monthly payments',
+        toast({
+          title: 'Error',
+          description: 'Failed to generate monthly payments',
         status: 'error',
         duration: 3000,
         isClosable: true,
@@ -371,7 +404,6 @@ const SalaryTracker = () => {
         onMarkPaidClose();
         setMarkPaidPayment(null);
         loadSalaryPayments();
-        loadStats();
       }
     } catch (error) {
       toast({ title: 'Error', description: 'Failed to mark payment as paid', status: 'error', duration: 3000, isClosable: true });
@@ -409,11 +441,37 @@ const SalaryTracker = () => {
       paid_on: new Date().toISOString().split('T')[0],
       method: '',
       notes: '',
+      account_id: '',
       payment_type: 'salary',
       period_type: 'month',
       period_value: new Date().toISOString().substr(0, 7),
     });
     setAttendanceBasedSalary(null);
+  };
+
+  // Helper functions for account selection
+  const formatAccountName = (acc) => {
+    if (!acc) return '';
+    return `${acc.name}${acc.code ? ` (${acc.code})` : ''} - PKR ${parseFloat(acc.balance || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  };
+
+  const getCashAccounts = () => {
+    return accounts.filter(acc => acc.type === 'cash');
+  };
+
+  const getBankAccounts = () => {
+    return accounts.filter(acc => acc.type === 'bank');
+  };
+
+  const getFilteredAccounts = (method) => {
+    if (!method) return accounts;
+    const methodLower = method.toLowerCase();
+    if (methodLower.includes('cash')) {
+      return getCashAccounts();
+    } else if (methodLower.includes('bank') || methodLower.includes('online') || methodLower.includes('transfer')) {
+      return getBankAccounts();
+    }
+    return accounts;
   };
 
   // Calculate period dates based on type and value
@@ -873,7 +931,7 @@ const SalaryTracker = () => {
                           <HStack spacing={2}>
                             <Button
                               size="sm"
-                              onClick={() => { setTxnPayment(payment); setTxnForm({ amount: '', paid_on: new Date().toISOString().split('T')[0], method: '', notes: '' }); onTxnOpen(); }}
+                              onClick={() => { setTxnPayment(payment); setTxnForm({ amount: '', paid_on: new Date().toISOString().split('T')[0], method: '', notes: '', account_id: '' }); onTxnOpen(); }}
                             >
                               Add Payment
                             </Button>
@@ -1225,7 +1283,37 @@ const SalaryTracker = () => {
               </FormControl>
               <FormControl>
                 <FormLabel>Method</FormLabel>
-                <Input value={quickPayForm.method} onChange={(e) => setQuickPayForm({ ...quickPayForm, method: e.target.value })} placeholder="cash/bank/etc" />
+                <Input 
+                  value={quickPayForm.method} 
+                  onChange={(e) => {
+                    const newMethod = e.target.value;
+                    const filtered = getFilteredAccounts(newMethod);
+                    // Auto-select first account if method changes and account is not set or not in filtered list
+                    let newAccountId = quickPayForm.account_id;
+                    if (newMethod && filtered.length > 0) {
+                      const currentAccount = accounts.find(acc => acc.id === Number(quickPayForm.account_id));
+                      if (!currentAccount || !filtered.find(acc => acc.id === currentAccount.id)) {
+                        newAccountId = filtered[0].id;
+                      }
+                    }
+                    setQuickPayForm({ ...quickPayForm, method: newMethod, account_id: newAccountId });
+                  }} 
+                  placeholder="cash/bank/etc" 
+                />
+              </FormControl>
+              <FormControl>
+                <FormLabel>Payment Account {quickPayForm.method ? '*' : '(Optional)'}</FormLabel>
+                <Select 
+                  placeholder={quickPayForm.method ? `Select ${quickPayForm.method.toLowerCase().includes('cash') ? 'cash' : quickPayForm.method.toLowerCase().includes('bank') || quickPayForm.method.toLowerCase().includes('online') ? 'bank' : 'payment'} account` : 'Select account (optional)'}
+                  value={quickPayForm.account_id} 
+                  onChange={(e) => setQuickPayForm({ ...quickPayForm, account_id: e.target.value })}
+                >
+                  {getFilteredAccounts(quickPayForm.method).map(acc => (
+                    <option key={acc.id} value={acc.id}>
+                      {formatAccountName(acc)}
+                    </option>
+                  ))}
+                </Select>
               </FormControl>
               <FormControl>
                 <FormLabel>Notes</FormLabel>
@@ -1246,6 +1334,7 @@ const SalaryTracker = () => {
                       amount: amountNum,
                       loan_date: quickPayForm.paid_on,
                       payment_method: quickPayForm.method || '',
+                      account_id: quickPayForm.account_id ? Number(quickPayForm.account_id) : undefined,
                       notes: quickPayForm.notes || '',
                     });
                     toast({ title: 'Success', description: 'Loan recorded successfully.', status: 'success', duration: 3000, isClosable: true });
@@ -1302,13 +1391,13 @@ const SalaryTracker = () => {
                     amount: amountNum,
                     paid_on: quickPayForm.paid_on,
                     method: quickPayForm.method || '',
+                    account_id: quickPayForm.account_id ? Number(quickPayForm.account_id) : undefined,
                     notes: quickPayForm.notes || (attendanceBasedSalary ? `Attendance-based: ${attendanceBasedSalary.attendance?.total_working_days || 0} working days` : ''),
                   });
                   toast({ title: 'Success', description: 'Payment recorded.', status: 'success', duration: 3000, isClosable: true });
                   resetQuickPayForm();
                   onQuickPayClose();
                   await loadSalaryPayments();
-                  await loadStats();
                 } catch (e) {
                   toast({ title: 'Error', description: e?.message || 'Quick pay failed.', status: 'error', duration: 3000, isClosable: true });
                 } finally {
@@ -1423,7 +1512,37 @@ const SalaryTracker = () => {
               </FormControl>
               <FormControl>
                 <FormLabel>Method</FormLabel>
-                <Input value={txnForm.method} onChange={(e) => setTxnForm({ ...txnForm, method: e.target.value })} placeholder="cash/bank/etc" />
+                <Input 
+                  value={txnForm.method} 
+                  onChange={(e) => {
+                    const newMethod = e.target.value;
+                    const filtered = getFilteredAccounts(newMethod);
+                    // Auto-select first account if method changes and account is not set or not in filtered list
+                    let newAccountId = txnForm.account_id;
+                    if (newMethod && filtered.length > 0) {
+                      const currentAccount = accounts.find(acc => acc.id === Number(txnForm.account_id));
+                      if (!currentAccount || !filtered.find(acc => acc.id === currentAccount.id)) {
+                        newAccountId = filtered[0].id;
+                      }
+                    }
+                    setTxnForm({ ...txnForm, method: newMethod, account_id: newAccountId });
+                  }} 
+                  placeholder="cash/bank/etc" 
+                />
+              </FormControl>
+              <FormControl>
+                <FormLabel>Payment Account {txnForm.method ? '*' : '(Optional)'}</FormLabel>
+                <Select 
+                  placeholder={txnForm.method ? `Select ${txnForm.method.toLowerCase().includes('cash') ? 'cash' : txnForm.method.toLowerCase().includes('bank') || txnForm.method.toLowerCase().includes('online') ? 'bank' : 'payment'} account` : 'Select account (optional)'}
+                  value={txnForm.account_id} 
+                  onChange={(e) => setTxnForm({ ...txnForm, account_id: e.target.value })}
+                >
+                  {getFilteredAccounts(txnForm.method).map(acc => (
+                    <option key={acc.id} value={acc.id}>
+                      {formatAccountName(acc)}
+                    </option>
+                  ))}
+                </Select>
               </FormControl>
               <FormControl>
                 <FormLabel>Notes</FormLabel>
@@ -1441,12 +1560,12 @@ const SalaryTracker = () => {
                     amount: amountNum,
                     paid_on: txnForm.paid_on,
                     method: txnForm.method || '',
+                    account_id: txnForm.account_id ? Number(txnForm.account_id) : undefined,
                     notes: txnForm.notes || '',
                   });
                   toast({ title: 'Success', description: 'Payment recorded.', status: 'success', duration: 3000, isClosable: true });
                   onTxnClose();
                   loadSalaryPayments();
-                  loadStats();
                 } catch (e) {
                   toast({ title: 'Error', description: e?.message || 'Failed to record payment.', status: 'error', duration: 3000, isClosable: true });
                 }

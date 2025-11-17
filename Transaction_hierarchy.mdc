@@ -1,0 +1,386 @@
+# Hierarchical Account Transactions API
+
+## Overview
+
+The hierarchical transaction system allows you to make inflow/outflow transactions across multiple sub-accounts of the same main account type. This is useful when you want to distribute a single transaction across multiple accounts (e.g., depositing money into multiple bank accounts or withdrawing from multiple cash accounts).
+
+## Key Features
+
+1. **Main Account Type Selection**: First select the main account type (cash, bank, custom, etc.)
+2. **Sub-Account Distribution**: Then select multiple sub-accounts of that type and specify amounts for each
+3. **Automatic Validation**: System ensures all sub-accounts belong to the selected main account type
+4. **Balance Checking**: For outflows, system validates sufficient balance in each sub-account
+5. **Atomic Transactions**: All sub-account transactions are processed atomically (all succeed or all fail)
+
+## Get Accounts by Type
+
+**Endpoint**: `GET /api/accounts-by-type`
+
+**Query Parameters**:
+- `types` (optional): Comma-separated list of account types to filter (e.g., `cash,bank`)
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": {
+    "accounts_by_type": {
+      "cash": [
+        {
+          "id": 1,
+          "name": "Main Cash",
+          "code": "CASH-001",
+          "type": "cash",
+          "balance": "50000.00",
+          "description": "Primary cash account"
+        },
+        {
+          "id": 5,
+          "name": "Petty Cash",
+          "code": "CASH-002",
+          "type": "cash",
+          "balance": "5000.00",
+          "description": "Small expenses"
+        }
+      ],
+      "bank": [
+        {
+          "id": 2,
+          "name": "Main Bank",
+          "code": "BANK-001",
+          "type": "bank",
+          "balance": "100000.00",
+          "description": "Primary bank account"
+        },
+        {
+          "id": 6,
+          "name": "Savings Account",
+          "code": "BANK-002",
+          "type": "bank",
+          "balance": "25000.00",
+          "description": "Savings"
+        }
+      ]
+    },
+    "total_accounts": 4
+  }
+}
+```
+
+**Use Case**: Use this endpoint to populate dropdowns in your UI. When user selects "bank" as main account type, show only bank accounts in the sub-accounts list.
+
+---
+
+## Add Hierarchical Transaction
+
+**Endpoint**: `POST /api/accounts/add-transaction`
+
+**Authentication**: Bearer token required
+
+### Request Body (Hierarchical Mode)
+
+```json
+{
+  "main_account_type": "bank",
+  "transaction_type": "inflow",
+  "sub_accounts": [
+    {
+      "account_id": 2,
+      "amount": 5000.00
+    },
+    {
+      "account_id": 6,
+      "amount": 3000.00
+    }
+  ],
+  "description": "Monthly deposit distribution",
+  "transaction_date": "2025-11-17 10:30:00"
+}
+```
+
+### Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `main_account_type` | string | Yes | Main account type: `cash`, `bank`, `custom`, `revenue`, `receivable`, `advance`, `udhaar`, `expense`, `loss`, `equity` |
+| `transaction_type` | string | Yes | Either `"inflow"` or `"outflow"` |
+| `sub_accounts` | array | Yes | Array of sub-account objects (min 1) |
+| `sub_accounts[].account_id` | integer | Yes | ID of the sub-account (must exist and match main_account_type) |
+| `sub_accounts[].amount` | decimal | Yes | Amount for this sub-account (must be > 0) |
+| `description` | string | Yes | Description of the transaction (max 500 chars) |
+| `transaction_date` | datetime | No | When the transaction occurred (defaults to now) |
+
+### Transaction Types
+
+- **Inflow** (`"transaction_type": "inflow"`): Adds money to the sub-accounts
+  - Increases account balances
+  - Recorded as "credit" in the database
+  
+- **Outflow** (`"transaction_type": "outflow"`): Removes money from the sub-accounts
+  - Decreases account balances
+  - Recorded as "debit" in the database
+  - **Validates sufficient balance** in each sub-account before processing
+
+### Validation Rules
+
+1. **Main Account Type**: Must be a valid account type
+2. **Sub-Accounts**: 
+   - Must be an array with at least 1 item
+   - Each `account_id` must exist in the database
+   - Each `account_id` must belong to the specified `main_account_type`
+   - Each `amount` must be greater than 0
+3. **Balance Check** (for outflows only):
+   - Each sub-account must have sufficient balance
+   - If any account has insufficient balance, the entire transaction is rejected
+
+### Success Response (201)
+
+```json
+{
+  "success": true,
+  "message": "Hierarchical transaction added successfully",
+  "data": {
+    "main_account_type": "bank",
+    "transaction_type": "inflow",
+    "total_amount": "8000.00",
+    "description": "Monthly deposit distribution",
+    "transaction_date": "2025-11-17T10:30:00.000000Z",
+    "transactions": [
+      {
+        "id": 123,
+        "account_id": 2,
+        "type": "credit",
+        "amount": "5000.00",
+        "balance_after": "105000.00",
+        "description": "Monthly deposit distribution",
+        "transaction_date": "2025-11-17T10:30:00.000000Z",
+        "reference_type": "ManualTransaction",
+        "reference_id": null
+      },
+      {
+        "id": 124,
+        "account_id": 6,
+        "type": "credit",
+        "amount": "3000.00",
+        "balance_after": "28000.00",
+        "description": "Monthly deposit distribution",
+        "transaction_date": "2025-11-17T10:30:00.000000Z",
+        "reference_type": "ManualTransaction",
+        "reference_id": null
+      }
+    ],
+    "accounts": [
+      {
+        "id": 2,
+        "name": "Main Bank",
+        "code": "BANK-001",
+        "type": "bank",
+        "balance": "105000.00",
+        "is_active": true
+      },
+      {
+        "id": 6,
+        "name": "Savings Account",
+        "code": "BANK-002",
+        "type": "bank",
+        "balance": "28000.00",
+        "is_active": true
+      }
+    ]
+  }
+}
+```
+
+### Error Responses
+
+#### Validation Error (422)
+
+```json
+{
+  "success": false,
+  "message": "Validation errors",
+  "errors": {
+    "main_account_type": ["The main account type field is required."],
+    "sub_accounts.0.amount": ["The sub_accounts.0.amount must be at least 0.01."]
+  }
+}
+```
+
+#### Account Type Mismatch (422)
+
+```json
+{
+  "success": false,
+  "message": "The following accounts do not belong to type 'bank': Main Cash"
+}
+```
+
+#### Insufficient Balance (422)
+
+```json
+{
+  "success": false,
+  "message": "Insufficient balance in account 'Petty Cash'. Available: 1000.00, Required: 2000.00"
+}
+```
+
+#### Account Not Found (404)
+
+```json
+{
+  "success": false,
+  "message": "One or more sub-accounts not found"
+}
+```
+
+---
+
+## Backward Compatibility
+
+The endpoint still supports the **legacy single-account transaction** format for backward compatibility:
+
+```json
+{
+  "account_id": 2,
+  "transaction_type": "inflow",
+  "amount": 5000.00,
+  "description": "Single account deposit",
+  "transaction_date": "2025-11-17 10:30:00"
+}
+```
+
+The system automatically detects which format you're using:
+- If `main_account_type` or `sub_accounts` is provided → Hierarchical mode
+- Otherwise → Legacy single-account mode
+
+---
+
+## Frontend Integration Guide
+
+### Step 1: Fetch Accounts by Type
+
+```javascript
+// Fetch all accounts grouped by type
+const response = await fetch('/api/accounts-by-type', {
+  headers: {
+    'Authorization': `Bearer ${token}`
+  }
+});
+const { data } = await response.json();
+// data.accounts_by_type contains accounts grouped by type
+```
+
+### Step 2: Build UI Flow
+
+1. **Select Main Account Type**:
+   - Show dropdown with account types: `cash`, `bank`, `custom`, etc.
+   - User selects: `"bank"`
+
+2. **Load Sub-Accounts**:
+   - Filter `accounts_by_type.bank` to show only bank accounts
+   - Display as a list with checkboxes or multi-select
+
+3. **Add Sub-Accounts with Amounts**:
+   - For each selected sub-account, show an amount input field
+   - Validate that amounts are > 0
+   - Optionally show current balance for each account
+
+4. **Submit Transaction**:
+   ```javascript
+   const payload = {
+     main_account_type: 'bank',
+     transaction_type: 'inflow', // or 'outflow'
+     sub_accounts: [
+       { account_id: 2, amount: 5000.00 },
+       { account_id: 6, amount: 3000.00 }
+     ],
+     description: 'Monthly deposit distribution',
+     transaction_date: new Date().toISOString()
+   };
+
+   const response = await fetch('/api/accounts/add-transaction', {
+     method: 'POST',
+     headers: {
+       'Content-Type': 'application/json',
+       'Authorization': `Bearer ${token}`
+     },
+     body: JSON.stringify(payload)
+   });
+   ```
+
+### Step 3: Handle Response
+
+- **Success**: Show success message and update account balances in UI
+- **Validation Error**: Display field-specific error messages
+- **Insufficient Balance**: Highlight the account(s) with insufficient balance
+- **Type Mismatch**: Show which accounts don't match the selected type
+
+---
+
+## Example Use Cases
+
+### Use Case 1: Deposit to Multiple Bank Accounts
+
+**Scenario**: You receive a payment of 10,000 and want to split it across 3 bank accounts.
+
+```json
+{
+  "main_account_type": "bank",
+  "transaction_type": "inflow",
+  "sub_accounts": [
+    { "account_id": 2, "amount": 5000.00 },
+    { "account_id": 6, "amount": 3000.00 },
+    { "account_id": 7, "amount": 2000.00 }
+  ],
+  "description": "Payment distribution across bank accounts"
+}
+```
+
+### Use Case 2: Withdraw from Multiple Cash Accounts
+
+**Scenario**: You need 5,000 total and want to withdraw from 2 cash accounts.
+
+```json
+{
+  "main_account_type": "cash",
+  "transaction_type": "outflow",
+  "sub_accounts": [
+    { "account_id": 1, "amount": 3000.00 },
+    { "account_id": 5, "amount": 2000.00 }
+  ],
+  "description": "Cash withdrawal for expenses"
+}
+```
+
+**Note**: System will validate that each account has sufficient balance before processing.
+
+### Use Case 3: Distribute Revenue Across Custom Accounts
+
+**Scenario**: You want to allocate revenue across different custom accounts.
+
+```json
+{
+  "main_account_type": "custom",
+  "transaction_type": "inflow",
+  "sub_accounts": [
+    { "account_id": 10, "amount": 10000.00 },
+    { "account_id": 11, "amount": 5000.00 }
+  ],
+  "description": "Revenue allocation"
+}
+```
+
+---
+
+## Notes
+
+1. **Atomicity**: All sub-account transactions are processed in a single database transaction. If any sub-account fails validation or processing, the entire transaction is rolled back.
+
+2. **Balance Updates**: Account balances are automatically updated after successful transactions.
+
+3. **Transaction History**: Each sub-account gets its own transaction record in `account_transactions` table for complete audit trail.
+
+4. **Total Amount**: The response includes `total_amount` which is the sum of all sub-account amounts.
+
+5. **Date Consistency**: All sub-account transactions use the same `transaction_date` for consistency.
+

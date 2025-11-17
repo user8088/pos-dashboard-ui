@@ -71,6 +71,7 @@ export default function POS() {
   const [reservationPrintLoading, setReservationPrintLoading] = React.useState(false);
   const [reservationActionLoading, setReservationActionLoading] = React.useState(false);
   const [reservationActionId, setReservationActionId] = React.useState(null);
+  const [applyWalletAdvance, setApplyWalletAdvance] = React.useState(false);
 
   const cashAccounts = React.useMemo(
     () => accounts.filter(acc => {
@@ -452,6 +453,13 @@ export default function POS() {
   React.useEffect(() => { loadCustomers(); loadCategories(); }, [loadCustomers, loadCategories]);
   React.useEffect(() => { loadAccounts(); }, [loadAccounts]);
   React.useEffect(() => { loadCustomerProfile(customerId); }, [customerId, loadCustomerProfile]);
+  
+  // Reset wallet advance toggle when customer changes or reservation is loaded
+  React.useEffect(() => {
+    if (!customerId || activeReservation) {
+      setApplyWalletAdvance(false);
+    }
+  }, [customerId, activeReservation]);
 
   const reservationsList = React.useMemo(() => {
     return (customerReservations || []).map((res, idx) => ({
@@ -735,14 +743,29 @@ export default function POS() {
   const reservationAdvanceAvailable = Number.isFinite(reservationAdvanceAvailableRaw)
     ? Math.max(0, reservationAdvanceAvailableRaw)
     : 0;
-  const applyAdvanceEffective =
-    Boolean(activeReservation) &&
+  // Determine if we should apply advance from reservation
+  const applyReservationAdvance = Boolean(activeReservation) &&
     paymentAs !== 'advance' &&
     reservationAdvanceAvailable > 0;
+  
+  // Determine if we should apply advance from wallet (separate from reservations)
+  const applyWalletAdvanceEffective = applyWalletAdvance &&
+    !activeReservation &&
+    paymentAs !== 'advance' &&
+    existingAdvance > 0;
+  
   const customerAdvanceAvailable = Math.max(0, existingAdvance);
-  const advancePool = customerAdvanceAvailable > 0
-    ? Math.min(customerAdvanceAvailable, reservationAdvanceAvailable || customerAdvanceAvailable)
-    : reservationAdvanceAvailable;
+  
+  // Calculate advance pool: reservation advance takes priority, then wallet advance
+  const advancePool = applyReservationAdvance
+    ? (customerAdvanceAvailable > 0
+        ? Math.min(customerAdvanceAvailable, reservationAdvanceAvailable || customerAdvanceAvailable)
+        : reservationAdvanceAvailable)
+    : (applyWalletAdvanceEffective
+        ? customerAdvanceAvailable
+        : 0);
+  
+  const applyAdvanceEffective = applyReservationAdvance || applyWalletAdvanceEffective;
   const applyFromAdvance = applyAdvanceEffective
     ? Math.min(total, advancePool)
     : 0;
@@ -1768,23 +1791,6 @@ export default function POS() {
                           onChange={(e)=> setPaidAmount(e.target.value)} 
                           size='md'
                         />
-                        <Checkbox
-                          mt='3'
-                          colorScheme='orange'
-                          isChecked={paymentAs === 'advance'}
-                          onChange={(e)=> setPaymentAs(e.target.checked ? 'advance' : 'payment')}
-                        >
-                          Store this paid amount as customer advance
-                        </Checkbox>
-                        {paymentAs === 'advance' ? (
-                          <Text fontSize='xs' color='gray.500' mt='1'>
-                            Invoice will remain due until the advance is applied later.
-                          </Text>
-                        ) : (
-                          <Text fontSize='xs' color='gray.500' mt='1'>
-                            Leave unchecked to settle this invoice immediately with the entered amount.
-                          </Text>
-                        )}
                       </Box>
                     )}
                     <Box>
@@ -1806,10 +1812,22 @@ export default function POS() {
                               <Text fontSize='xs' fontWeight='medium'>PKR {existingAdvance.toFixed(2)}</Text>
                             </HStack>
                           )}
-                          <HStack justify='space-between'>
-                            <Text fontSize='xs'>Will Apply from Advance:</Text>
-                            <Text fontSize='xs' fontWeight='medium'>PKR {applyFromAdvance.toFixed(2)}</Text>
-                          </HStack>
+                          {existingAdvance > 0 && !activeReservation && (
+                            <Checkbox
+                              colorScheme='green'
+                              isChecked={applyWalletAdvance}
+                              onChange={(e) => setApplyWalletAdvance(e.target.checked)}
+                              size='sm'
+                            >
+                              <Text fontSize='xs'>Apply advance from wallet</Text>
+                            </Checkbox>
+                          )}
+                          {applyFromAdvance > 0 && (
+                            <HStack justify='space-between'>
+                              <Text fontSize='xs'>Will Apply from Advance:</Text>
+                              <Text fontSize='xs' fontWeight='medium'>PKR {applyFromAdvance.toFixed(2)}</Text>
+                            </HStack>
+                          )}
                           {paymentMode === 'split' ? (
                             <HStack justify='space-between'>
                               <Text fontSize='xs'>Split Applied Now:</Text>

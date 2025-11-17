@@ -35,6 +35,13 @@ import {
   MenuList,
   MenuItem,
   IconButton,
+  Tabs,
+  TabList,
+  TabPanels,
+  Tab,
+  TabPanel,
+  Divider,
+  Icon,
 } from "@chakra-ui/react";
 // Custom components
 import Card from "components/Card/Card.js";
@@ -42,7 +49,7 @@ import CardBody from "components/Card/CardBody.js";
 import CardHeader from "components/Card/CardHeader.js";
 import TransactionRow from "components/Tables/TransactionRow";
 import React from "react";
-import { FaRegCalendarAlt, FaPlus } from "react-icons/fa";
+import { FaRegCalendarAlt, FaPlus, FaTrash } from "react-icons/fa";
 import { FiSearch } from "react-icons/fi";
 import { HamburgerIcon } from "@chakra-ui/icons";
 import { accountService } from "services/accountService";
@@ -70,6 +77,18 @@ const Transactions = () => {
     transaction_date: "",
   });
 
+  // Hierarchical transaction state
+  const [transactionMode, setTransactionMode] = React.useState("single"); // "single" or "multiple"
+  const [accountsByType, setAccountsByType] = React.useState({});
+  const [loadingAccountsByType, setLoadingAccountsByType] = React.useState(false);
+  const [hierarchicalTransaction, setHierarchicalTransaction] = React.useState({
+    main_account_type: "",
+    transaction_type: "inflow",
+    sub_accounts: [],
+    description: "",
+    transaction_date: "",
+  });
+
   const toast = useToast();
 
   const navbarGlassBg = useColorModeValue(
@@ -92,6 +111,28 @@ const Transactions = () => {
       console.error('Failed to load accounts:', error);
     }
   }, []);
+
+  // Load accounts by type for hierarchical transactions
+  const loadAccountsByType = React.useCallback(async () => {
+    try {
+      setLoadingAccountsByType(true);
+      const resp = await accountService.getAccountsByType();
+      const data = resp?.data || resp || {};
+      const accountsByTypeData = data.accounts_by_type || {};
+      setAccountsByType(accountsByTypeData);
+    } catch (error) {
+      console.error('Failed to load accounts by type:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to load accounts by type',
+        status: 'error',
+        duration: 3000,
+        isClosable: true,
+      });
+    } finally {
+      setLoadingAccountsByType(false);
+    }
+  }, [toast]);
 
   // Load transactions from all accounts
   const loadTransactions = React.useCallback(async (forceReloadAccounts = false) => {
@@ -243,52 +284,102 @@ const Transactions = () => {
     };
   };
 
+  // Format transaction date helper
+  const formatTransactionDate = (dateString) => {
+    if (!dateString) return undefined;
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) return undefined;
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    const seconds = String(date.getSeconds()).padStart(2, '0');
+    return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+  };
+
   const handleAddTransaction = async () => {
-    if (!newTransaction.account_id || !newTransaction.amount || !newTransaction.description) {
-      toast({
-        title: 'Validation error',
-        description: 'Please fill in all required fields',
-        status: 'error',
-        duration: 3000,
-        isClosable: true,
-      });
-      return;
-    }
-    
     try {
-      // Format transaction_date properly if provided
-      let transactionDate = undefined;
-      if (newTransaction.transaction_date) {
-        // Convert datetime-local format to YYYY-MM-DD HH:MM:SS format
-        const date = new Date(newTransaction.transaction_date);
-        if (!isNaN(date.getTime())) {
-          const year = date.getFullYear();
-          const month = String(date.getMonth() + 1).padStart(2, '0');
-          const day = String(date.getDate()).padStart(2, '0');
-          const hours = String(date.getHours()).padStart(2, '0');
-          const minutes = String(date.getMinutes()).padStart(2, '0');
-          const seconds = String(date.getSeconds()).padStart(2, '0');
-          transactionDate = `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+      setLoading(true);
+      let payload;
+
+      if (transactionMode === "single") {
+        // Single account transaction (legacy mode)
+        if (!newTransaction.account_id || !newTransaction.amount || !newTransaction.description) {
+          toast({
+            title: 'Validation error',
+            description: 'Please fill in all required fields',
+            status: 'error',
+            duration: 3000,
+            isClosable: true,
+          });
+          setLoading(false);
+          return;
         }
+        
+        payload = {
+          account_id: Number(newTransaction.account_id),
+          transaction_type: newTransaction.transaction_type,
+          amount: Number(newTransaction.amount),
+          description: newTransaction.description,
+          transaction_date: formatTransactionDate(newTransaction.transaction_date),
+        };
+      } else {
+        // Hierarchical transaction mode
+        if (!hierarchicalTransaction.main_account_type || 
+            !hierarchicalTransaction.description ||
+            hierarchicalTransaction.sub_accounts.length === 0) {
+          toast({
+            title: 'Validation error',
+            description: 'Please fill in all required fields and add at least one sub-account',
+            status: 'error',
+            duration: 3000,
+            isClosable: true,
+          });
+          setLoading(false);
+          return;
+        }
+
+        // Validate all sub-accounts have amounts > 0
+        const invalidAccounts = hierarchicalTransaction.sub_accounts.filter(
+          sub => !sub.account_id || !sub.amount || Number(sub.amount) <= 0
+        );
+        if (invalidAccounts.length > 0) {
+          toast({
+            title: 'Validation error',
+            description: 'All sub-accounts must have valid amounts greater than 0',
+            status: 'error',
+            duration: 3000,
+            isClosable: true,
+          });
+          setLoading(false);
+          return;
+        }
+
+        payload = {
+          main_account_type: hierarchicalTransaction.main_account_type,
+          transaction_type: hierarchicalTransaction.transaction_type,
+          sub_accounts: hierarchicalTransaction.sub_accounts.map(sub => ({
+            account_id: Number(sub.account_id),
+            amount: Number(sub.amount),
+          })),
+          description: hierarchicalTransaction.description,
+          transaction_date: formatTransactionDate(hierarchicalTransaction.transaction_date),
+        };
       }
-      
-      const payload = {
-        account_id: Number(newTransaction.account_id),
-        transaction_type: newTransaction.transaction_type,
-        amount: Number(newTransaction.amount),
-        description: newTransaction.description,
-        transaction_date: transactionDate,
-      };
       
       await accountService.addTransaction(payload);
       toast({
         title: 'Success',
-        description: 'Transaction added successfully',
+        description: transactionMode === "single" 
+          ? 'Transaction added successfully' 
+          : 'Hierarchical transaction added successfully',
         status: 'success',
         duration: 3000,
         isClosable: true,
       });
       
+      // Reset forms
       setNewTransaction({
         account_id: "",
         transaction_type: "inflow",
@@ -296,6 +387,14 @@ const Transactions = () => {
         description: "",
         transaction_date: "",
       });
+      setHierarchicalTransaction({
+        main_account_type: "",
+        transaction_type: "inflow",
+        sub_accounts: [],
+        description: "",
+        transaction_date: "",
+      });
+      setTransactionMode("single");
       onAddClose();
       
       // Force reload everything - wait a moment for the backend to process
@@ -306,6 +405,11 @@ const Transactions = () => {
       const accountsData = accountsResp?.data || accountsResp || {};
       const freshAccounts = Array.isArray(accountsData) ? accountsData : (accountsData.accounts || []);
       setAccounts(freshAccounts);
+      
+      // Reload accounts by type if in hierarchical mode
+      if (transactionMode === "multiple") {
+        await loadAccountsByType();
+      }
       
       // Now reload transactions with the fresh accounts
       await loadTransactions(true);
@@ -318,7 +422,85 @@ const Transactions = () => {
         duration: 3000,
         isClosable: true,
       });
+    } finally {
+      setLoading(false);
     }
+  };
+
+  // Handle adding a sub-account to hierarchical transaction
+  const handleAddSubAccount = () => {
+    const availableAccounts = accountsByType[hierarchicalTransaction.main_account_type] || [];
+    if (availableAccounts.length === 0) {
+      toast({
+        title: 'No accounts available',
+        description: 'Please select a main account type first',
+        status: 'warning',
+        duration: 3000,
+        isClosable: true,
+      });
+      return;
+    }
+
+    // Find first account not already added
+    const existingIds = hierarchicalTransaction.sub_accounts.map(sub => sub.account_id);
+    const nextAccount = availableAccounts.find(acc => !existingIds.includes(acc.id));
+    
+    if (!nextAccount) {
+      toast({
+        title: 'All accounts added',
+        description: 'All available accounts have been added',
+        status: 'info',
+        duration: 3000,
+        isClosable: true,
+      });
+      return;
+    }
+
+    setHierarchicalTransaction({
+      ...hierarchicalTransaction,
+      sub_accounts: [
+        ...hierarchicalTransaction.sub_accounts,
+        {
+          account_id: nextAccount.id,
+          amount: "",
+        }
+      ]
+    });
+  };
+
+  // Handle removing a sub-account
+  const handleRemoveSubAccount = (index) => {
+    const newSubAccounts = hierarchicalTransaction.sub_accounts.filter((_, i) => i !== index);
+    setHierarchicalTransaction({
+      ...hierarchicalTransaction,
+      sub_accounts: newSubAccounts,
+    });
+  };
+
+  // Handle sub-account field changes
+  const handleSubAccountChange = (index, field, value) => {
+    const newSubAccounts = [...hierarchicalTransaction.sub_accounts];
+    newSubAccounts[index] = {
+      ...newSubAccounts[index],
+      [field]: value,
+    };
+    setHierarchicalTransaction({
+      ...hierarchicalTransaction,
+      sub_accounts: newSubAccounts,
+    });
+  };
+
+  // Get available accounts for selected main account type
+  const getAvailableSubAccounts = () => {
+    if (!hierarchicalTransaction.main_account_type) return [];
+    return accountsByType[hierarchicalTransaction.main_account_type] || [];
+  };
+
+  // Calculate total amount for hierarchical transaction
+  const getTotalAmount = () => {
+    return hierarchicalTransaction.sub_accounts.reduce((sum, sub) => {
+      return sum + (Number(sub.amount) || 0);
+    }, 0);
   };
 
   // Split transactions into newest and older (based on date)
@@ -570,7 +752,30 @@ const Transactions = () => {
       </Modal>
 
       {/* Add New Transaction Modal */}
-      <Modal isOpen={isAddOpen} onClose={onAddClose} size='lg' motionPreset='slideInBottom'>
+      <Modal 
+        isOpen={isAddOpen} 
+        onClose={() => {
+          onAddClose();
+          // Reset forms when closing
+          setTransactionMode("single");
+          setNewTransaction({
+            account_id: "",
+            transaction_type: "inflow",
+            amount: "",
+            description: "",
+            transaction_date: "",
+          });
+          setHierarchicalTransaction({
+            main_account_type: "",
+            transaction_type: "inflow",
+            sub_accounts: [],
+            description: "",
+            transaction_date: "",
+          });
+        }} 
+        size='lg' 
+        motionPreset='slideInBottom'
+      >
         <ModalOverlay bg='rgba(0,0,0,0.4)' backdropFilter='blur(6px)' />
         <ModalContent
           bg={navbarGlassBg}
@@ -581,71 +786,281 @@ const Transactions = () => {
           <ModalHeader color={textColor}>Add New Transaction</ModalHeader>
           <ModalCloseButton />
           <ModalBody pb='24px'>
-            <VStack spacing='16px'>
-              <FormControl isRequired>
-                <FormLabel color={textColor}>Account *</FormLabel>
-                <Select
-                  placeholder='Select account'
-                  value={newTransaction.account_id}
-                  onChange={(e) => setNewTransaction({...newTransaction, account_id: e.target.value})}>
-                  {accounts.map(acc => (
-                    <option key={acc.id} value={acc.id}>
-                      {acc.name} {acc.code ? `(${acc.code})` : ''}
-                    </option>
-                  ))}
-                </Select>
-              </FormControl>
-              
-              <FormControl isRequired>
-                <FormLabel color={textColor}>Transaction Type *</FormLabel>
-                <Select
-                  value={newTransaction.transaction_type}
-                  onChange={(e) => setNewTransaction({...newTransaction, transaction_type: e.target.value})}>
-                  <option value='inflow'>Inflow (Money In)</option>
-                  <option value='outflow'>Outflow (Money Out)</option>
-                </Select>
-              </FormControl>
-              
-              <FormControl isRequired>
-                <FormLabel color={textColor}>Amount *</FormLabel>
-                <Input
-                  type='number'
-                  step='0.01'
-                  placeholder='Enter amount'
-                  value={newTransaction.amount}
-                  onChange={(e) => setNewTransaction({...newTransaction, amount: e.target.value})}
-                />
-              </FormControl>
-              
-              <FormControl isRequired>
-                <FormLabel color={textColor}>Description *</FormLabel>
-                <Input
-                  placeholder='Enter transaction description'
-                  value={newTransaction.description}
-                  onChange={(e) => setNewTransaction({...newTransaction, description: e.target.value})}
-                />
-              </FormControl>
-              
-              <FormControl>
-                <FormLabel color={textColor}>Transaction Date (Optional)</FormLabel>
-                <Input
-                  type='datetime-local'
-                  value={newTransaction.transaction_date}
-                  onChange={(e) => setNewTransaction({...newTransaction, transaction_date: e.target.value})}
-                />
-              </FormControl>
-              
-              <Button
-                colorScheme='teal'
-                bg='#FF8D28'
-                color='white'
-                _hover={{ bg: '#E67E22' }}
-                w='100%'
-                onClick={handleAddTransaction}
-                isLoading={loading}>
-                ADD TRANSACTION
-              </Button>
-            </VStack>
+            <Tabs 
+              index={transactionMode === "single" ? 0 : 1} 
+              onChange={(index) => {
+                const newMode = index === 0 ? "single" : "multiple";
+                setTransactionMode(newMode);
+                if (newMode === "multiple" && Object.keys(accountsByType).length === 0) {
+                  loadAccountsByType();
+                }
+              }}
+              colorScheme='orange'
+            >
+              <TabList>
+                <Tab>Single Account</Tab>
+                <Tab>Multiple Accounts</Tab>
+              </TabList>
+
+              <TabPanels>
+                {/* Single Account Mode */}
+                <TabPanel px={0}>
+                  <VStack spacing='16px'>
+                    <FormControl isRequired>
+                      <FormLabel color={textColor}>Account *</FormLabel>
+                      <Select
+                        placeholder='Select account'
+                        value={newTransaction.account_id}
+                        onChange={(e) => setNewTransaction({...newTransaction, account_id: e.target.value})}>
+                        {accounts.map(acc => (
+                          <option key={acc.id} value={acc.id}>
+                            {acc.name} {acc.code ? `(${acc.code})` : ''}
+                          </option>
+                        ))}
+                      </Select>
+                    </FormControl>
+                    
+                    <FormControl isRequired>
+                      <FormLabel color={textColor}>Transaction Type *</FormLabel>
+                      <Select
+                        value={newTransaction.transaction_type}
+                        onChange={(e) => setNewTransaction({...newTransaction, transaction_type: e.target.value})}>
+                        <option value='inflow'>Inflow (Money In)</option>
+                        <option value='outflow'>Outflow (Money Out)</option>
+                      </Select>
+                    </FormControl>
+                    
+                    <FormControl isRequired>
+                      <FormLabel color={textColor}>Amount *</FormLabel>
+                      <Input
+                        type='number'
+                        step='0.01'
+                        placeholder='Enter amount'
+                        value={newTransaction.amount}
+                        onChange={(e) => setNewTransaction({...newTransaction, amount: e.target.value})}
+                      />
+                    </FormControl>
+                    
+                    <FormControl isRequired>
+                      <FormLabel color={textColor}>Description *</FormLabel>
+                      <Input
+                        placeholder='Enter transaction description'
+                        value={newTransaction.description}
+                        onChange={(e) => setNewTransaction({...newTransaction, description: e.target.value})}
+                      />
+                    </FormControl>
+                    
+                    <FormControl>
+                      <FormLabel color={textColor}>Transaction Date (Optional)</FormLabel>
+                      <Input
+                        type='datetime-local'
+                        value={newTransaction.transaction_date}
+                        onChange={(e) => setNewTransaction({...newTransaction, transaction_date: e.target.value})}
+                      />
+                    </FormControl>
+                  </VStack>
+                </TabPanel>
+
+                {/* Multiple Accounts (Hierarchical) Mode */}
+                <TabPanel px={0}>
+                  <VStack spacing='16px'>
+                    <FormControl isRequired>
+                      <FormLabel color={textColor}>Main Account Type *</FormLabel>
+                      <Select
+                        placeholder='Select account type'
+                        value={hierarchicalTransaction.main_account_type}
+                        onChange={(e) => {
+                          setHierarchicalTransaction({
+                            ...hierarchicalTransaction,
+                            main_account_type: e.target.value,
+                            sub_accounts: [], // Reset sub-accounts when type changes
+                          });
+                        }}
+                        isDisabled={loadingAccountsByType}
+                      >
+                        <option value='cash'>Cash</option>
+                        <option value='bank'>Bank</option>
+                        <option value='custom'>Custom</option>
+                        <option value='revenue'>Revenue</option>
+                        <option value='receivable'>Receivable</option>
+                        <option value='advance'>Advance</option>
+                        <option value='udhaar'>Udhaar</option>
+                        <option value='expense'>Expense</option>
+                        <option value='loss'>Loss</option>
+                        <option value='equity'>Equity</option>
+                      </Select>
+                      {loadingAccountsByType && (
+                        <Text fontSize='xs' color='gray.500' mt='4px'>Loading accounts...</Text>
+                      )}
+                    </FormControl>
+
+                    <FormControl isRequired>
+                      <FormLabel color={textColor}>Transaction Type *</FormLabel>
+                      <Select
+                        value={hierarchicalTransaction.transaction_type}
+                        onChange={(e) => setHierarchicalTransaction({
+                          ...hierarchicalTransaction,
+                          transaction_type: e.target.value
+                        })}
+                      >
+                        <option value='inflow'>Inflow (Money In)</option>
+                        <option value='outflow'>Outflow (Money Out)</option>
+                      </Select>
+                    </FormControl>
+
+                    {/* Sub-Accounts Section */}
+                    <Box w='100%'>
+                      <Flex justify='space-between' align='center' mb='12px'>
+                        <FormLabel color={textColor} mb={0}>Sub-Accounts *</FormLabel>
+                        <Button
+                          size='sm'
+                          leftIcon={<Icon as={FaPlus} />}
+                          onClick={handleAddSubAccount}
+                          isDisabled={!hierarchicalTransaction.main_account_type || loadingAccountsByType}
+                          colorScheme='blue'
+                          variant='outline'
+                        >
+                          Add Account
+                        </Button>
+                      </Flex>
+
+                      {hierarchicalTransaction.sub_accounts.length === 0 ? (
+                        <Box
+                          p='16px'
+                          border='1px dashed'
+                          borderColor='gray.300'
+                          borderRadius='8px'
+                          textAlign='center'
+                          color='gray.500'
+                        >
+                          <Text fontSize='sm'>No sub-accounts added. Click "Add Account" to add one.</Text>
+                        </Box>
+                      ) : (
+                        <VStack spacing='12px' align='stretch'>
+                          {hierarchicalTransaction.sub_accounts.map((subAccount, index) => {
+                            const availableAccounts = getAvailableSubAccounts();
+                            const selectedAccount = availableAccounts.find(acc => acc.id === subAccount.account_id);
+                            const balance = selectedAccount ? parseFloat(selectedAccount.balance || 0) : 0;
+                            const amount = Number(subAccount.amount) || 0;
+                            const hasInsufficientBalance = hierarchicalTransaction.transaction_type === 'outflow' && amount > balance;
+
+                            return (
+                              <Box
+                                key={index}
+                                p='12px'
+                                border='1px solid'
+                                borderColor={hasInsufficientBalance ? 'red.300' : 'gray.200'}
+                                borderRadius='8px'
+                                bg={hasInsufficientBalance ? 'red.50' : 'transparent'}
+                              >
+                                <VStack spacing='8px' align='stretch'>
+                                  <HStack justify='space-between'>
+                                    <FormControl isRequired flex='1'>
+                                      <FormLabel fontSize='sm' color={textColor}>Account</FormLabel>
+                                      <Select
+                                        size='sm'
+                                        value={subAccount.account_id}
+                                        onChange={(e) => handleSubAccountChange(index, 'account_id', e.target.value)}
+                                      >
+                                        <option value=''>Select account</option>
+                                        {availableAccounts.map(acc => (
+                                          <option key={acc.id} value={acc.id}>
+                                            {acc.name} {acc.code ? `(${acc.code})` : ''} - Balance: PKR {parseFloat(acc.balance || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                          </option>
+                                        ))}
+                                      </Select>
+                                    </FormControl>
+                                    <Button
+                                      size='sm'
+                                      colorScheme='red'
+                                      variant='ghost'
+                                      onClick={() => handleRemoveSubAccount(index)}
+                                      mt='24px'
+                                    >
+                                      <Icon as={FaTrash} />
+                                    </Button>
+                                  </HStack>
+                                  <FormControl isRequired>
+                                    <FormLabel fontSize='sm' color={textColor}>Amount</FormLabel>
+                                    <Input
+                                      size='sm'
+                                      type='number'
+                                      step='0.01'
+                                      placeholder='Enter amount'
+                                      value={subAccount.amount}
+                                      onChange={(e) => handleSubAccountChange(index, 'amount', e.target.value)}
+                                      isInvalid={hasInsufficientBalance}
+                                    />
+                                    {selectedAccount && (
+                                      <Text fontSize='xs' color='gray.500' mt='4px'>
+                                        Current Balance: PKR {balance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                      </Text>
+                                    )}
+                                    {hasInsufficientBalance && (
+                                      <Text fontSize='xs' color='red.500' mt='4px'>
+                                        Insufficient balance! Available: PKR {balance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                      </Text>
+                                    )}
+                                  </FormControl>
+                                </VStack>
+                              </Box>
+                            );
+                          })}
+                        </VStack>
+                      )}
+
+                      {hierarchicalTransaction.sub_accounts.length > 0 && (
+                        <Box mt='12px' p='12px' bg='gray.50' borderRadius='8px'>
+                          <Flex justify='space-between' align='center'>
+                            <Text fontWeight='semibold' color={textColor}>Total Amount:</Text>
+                            <Text fontWeight='bold' fontSize='lg' color='orange.500'>
+                              PKR {getTotalAmount().toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </Text>
+                          </Flex>
+                        </Box>
+                      )}
+                    </Box>
+                    
+                    <FormControl isRequired>
+                      <FormLabel color={textColor}>Description *</FormLabel>
+                      <Input
+                        placeholder='Enter transaction description'
+                        value={hierarchicalTransaction.description}
+                        onChange={(e) => setHierarchicalTransaction({
+                          ...hierarchicalTransaction,
+                          description: e.target.value
+                        })}
+                      />
+                    </FormControl>
+                    
+                    <FormControl>
+                      <FormLabel color={textColor}>Transaction Date (Optional)</FormLabel>
+                      <Input
+                        type='datetime-local'
+                        value={hierarchicalTransaction.transaction_date}
+                        onChange={(e) => setHierarchicalTransaction({
+                          ...hierarchicalTransaction,
+                          transaction_date: e.target.value
+                        })}
+                      />
+                    </FormControl>
+                  </VStack>
+                </TabPanel>
+              </TabPanels>
+            </Tabs>
+            
+            <Divider my='20px' />
+            
+            <Button
+              colorScheme='teal'
+              bg='#FF8D28'
+              color='white'
+              _hover={{ bg: '#E67E22' }}
+              w='100%'
+              onClick={handleAddTransaction}
+              isLoading={loading}>
+              {transactionMode === "single" ? "ADD TRANSACTION" : "ADD HIERARCHICAL TRANSACTION"}
+            </Button>
           </ModalBody>
         </ModalContent>
       </Modal>

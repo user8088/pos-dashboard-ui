@@ -7,12 +7,21 @@ import IconBox from "components/Icons/IconBox";
 import { Separator } from "components/Separator/Separator";
 import React from "react";
 
-const PaymentStatistics = ({ icon, title, description, amount }) => {
+const PaymentStatistics = ({ icon, title, description, amount, onClick, account }) => {
   const iconTeal = useColorModeValue("#FF8D28", "#FF8D28");
   const textColor = useColorModeValue("gray.700", "white");
+  const cardBg = useColorModeValue("white", "gray.700");
 
   return (
-    <Card p='16px' display='flex' align='center' justify='center'>
+    <Card 
+      p='16px' 
+      display='flex' 
+      align='center' 
+      justify='center'
+      cursor={onClick ? "pointer" : "default"}
+      onClick={onClick}
+      _hover={onClick ? { transform: "translateY(-4px)", shadow: "lg" } : {}}
+      transition="all 0.2s">
       <CardBody>
         <Flex direction='column' align='center' w='100%' py='14px'>
           <IconBox as='box' h={"60px"} w={"60px"} bg={iconTeal}>

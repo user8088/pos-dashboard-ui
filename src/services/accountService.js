@@ -74,6 +74,12 @@ class AccountService {
       body: JSON.stringify(payload),
     });
   }
+
+  getAccountsByType(types = []) {
+    const params = types.length > 0 ? { types: types.join(',') } : {};
+    const qs = new URLSearchParams(params).toString();
+    return this.request(`/api/accounts-by-type${qs ? `?${qs}` : ''}`);
+  }
 }
 
 export const accountService = new AccountService();
