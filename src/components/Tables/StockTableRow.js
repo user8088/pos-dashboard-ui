@@ -23,16 +23,31 @@ function StockTableRow(props) {
     quantity,
     primaryUnit,
     secondaryUnit,
+    secondaryPerPrimary,
     category,
     status,
     lastPurchase,
     sellingPrice,
+    supplier,
+    highestPurchasePrice,
+    lowestPurchasePrice,
     onEdit,
     onView,
     onDelete,
     onProduce,
   } = props;
   const textColor = useColorModeValue("gray.700", "white");
+  
+  // Format quantity display with both units if secondary unit exists
+  const formatQuantity = () => {
+    if (quantity == null || quantity === 0) return '-';
+    const qty = Number(quantity);
+    if (secondaryUnit && secondaryPerPrimary && secondaryPerPrimary > 0) {
+      const secondaryQty = qty * secondaryPerPrimary;
+      return `${qty.toLocaleString()} ${primaryUnit || ''} (${secondaryQty.toLocaleString()} ${secondaryUnit})`;
+    }
+    return `${qty.toLocaleString()} ${primaryUnit || ''}`;
+  };
 
   // Status color mapping
   const getStatusColor = (status) => {
@@ -75,7 +90,7 @@ function StockTableRow(props) {
 
       <Td>
         <Text fontSize="md" color={textColor} fontWeight="bold">
-          {quantity != null && quantity !== 0 ? Number(quantity).toLocaleString() : '-'}
+          {formatQuantity()}
         </Text>
       </Td>
 
@@ -112,11 +127,22 @@ function StockTableRow(props) {
         <Text fontSize="md" color={textColor} fontWeight="bold">
           {lastPurchase}
         </Text>
+        {highestPurchasePrice != null && lowestPurchasePrice != null && (
+          <Text fontSize="xs" color="gray.500">
+            Range: {lowestPurchasePrice.toFixed(2)} - {highestPurchasePrice.toFixed(2)}
+          </Text>
+        )}
       </Td>
 
       <Td>
         <Text fontSize="md" color={textColor} fontWeight="bold">
           {sellingPrice}
+        </Text>
+      </Td>
+
+      <Td>
+        <Text fontSize="md" color={textColor}>
+          {supplier || '-'}
         </Text>
       </Td>
 

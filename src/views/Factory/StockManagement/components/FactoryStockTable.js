@@ -58,8 +58,6 @@ const FactoryStockTable = ({ title, captions }) => {
     primary_unit_id: "",
     secondary_unit_id: "",
     secondary_per_primary: "",
-    qty_per_primary_unit: "",
-    qty_per_secondary_unit: "1",
     manufacturing_cost: "",
     selling_price: "",
     image_url: "",
@@ -133,8 +131,6 @@ const FactoryStockTable = ({ title, captions }) => {
           }
           return typeof it.secondary_unit === 'string' ? it.secondary_unit : '';
         })(),
-        qtyPerPrimary: it.qty_per_primary_unit ?? it.qty ?? 0,
-        qtyPerSecondary: it.qty_per_secondary_unit ?? 1,
         category: (() => {
           const cat = it.category;
           if (cat && typeof cat === 'object') {
@@ -145,6 +141,7 @@ const FactoryStockTable = ({ title, captions }) => {
         status: it.status || 'In Stock',
         lastPurchase: `PKR.${it.manufacturing_cost != null ? Number(it.manufacturing_cost).toFixed(2) : it.last_purchase_price != null ? Number(it.last_purchase_price).toFixed(2) : '0.00'}`,
         sellingPrice: `PKR.${it.selling_price != null ? Number(it.selling_price).toFixed(2) : '0.00'}`,
+        secondary_per_primary: it.secondary_per_primary ? Number(it.secondary_per_primary) : null,
         // Keep raw data for editing
         rawData: it,
       }));
@@ -216,8 +213,6 @@ const FactoryStockTable = ({ title, captions }) => {
         primary_unit_id: Number(newStock.primary_unit_id),
         secondary_unit_id: newStock.secondary_unit_id ? Number(newStock.secondary_unit_id) : undefined,
         secondary_per_primary: newStock.secondary_per_primary ? Number(newStock.secondary_per_primary) : undefined,
-        qty_per_primary_unit: Math.max(1, Number(newStock.qty_per_primary_unit) || 1),
-        qty_per_secondary_unit: Math.max(1, Number(newStock.qty_per_secondary_unit) || 1),
         manufacturing_cost: newStock.manufacturing_cost ? Math.max(0, Number(newStock.manufacturing_cost)) : undefined,
         selling_price: Math.max(0, Number(newStock.selling_price) || 0),
         image_url: newStock.image_url || undefined,
@@ -232,8 +227,6 @@ const FactoryStockTable = ({ title, captions }) => {
         primary_unit_id: "",
         secondary_unit_id: "",
         secondary_per_primary: "",
-        qty_per_primary_unit: "",
-        qty_per_secondary_unit: "1",
         manufacturing_cost: "",
         selling_price: "",
         image_url: "",
@@ -273,8 +266,6 @@ const FactoryStockTable = ({ title, captions }) => {
         primary_unit_id: Number(editingStock.primary_unit_id),
         secondary_unit_id: editingStock.secondary_unit_id ? Number(editingStock.secondary_unit_id) : undefined,
         secondary_per_primary: editingStock.secondary_per_primary ? Number(editingStock.secondary_per_primary) : undefined,
-        qty_per_primary_unit: Math.max(1, Number(editingStock.qty_per_primary_unit) || 1),
-        qty_per_secondary_unit: Math.max(1, Number(editingStock.qty_per_secondary_unit) || 1),
         manufacturing_cost: editingStock.manufacturing_cost ? Math.max(0, Number(editingStock.manufacturing_cost)) : undefined,
         selling_price: Math.max(0, Number(editingStock.selling_price) || 0),
         image_url: editingStock.image_url || undefined,
@@ -341,8 +332,6 @@ const FactoryStockTable = ({ title, captions }) => {
       primary_unit_id: raw.primary_unit_id || "",
       secondary_unit_id: raw.secondary_unit_id || "",
       secondary_per_primary: raw.secondary_per_primary || "",
-      qty_per_primary_unit: raw.qty_per_primary_unit || "",
-      qty_per_secondary_unit: raw.qty_per_secondary_unit || "1",
       manufacturing_cost: raw.manufacturing_cost || "",
       selling_price: raw.selling_price || "",
       image_url: raw.image_url || "",
@@ -505,6 +494,7 @@ const FactoryStockTable = ({ title, captions }) => {
                   serialId={row.serialId}
                   primaryUnit={row.primaryUnit}
                   secondaryUnit={row.secondaryUnit}
+                  secondaryPerPrimary={row.secondary_per_primary}
                   category={row.category}
                   status={row.status}
                   lastPurchase={row.lastPurchase}

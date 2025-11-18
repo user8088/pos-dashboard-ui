@@ -131,6 +131,21 @@ function Billing() {
     loadAccounts();
   }, [loadAccounts]);
 
+  // Listen for account updates from supplier transactions
+  React.useEffect(() => {
+    const handleAccountUpdate = () => {
+      loadAccounts();
+    };
+    
+    window.addEventListener('supplier-transaction-created', handleAccountUpdate);
+    window.addEventListener('accounts-updated', handleAccountUpdate);
+    
+    return () => {
+      window.removeEventListener('supplier-transaction-created', handleAccountUpdate);
+      window.removeEventListener('accounts-updated', handleAccountUpdate);
+    };
+  }, [loadAccounts]);
+
   // Load bills list for the Bills & Rents card
   React.useEffect(() => {
     (async () => {

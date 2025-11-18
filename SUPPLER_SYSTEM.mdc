@@ -1,73 +1,647 @@
-## Supplier Management API
+# Stock & Supplier Integration API Documentation
 
-Base: `/api` (auth required)
+## Overview
 
-### Entities
+The stock management system is now fully integrated with the supplier management and accounting systems. When stock is purchased, it automatically:
+- Records the purchase in supplier transaction history
+- Tracks purchase prices (last, highest, lowest)
+- Records expenses in the stock account (EXP-001)
+- Links stock items to their suppliers
 
-- Supplier: `name`, `address`, `phone`
-- SupplierTransaction: `supplier_id`, `serial`, `total_amount`, `transaction_date`, `note`
-- SupplierTransactionItem: `supplier_transaction_id`, `stock_item_id`, `quantity`, `purchase_price`
+## Database Changes
 
-### Core Endpoints
+### New Fields in `stock_items`
+- `supplier_id` (nullable, foreign key) - Links stock item to its supplier
+- `highest_purchase_price` (nullable, decimal) - Highest price ever paid for this item
+- `lowest_purchase_price` (nullable, decimal) - Lowest price ever paid for this item
 
-#### Suppliers CRUD
+**Note:** `last_purchase_price` already existed and continues to track the most recent purchase price.
 
-- GET `/api/suppliers?q=ali&per_page=15` — list with `transactions_count` and contact info
-- POST `/api/suppliers` — `{ "name": "Alpha Traders", "phone": "0300...", "address": "Market Rd" }`
-- GET `/api/suppliers/{id}` — includes transactions and total spent
-- PUT `/api/suppliers/{id}` — partial update
-- DELETE `/api/suppliers/{id}` — blocked if transactions exist
+## Stock Items API
 
-#### Create Purchase (adds stock automatically)
+### Create Stock Item
 
-POST `/api/suppliers/{supplierId}/purchases`
+**New/Updated Fields:**
+- `supplier_id` (optional) - Link item to a supplier
+- `create_supplier_transaction` (optional, boolean) - If true and quantity > 0, creates supplier transaction
+- `transaction_serial` (optional) - Serial number for supplier transaction (auto-generated if not provided)
+- `transaction_note` (optional) - Note for supplier transaction
+- `deposit_account_id` (optional) - **Any account** to pay from (cash, bank, or any other account type - defaults to cash account). **Money is deducted from this account.**
+
+**Example - Create with Supplier Transaction:**
 ```json
+POST /api/items
 {
-  "serial": "INV-20251103-001", // optional; auto-generated if omitted
-  "transaction_date": "2025-11-03",
-  "note": "Monthly restock",
-  "items": [
-    // Option A: use existing stock item
-    { "stock_item_id": 12, "quantity": 50, "purchase_price": 120 },
-
-    // Option B: create a brand-new stock item inline
-    {
-      "new_item": {
-        "name": "Premium Tape",
-        "product_category_id": 3,
-        "primary_unit_id": 1,
-        "secondary_unit_id": 2,
-        "secondary_per_primary": 12,
-        "qty_per_primary_unit": 1,
-        "qty_per_secondary_unit": 1,
-        "selling_price": 250,
-        "image_url": null
-      },
-      "quantity": 24,
-      "purchase_price": 150
-    }
-  ]
+  "name": "Portland Cement",
+  "product_category_id": 1,
+  "supplier_id": 5,
+  "primary_unit_id": 2,
+  "secondary_unit_id": 3,
+  "secondary_per_primary": 50.0,
+  "last_purchase_price": 1200.00,
+  "selling_price": 1400.00,
+  "quantity": 10.0,
+  "create_supplier_transaction": true,
+  "transaction_serial": "INV-2025-001",
+  "transaction_note": "Initial stock purchase",
+  "deposit_account_id": 2  // Bank account ID - money will be deducted from this account
 }
 ```
-Behavior:
-- Creates transaction + items
-- For each item, increases `stock_items.quantity` and sets `last_purchase_price`
-- If an item includes `new_item`, a new stock item is created first (same rules as stock management), then quantity is added
 
-Response 201 includes the created transaction and items.
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Item created and supplier transaction recorded",
+  "data": {
+    "id": 123,
+    "name": "Portland Cement",
+    "supplier_id": 5,
+    "supplier": {
+      "id": 5,
+      "name": "ABC Suppliers"
+    },
+    "last_purchase_price": "1200.00",
+    "highest_purchase_price": "1200.00",
+    "lowest_purchase_price": "1200.00",
+    "quantity": "10.00",
+    ...
+  }
+}
+```
 
-#### List Purchases (filters)
+**Example - Create without Supplier Transaction:**
+```json
+POST /api/items
+{
+  "name": "Portland Cement",
+  "product_category_id": 1,
+  "supplier_id": 5,
+  "primary_unit_id": 2,
+  "last_purchase_price": 1200.00,
+  "selling_price": 1400.00,
+  "quantity": 0
+}
+```
 
-GET `/api/suppliers/{supplierId}/purchases?serial=INV-2025&start_date=2025-11-01&end_date=2025-11-30&per_page=15`
+### Add Quantity to Stock
 
-#### Repeat by Serial
+**New Fields:**
+- `purchase_price` (optional) - Purchase price for this restock (updates price tracking)
+- `create_supplier_transaction` (optional, boolean) - If true, creates supplier transaction
+- `supplier_id` (optional) - Supplier ID (uses item's supplier if not provided)
+- `transaction_serial` (optional) - Serial for transaction
+- `transaction_note` (optional) - Note for transaction
+- `deposit_account_id` (optional) - **Any account** to pay from (cash, bank, or any other account type - defaults to cash). **Money is deducted from this account.**
 
-POST `/api/suppliers/{supplierId}/purchases/{serial}/repeat`
-— Recreates the same items and updates stock. New serial is derived from the old one.
+**Example - Add Quantity with Supplier Transaction:**
+```json
+POST /api/items/123/add-quantity
+{
+  "quantity": 5.0,
+  "purchase_price": 1250.00,
+  "create_supplier_transaction": true,
+  "supplier_id": 5,
+  "transaction_serial": "INV-2025-002",
+  "transaction_note": "Restock order",
+  "deposit_account_id": 1  // Cash account ID - money will be deducted from this account
+}
+```
 
-### Stock UI Integration
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Quantity added successfully and supplier transaction recorded",
+  "data": {
+    "id": 123,
+    "quantity": "15.00",
+    "last_purchase_price": "1250.00",
+    "highest_purchase_price": "1250.00",  // Updated if this is higher
+    "lowest_purchase_price": "1200.00",   // Keeps previous lowest
+    ...
+  }
+}
+```
 
-- From Stock Management: add a supplier dropdown and call the purchase endpoint using the chosen supplier.
-- From Supplier Management: create purchase directly; the stock updates automatically.
+**Example - Simple Quantity Add (No Transaction):**
+```json
+POST /api/items/123/add-quantity
+{
+  "quantity": 2.0
+}
+```
 
+### Update Stock Item
+
+**New Field:**
+- `supplier_id` (optional) - Can update supplier
+
+**Example:**
+```json
+PUT /api/items/123
+{
+  "supplier_id": 6,
+  "selling_price": 1450.00
+}
+```
+
+## Supplier Management API
+
+### Create Purchase
+
+**Updated Behavior:**
+- Records expense to stock account (EXP-001) for accounting
+- **Deducts money from selected deposit account** (cash/bank)
+- Tracks highest/lowest purchase prices automatically
+- Updates stock item's supplier if not set
+
+**New Field:**
+- `deposit_account_id` (optional) - **Any account** to pay from (cash, bank, or any other account type - defaults based on payment_method if not provided)
+
+**Example:**
+```json
+POST /api/suppliers/5/purchases
+{
+  "items": [
+    {
+      "stock_item_id": 123,
+      "quantity": 10.0,
+      "purchase_price": 1200.00
+    }
+  ],
+  "transaction_date": "2025-11-18",
+  "note": "Monthly order",
+  "deposit_account_id": 2,  // Bank account - money will be deducted from here
+  "payment_method": "bank"  // Optional: used if deposit_account_id not provided
+}
+```
+
+**What Happens:**
+1. Creates `SupplierTransaction` with auto-generated serial
+2. Creates `SupplierTransactionItem` records
+3. Updates stock quantity
+4. Updates stock item's `supplier_id` if not set
+5. Updates price tracking (last, highest, lowest)
+6. **Debits selected account** (deducts money directly from deposit_account_id or cash/bank based on payment_method)
+
+### Repeat Purchase by Serial
+
+**Updated Behavior:**
+- Now tracks highest/lowest prices
+- Records expense to stock account
+- Updates supplier on stock items
+- **Deducts money from selected deposit account**
+
+**New Field:**
+- `deposit_account_id` (optional) - **Any account** to pay from (cash, bank, or any other account type - defaults to cash)
+
+**Example:**
+```json
+POST /api/suppliers/5/purchases/INV-2025-001/repeat
+{
+  "deposit_account_id": 1  // Cash account - money will be deducted from here
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Repeat transaction created and stock updated",
+  "data": {
+    "id": 456,
+    "serial": "INV-2025-001-RABC",
+    "supplier_id": 5,
+    "total_amount": "12000.00",
+    "items": [
+      {
+        "id": 789,
+        "stock_item_id": 123,
+        "quantity": "10.00",
+        "purchase_price": "1200.00"
+      }
+    ]
+  }
+}
+```
+
+## Price Tracking
+
+### How It Works
+
+The system automatically tracks three price metrics:
+
+1. **Last Purchase Price** - Most recent purchase price
+2. **Highest Purchase Price** - Maximum price ever paid
+3. **Lowest Purchase Price** - Minimum price ever paid
+
+### Price Update Logic
+
+When a purchase is made:
+```php
+// Automatically called via updatePurchasePrice() method
+if (price > highest_purchase_price OR highest_purchase_price is null) {
+    highest_purchase_price = price
+}
+
+if (price < lowest_purchase_price OR lowest_purchase_price is null) {
+    lowest_purchase_price = price
+}
+
+last_purchase_price = price
+```
+
+### Example Price Tracking
+
+**Purchase 1:** 10 bags @ PKR 1,200/bag
+- `last_purchase_price`: 1200.00
+- `highest_purchase_price`: 1200.00
+- `lowest_purchase_price`: 1200.00
+
+**Purchase 2:** 5 bags @ PKR 1,250/bag
+- `last_purchase_price`: 1250.00
+- `highest_purchase_price`: 1250.00 (updated)
+- `lowest_purchase_price`: 1200.00 (unchanged)
+
+**Purchase 3:** 8 bags @ PKR 1,150/bag
+- `last_purchase_price`: 1150.00
+- `highest_purchase_price`: 1250.00 (unchanged)
+- `lowest_purchase_price`: 1150.00 (updated)
+
+## Accounting Integration
+
+### Direct Account Deduction
+
+When a stock purchase is made, money is **directly deducted** from the selected deposit account. No expense account is credited - the money simply leaves the account you choose.
+
+**IMPORTANT:** The selected deposit account is **debited** - money is **deducted** from it.
+
+**Example Account Transaction:**
+
+**Payment Account - Debited:**
+```json
+{
+  "account_id": 1,  // Selected account (cash, bank, or any account)
+  "type": "debit",
+  "amount": 12000.00,
+  "balance_after": 88000.00,  // Account balance decreases (money deducted)
+  "description": "Stock purchase: Portland Cement - Serial: INV-2025-001",
+  "reference_type": "SupplierTransaction",
+  "reference_id": 456
+}
+```
+
+### Account Selection Logic
+
+1. If `deposit_account_id` is provided → Uses that account (**ANY account type** - cash, bank, revenue, expense, etc.)
+2. If `deposit_account_id` is NOT provided:
+   - Checks `payment_method`:
+     - If "bank", "online", "bank transfer", "online transfer" → Uses bank account
+     - Otherwise → Uses cash account
+3. Money is **always deducted** from the selected payment account
+
+**Important:** You can select **ANY account** in the system as the deposit account. The system will deduct money from whichever account you specify.
+
+## Frontend Implementation Guide
+
+### Fetching Available Accounts
+
+```javascript
+// Get all available accounts for deposit account selection
+const fetchAccounts = async () => {
+  const response = await fetch('/api/accounts?is_active=true');
+  const { data } = await response.json();
+
+  // Returns ALL accounts (cash, bank, revenue, expense, etc.)
+  return data.accounts;
+};
+
+// Usage in dropdown/select
+const accounts = await fetchAccounts();
+// Display all accounts for user to choose from
+accounts.forEach(account => {
+  console.log(`${account.name} (${account.type}) - Balance: ${account.balance}`);
+});
+```
+
+### Displaying Stock Items with Supplier
+
+```javascript
+// Fetch stock items
+const response = await fetch('/api/items?q=cement');
+const { data } = await response.json();
+
+// Display item with supplier info
+data.data.forEach(item => {
+  console.log(`${item.name} - Supplier: ${item.supplier?.name || 'N/A'}`);
+  console.log(`Prices - Last: ${item.last_purchase_price}, Highest: ${item.highest_purchase_price}, Lowest: ${item.lowest_purchase_price}`);
+});
+```
+
+### Creating Stock Item with Supplier Transaction
+
+```javascript
+// First, fetch all available accounts
+const accounts = await fetchAccounts();
+
+// Create stock item with selected account
+const createStockItem = async (itemData) => {
+  const payload = {
+    name: itemData.name,
+    product_category_id: itemData.categoryId,
+    supplier_id: itemData.supplierId,
+    primary_unit_id: itemData.primaryUnitId,
+    secondary_unit_id: itemData.secondaryUnitId,
+    secondary_per_primary: itemData.conversionRatio,
+    last_purchase_price: itemData.purchasePrice,
+    selling_price: itemData.sellingPrice,
+    quantity: itemData.quantity,
+    create_supplier_transaction: itemData.quantity > 0, // Auto-create if quantity > 0
+    transaction_serial: itemData.invoiceSerial, // Optional
+    transaction_note: itemData.note, // Optional
+    deposit_account_id: itemData.paymentAccountId // ANY account ID - money deducted from this account
+  };
+
+  const response = await fetch('/api/items', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    },
+    body: JSON.stringify(payload)
+  });
+
+  return response.json();
+};
+```
+
+### Restocking via Serial (Quick Restock)
+
+```javascript
+// Quick restock using supplier transaction serial
+const quickRestock = async (supplierId, serial) => {
+  const response = await fetch(`/api/suppliers/${supplierId}/purchases/${serial}/repeat`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`
+    }
+  });
+
+  return response.json();
+};
+
+// Usage
+await quickRestock(5, 'INV-2025-001');
+// Automatically:
+// - Creates new transaction with same items
+// - Updates stock quantities
+// - Updates price tracking
+// - Records expense to stock account
+```
+
+### Adding Quantity with Supplier Transaction
+
+```javascript
+const addStockQuantity = async (itemId, quantity, purchasePrice, supplierId, paymentAccountId) => {
+  const payload = {
+    quantity: quantity,
+    purchase_price: purchasePrice,
+    create_supplier_transaction: true,
+    supplier_id: supplierId,
+    transaction_note: 'Restock order',
+    deposit_account_id: paymentAccountId // Account to pay from (money deducted)
+  };
+
+  const response = await fetch(`/api/items/${itemId}/add-quantity`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    },
+    body: JSON.stringify(payload)
+  });
+
+  return response.json();
+};
+```
+
+### Displaying Price History
+
+```javascript
+// Show price tracking information
+const displayPriceInfo = (stockItem) => {
+  return {
+    current: stockItem.last_purchase_price,
+    highest: stockItem.highest_purchase_price,
+    lowest: stockItem.lowest_purchase_price,
+    priceRange: stockItem.highest_purchase_price && stockItem.lowest_purchase_price
+      ? `${stockItem.lowest_purchase_price} - ${stockItem.highest_purchase_price}`
+      : 'N/A',
+    priceVariation: stockItem.highest_purchase_price && stockItem.lowest_purchase_price
+      ? ((stockItem.highest_purchase_price - stockItem.lowest_purchase_price) / stockItem.lowest_purchase_price * 100).toFixed(2) + '%'
+      : 'N/A'
+  };
+};
+```
+
+### Supplier Purchase Form
+
+```javascript
+// Complete supplier purchase form
+// First, fetch all available accounts for selection
+const accounts = await fetchAccounts();
+
+const createSupplierPurchase = async (supplierId, items, transactionDate, note, paymentAccountId) => {
+  const payload = {
+    items: items.map(item => ({
+      stock_item_id: item.stockItemId,
+      quantity: item.quantity,
+      purchase_price: item.purchasePrice
+    })),
+    transaction_date: transactionDate,
+    note: note,
+    deposit_account_id: paymentAccountId, // ANY account ID - money deducted directly from this account
+    payment_method: 'cash', // Optional: used if deposit_account_id not provided (fallback)
+    record_payment: true // Automatically deducts money from selected account
+  };
+
+  const response = await fetch(`/api/suppliers/${supplierId}/purchases`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    },
+    body: JSON.stringify(payload)
+  });
+
+  return response.json();
+};
+```
+
+## Workflow Examples
+
+### Workflow 1: New Stock Item from Supplier
+
+1. **Create stock item with initial purchase:**
+```json
+POST /api/items
+{
+  "name": "Steel Rods",
+  "supplier_id": 3,
+  "product_category_id": 2,
+  "primary_unit_id": 4,
+  "last_purchase_price": 500.00,
+  "selling_price": 650.00,
+  "quantity": 100.0,
+  "create_supplier_transaction": true,
+  "transaction_serial": "SUP-2025-001",
+  "deposit_account_id": 2  // Bank account - PKR 50,000 deducted
+}
+```
+
+**Result:**
+- Stock item created
+- Supplier transaction created
+- **Bank account debited** (PKR 50,000 deducted directly)
+- Price tracking initialized (all prices = 500.00)
+
+### Workflow 2: Restock Existing Item
+
+1. **Add quantity via supplier purchase:**
+```json
+POST /api/suppliers/3/purchases
+{
+  "items": [
+    {
+      "stock_item_id": 50,
+      "quantity": 50.0,
+      "purchase_price": 520.00
+    }
+  ],
+  "transaction_date": "2025-11-18",
+  "deposit_account_id": 1  // Cash account - PKR 26,000 deducted
+}
+```
+
+**Result:**
+- Stock quantity increased by 50
+- `last_purchase_price`: 520.00
+- `highest_purchase_price`: 520.00 (if higher than previous)
+- `lowest_purchase_price`: 500.00 (if 520 > 500)
+- Supplier transaction recorded
+- **Cash account debited** (PKR 26,000 deducted directly)
+
+### Workflow 3: Quick Restock by Serial
+
+1. **Repeat previous purchase:**
+```json
+POST /api/suppliers/3/purchases/SUP-2025-001/repeat
+{
+  "deposit_account_id": 1  // Cash account - money deducted
+}
+```
+
+**Result:**
+- New transaction created with same items
+- Stock quantities updated
+- Price tracking updated
+- **Cash account debited** (money deducted directly)
+
+### Workflow 4: Manual Quantity Add (No Transaction)
+
+1. **Add quantity without supplier transaction:**
+```json
+POST /api/items/50/add-quantity
+{
+  "quantity": 10.0
+}
+```
+
+**Result:**
+- Stock quantity increased
+- No supplier transaction created
+- No account transaction
+- Price tracking unchanged
+
+## API Response Examples
+
+### Stock Item with Supplier and Price Tracking
+
+```json
+{
+  "id": 123,
+  "name": "Portland Cement",
+  "serial_id": "CEM-001",
+  "supplier_id": 5,
+  "supplier": {
+    "id": 5,
+    "name": "ABC Suppliers",
+    "phone": "+92-300-1234567"
+  },
+  "product_category_id": 1,
+  "category": {
+    "id": 1,
+    "name": "Construction Materials"
+  },
+  "last_purchase_price": "1250.00",
+  "highest_purchase_price": "1250.00",
+  "lowest_purchase_price": "1200.00",
+  "selling_price": "1400.00",
+  "quantity": "15.00",
+  "available_quantity": "15.00",
+  "primary_unit": "bag",
+  "secondary_unit": "kg",
+  "primaryUnit": {
+    "id": 2,
+    "name": "Bag",
+    "symbol": "bag"
+  },
+  "secondaryUnit": {
+    "id": 3,
+    "name": "Kilogram",
+    "symbol": "kg"
+  }
+}
+```
+
+## Best Practices
+
+1. **Always set supplier_id** when creating stock items from suppliers
+2. **Use create_supplier_transaction** when adding initial stock or restocking from suppliers
+3. **Provide purchase_price** when adding quantity to update price tracking
+4. **Use repeatBySerial** for quick restocking of common orders
+5. **Monitor price tracking** to identify price trends and negotiate better deals
+6. **Link stock items to suppliers** for better inventory management
+
+## Summary
+
+- ✅ Stock items can be linked to suppliers
+- ✅ Automatic supplier transaction creation when adding stock
+- ✅ Price tracking (last, highest, lowest purchase prices)
+- ✅ **Payment account selection** - Choose which account to pay from (any account type)
+- ✅ **Direct money deduction** - Selected account is debited (money deducted directly)
+- ✅ Quick restock via serial number
+- ✅ Supplier history automatically maintained
+
+## Important Notes
+
+⚠️ **Money Deduction:** When you create a stock purchase with `deposit_account_id`, the money is **deducted** from that account. Make sure the account has sufficient balance.
+
+⚠️ **Account Selection:**
+- **You can select ANY account** in the system (cash, bank, revenue, expense, etc.)
+- Always provide `deposit_account_id` to explicitly choose payment account
+- Use `GET /api/accounts?is_active=true` to get all available accounts
+- If not provided, system uses `payment_method` to determine (cash/bank)
+- Defaults to cash account if neither is provided
+
+⚠️ **Direct Deduction:**
+- **Selected deposit account** (any account type) is **debited** (balance decreases)
+- Money is **directly deducted** - no expense account is credited
+- Transaction is linked to the `SupplierTransaction` record
+
+⚠️ **Account Types:**
+- You can pay from **any account type**: cash, bank, revenue, expense, receivable, advance, etc.
+- The system will **deduct money directly** from whichever account you specify
+- Use `GET /api/accounts` to see all available accounts with their balances
 

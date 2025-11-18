@@ -8,6 +8,7 @@ import { FiSearch } from 'react-icons/fi';
 import { AddIcon, RepeatIcon } from '@chakra-ui/icons';
 import { supplierService } from 'services/supplierService';
 import { stockService } from 'services/stockService';
+import { accountService } from 'services/accountService';
 import { useHistory } from 'react-router-dom';
 
 const SupplierManagement = () => {
@@ -18,11 +19,14 @@ const SupplierManagement = () => {
   const history = useHistory();
 
   const [suppliers, setSuppliers] = React.useState([]);
+  const [allSuppliers, setAllSuppliers] = React.useState([]); // Store all suppliers for filtering
   const [loading, setLoading] = React.useState(false);
   const [q, setQ] = React.useState('');
   const [selectedSupplier, setSelectedSupplier] = React.useState(null);
   const [categories, setCategories] = React.useState([]);
   const [units, setUnits] = React.useState([]);
+  const [accounts, setAccounts] = React.useState([]);
+  const [stockItems, setStockItems] = React.useState([]); // Store stock items for product-based search
 
   const { isOpen: isAddOpen, onOpen: onAddOpen, onClose: onAddClose } = useDisclosure();
   const { isOpen: isEditOpen, onOpen: onEditOpen, onClose: onEditClose } = useDisclosure();
@@ -31,36 +35,94 @@ const SupplierManagement = () => {
   const [newSupplier, setNewSupplier] = React.useState({ name: '', phone: '', address: '' });
   const [editSupplier, setEditSupplier] = React.useState(null);
   const today = new Date().toISOString().slice(0,10);
-  const [purchaseForm, setPurchaseForm] = React.useState({ serial: '', transaction_date: today, note: '', items: [{ mode: 'existing', stock_item_id: '', quantity: '', purchase_price: '', new_item: { name: '', product_category_id: '', primary_unit_id: '', secondary_unit_id: '', secondary_per_primary: '', qty_per_primary_unit: '', qty_per_secondary_unit: '', selling_price: '', image_url: '' } }] });
+  const [purchaseForm, setPurchaseForm] = React.useState({ serial: '', transaction_date: today, note: '', deposit_account_id: '', payment_method: 'cash', items: [{ mode: 'existing', stock_item_id: '', quantity: '', purchase_price: '', new_item: { name: '', product_category_id: '', primary_unit_id: '', secondary_unit_id: '', secondary_per_primary: '', selling_price: '', image_url: '' } }] });
 
   const loadSuppliers = React.useCallback(async () => {
     try {
       setLoading(true);
-      const resp = await supplierService.listSuppliers({ q: q || undefined, per_page: 50 });
+      const resp = await supplierService.listSuppliers({ per_page: 100 });
       const data = resp?.data || resp || {};
       const list = Array.isArray(data) ? data : (data.data || data.suppliers || []);
-      setSuppliers(list);
+      setAllSuppliers(list);
+      // Filter will be applied in useEffect based on search query
     } catch (e) {
       toast({ title: 'Error loading suppliers', description: e.message, status: 'error' });
     } finally { setLoading(false); }
-  }, [q, toast]);
+  }, [toast]);
 
-  React.useEffect(() => { loadSuppliers(); }, [loadSuppliers]);
+  const loadStockItems = React.useCallback(async () => {
+    try {
+      const resp = await stockService.listItems({ per_page: 1000 });
+      const data = resp?.data || resp || {};
+      const items = Array.isArray(data) ? data : (data.data || data.items || []);
+      setStockItems(items);
+    } catch (e) {
+      // Non-blocking
+    }
+  }, []);
 
-  // Load category and unit options for new item creation
+  // Filter suppliers based on search query (by name, phone, or products they supply)
+  React.useEffect(() => {
+    if (!q || q.trim() === '') {
+      setSuppliers(allSuppliers);
+      return;
+    }
+
+    const searchTerm = q.toLowerCase().trim();
+    
+    // First, find stock items that match the search term
+    const matchingItems = stockItems.filter(item => {
+      const itemName = (item.name || '').toLowerCase();
+      const categoryName = (item.category?.name || item.category_name || '').toLowerCase();
+      return itemName.includes(searchTerm) || categoryName.includes(searchTerm);
+    });
+
+    // Get supplier IDs from matching items
+    const supplierIdsFromItems = new Set(
+      matchingItems
+        .map(item => item.supplier_id)
+        .filter(id => id != null)
+    );
+
+    // Filter suppliers by:
+    // 1. Name or phone matches search term
+    // 2. OR supplier_id is in the list of suppliers that supply matching products
+    const filtered = allSuppliers.filter(supplier => {
+      const nameMatch = (supplier.name || '').toLowerCase().includes(searchTerm);
+      const phoneMatch = (supplier.phone || '').toLowerCase().includes(searchTerm);
+      const productMatch = supplierIdsFromItems.has(supplier.id);
+      
+      return nameMatch || phoneMatch || productMatch;
+    });
+
+    setSuppliers(filtered);
+  }, [q, allSuppliers, stockItems]);
+
+  React.useEffect(() => { 
+    loadSuppliers();
+    loadStockItems();
+  }, [loadSuppliers, loadStockItems]);
+
+  // Load category, unit, and account options
   React.useEffect(() => {
     (async () => {
       try {
-        const [catResp, unitResp] = await Promise.all([
+        const [catResp, unitResp, accountResp] = await Promise.all([
           stockService.listCategories({ per_page: 100 }),
           stockService.listUnits({ per_page: 100 }),
+          accountService.listAccounts({ is_active: true }),
         ]);
         const catData = catResp?.data || catResp || {};
         const unitData = unitResp?.data || unitResp || {};
+        const accountData = accountResp?.data || accountResp || {};
         const catList = Array.isArray(catData) ? catData : (catData.data || catData.categories || []);
         const unitList = Array.isArray(unitData) ? unitData : (unitData.data || unitData.units || []);
+        const accountsList = Array.isArray(accountData) ? accountData : (accountData.accounts || accountData.data || []);
+        // Show ALL active accounts (any account type can be used for payments)
+        const activeAccounts = accountsList.filter(acc => acc.is_active !== false);
         setCategories(catList);
         setUnits(unitList);
+        setAccounts(activeAccounts);
       } catch (_) { /* ignore */ }
     })();
   }, []);
@@ -92,10 +154,21 @@ const SupplierManagement = () => {
     catch (e) { toast({ title: 'Delete failed', description: e.message, status: 'error' }); }
   };
 
-  const handleOpenPurchase = (s) => { setSelectedSupplier(s); setPurchaseForm({ serial: '', transaction_date: today, note: '', items: [{ stock_item_id: '', quantity: '', purchase_price: '' }] }); onPurchaseOpen(); };
-  const addPurchaseRow = () => setPurchaseForm((p) => ({ ...p, items: [...p.items, { mode: 'existing', stock_item_id: '', quantity: '', purchase_price: '', new_item: { name: '', product_category_id: '', primary_unit_id: '', secondary_unit_id: '', secondary_per_primary: '', qty_per_primary_unit: '', qty_per_secondary_unit: '', selling_price: '', image_url: '' } }] }));
+  const handleOpenPurchase = (s) => { 
+    setSelectedSupplier(s); 
+    setPurchaseForm({ 
+      serial: '', 
+      transaction_date: today, 
+      note: '', 
+      deposit_account_id: '', 
+      payment_method: 'cash',
+      items: [{ mode: 'existing', stock_item_id: '', quantity: '', purchase_price: '', new_item: { name: '', product_category_id: '', primary_unit_id: '', secondary_unit_id: '', secondary_per_primary: '', selling_price: '', image_url: '' } }] 
+    }); 
+    onPurchaseOpen(); 
+  };
+  const addPurchaseRow = () => setPurchaseForm((p) => ({ ...p, items: [...p.items, { mode: 'existing', stock_item_id: '', quantity: '', purchase_price: '', new_item: { name: '', product_category_id: '', primary_unit_id: '', secondary_unit_id: '', secondary_per_primary: '', selling_price: '', image_url: '' } }] }));
   const removePurchaseRow = (idx) => setPurchaseForm((p) => ({ ...p, items: p.items.filter((_, i) => i !== idx) }));
-  const ensureNewItemShape = () => ({ name: '', product_category_id: '', primary_unit_id: '', secondary_unit_id: '', secondary_per_primary: '', qty_per_primary_unit: '', qty_per_secondary_unit: '', selling_price: '', image_url: '' });
+  const ensureNewItemShape = () => ({ name: '', product_category_id: '', primary_unit_id: '', secondary_unit_id: '', secondary_per_primary: '', selling_price: '', image_url: '' });
   const updatePurchaseRow = (idx, field, value) => setPurchaseForm((p) => ({
     ...p,
     items: p.items.map((it,i)=> {
@@ -124,6 +197,8 @@ const SupplierManagement = () => {
       serial: purchaseForm.serial || undefined,
       transaction_date: purchaseForm.transaction_date,
       note: purchaseForm.note || undefined,
+      deposit_account_id: purchaseForm.deposit_account_id ? Number(purchaseForm.deposit_account_id) : undefined,
+      payment_method: purchaseForm.payment_method || undefined,
       items: purchaseForm.items.map(it => {
         const common = { quantity: Number(it.quantity), purchase_price: Number(it.purchase_price) };
         if (it.mode === 'new') {
@@ -134,10 +209,9 @@ const SupplierManagement = () => {
             primary_unit_id: ni.primary_unit_id ? Number(ni.primary_unit_id) : undefined,
             secondary_unit_id: ni.secondary_unit_id ? Number(ni.secondary_unit_id) : undefined,
             secondary_per_primary: ni.secondary_per_primary ? Number(ni.secondary_per_primary) : undefined,
-            qty_per_primary_unit: ni.qty_per_primary_unit ? Number(ni.qty_per_primary_unit) : undefined,
-            qty_per_secondary_unit: ni.qty_per_secondary_unit ? Number(ni.qty_per_secondary_unit) : undefined,
             selling_price: ni.selling_price ? Number(ni.selling_price) : undefined,
             image_url: ni.image_url || undefined,
+            supplier_id: selectedSupplier.id, // Link new item to supplier
           };
           return { ...common, new_item: newItemPayload };
         }
@@ -149,6 +223,9 @@ const SupplierManagement = () => {
       await supplierService.createPurchase(selectedSupplier.id, payload);
       toast({ title: 'Purchase created and stock updated', status: 'success' });
       onPurchaseClose(); setSelectedSupplier(null);
+      // Dispatch event to update accounts in real-time
+      window.dispatchEvent(new CustomEvent('supplier-transaction-created'));
+      window.dispatchEvent(new CustomEvent('accounts-updated'));
     } catch (e) { toast({ title: 'Purchase failed', description: e.message, status: 'error' }); }
   };
 
@@ -172,7 +249,7 @@ const SupplierManagement = () => {
               <InputLeftElement>
                 <FiSearch color={useColorModeValue('#718096', '#A0AEC0')} />
               </InputLeftElement>
-              <Input placeholder='Search by name or phone' value={q} onChange={(e) => setQ(e.target.value)} />
+              <Input placeholder='Search by name, phone, or product (e.g., "cement")' value={q} onChange={(e) => setQ(e.target.value)} />
             </InputGroup>
           </FormControl>
           <Button onClick={loadSuppliers}>Refresh</Button>
@@ -293,6 +370,39 @@ const SupplierManagement = () => {
                 <FormLabel>Note</FormLabel>
                 <Input value={purchaseForm.note} onChange={(e) => setPurchaseForm({ ...purchaseForm, note: e.target.value })} />
               </FormControl>
+              <HStack>
+                <FormControl>
+                  <FormLabel>Payment Account (Optional)</FormLabel>
+                  <Select
+                    value={purchaseForm.deposit_account_id}
+                    onChange={(e) => setPurchaseForm({ ...purchaseForm, deposit_account_id: e.target.value })}
+                    placeholder='Select account to pay from (any account type)'>
+                    {accounts.map((acc) => (
+                      <option key={acc.id} value={acc.id}>
+                        {acc.name} ({acc.type || 'custom'}) - Balance: PKR {parseFloat(acc.balance || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </option>
+                    ))}
+                  </Select>
+                  <Text mt='1' fontSize='xs' color='gray.500'>
+                    Money will be deducted from this account. You can select any account type (cash, bank, revenue, expense, etc.). Defaults based on payment method if not selected.
+                  </Text>
+                </FormControl>
+                <FormControl>
+                  <FormLabel>Payment Method (Optional)</FormLabel>
+                  <Select
+                    value={purchaseForm.payment_method}
+                    onChange={(e) => setPurchaseForm({ ...purchaseForm, payment_method: e.target.value })}>
+                    <option value='cash'>Cash</option>
+                    <option value='bank'>Bank</option>
+                    <option value='online'>Online</option>
+                    <option value='bank transfer'>Bank Transfer</option>
+                    <option value='online transfer'>Online Transfer</option>
+                  </Select>
+                  <Text mt='1' fontSize='xs' color='gray.500'>
+                    Used if payment account is not selected. Defaults to cash.
+                  </Text>
+                </FormControl>
+              </HStack>
               <Box border='1px' borderColor={borderColor} borderRadius='8px' p='10px'>
                 <Text fontWeight='semibold' mb='8px'>Items</Text>
                 <VStack spacing='10px' align='stretch'>
@@ -358,14 +468,6 @@ const SupplierManagement = () => {
                             <FormControl>
                               <FormLabel fontSize='sm'>Secondary per Primary</FormLabel>
                               <Input value={it.new_item?.secondary_per_primary || ''} onChange={(e) => updatePurchaseRowNewItem(idx, 'secondary_per_primary', e.target.value)} />
-                            </FormControl>
-                            <FormControl>
-                              <FormLabel fontSize='sm'>Qty per Primary</FormLabel>
-                              <Input value={it.new_item?.qty_per_primary_unit || ''} onChange={(e) => updatePurchaseRowNewItem(idx, 'qty_per_primary_unit', e.target.value)} />
-                            </FormControl>
-                            <FormControl>
-                              <FormLabel fontSize='sm'>Qty per Secondary</FormLabel>
-                              <Input value={it.new_item?.qty_per_secondary_unit || ''} onChange={(e) => updatePurchaseRowNewItem(idx, 'qty_per_secondary_unit', e.target.value)} />
                             </FormControl>
                           </HStack>
                           <HStack>

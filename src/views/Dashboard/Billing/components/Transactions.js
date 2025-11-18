@@ -232,6 +232,26 @@ const Transactions = () => {
     }
   }, [accounts.length, startDate, endDate, loadTransactions]);
 
+  // Listen for account updates from supplier transactions
+  React.useEffect(() => {
+    const handleAccountUpdate = async () => {
+      // Reload accounts first, then transactions
+      await loadAccounts();
+      // Small delay to ensure accounts state is updated
+      setTimeout(() => {
+        loadTransactions(true);
+      }, 300);
+    };
+    
+    window.addEventListener('supplier-transaction-created', handleAccountUpdate);
+    window.addEventListener('accounts-updated', handleAccountUpdate);
+    
+    return () => {
+      window.removeEventListener('supplier-transaction-created', handleAccountUpdate);
+      window.removeEventListener('accounts-updated', handleAccountUpdate);
+    };
+  }, [loadAccounts, loadTransactions]);
+
   // Filter transactions by search query
   const filteredTransactions = React.useMemo(() => {
     let filtered = transactions;

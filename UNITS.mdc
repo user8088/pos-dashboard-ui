@@ -1,3 +1,431 @@
----
-alwaysApply: true
----
+# Unit Conversion & Dual Unit Sales API Documentation
+
+## Overview
+
+The stock management system now supports selling items in either **primary** or **secondary** units, while maintaining inventory tracking in a single measurement (primary units). This allows for flexible sales while ensuring accurate stock management.
+
+## Key Concepts
+
+### Primary Unit (Stocking Unit)
+- **Primary unit** is the base unit used for inventory tracking
+- All stock quantities are stored in primary units
+- Example: "Bag" for cement
+
+### Secondary Unit (Alternative Sales Unit)
+- **Secondary unit** is an optional alternative unit for sales
+- Must have a conversion ratio (`secondary_per_primary`) defined
+- Example: "Kilogram" for cement (1 bag = 50 kg)
+
+### Conversion Formula
+```
+Primary Quantity = Secondary Quantity ÷ secondary_per_primary
+Secondary Quantity = Primary Quantity × secondary_per_primary
+```
+
+## Database Changes
+
+### Removed Fields
+- `qty_per_primary_unit` - No longer needed
+- `qty_per_secondary_unit` - No longer needed
+
+### New Fields in `invoice_items`
+- `unit_type` (string, default: 'primary') - Either 'primary' or 'secondary'
+- `sold_quantity` (decimal, 12,6) - Original quantity in the unit_type specified (for display)
+
+### New Fields in `reservation_items`
+- `unit_type` (string, default: 'primary') - Either 'primary' or 'secondary'
+- `sold_quantity` (decimal, 12,6) - Original quantity in the unit_type specified (for display)
+
+## API Changes
+
+### Stock Items API
+
+#### Create/Update Stock Item
+**Removed fields:**
+- `qty_per_primary_unit`
+- `qty_per_secondary_unit`
+
+**Required fields:**
+- `primary_unit_id` (required)
+- `secondary_unit_id` (optional, but if provided, `secondary_per_primary` must also be provided)
+- `secondary_per_primary` (optional, but if provided, `secondary_unit_id` must also be provided)
+- `selling_price` (required) - Price per primary unit
+- `secondary_selling_price` (optional) - Price per secondary unit (for flexible pricing)
+
+**Example:**
+```json
+POST /api/items
+{
+  "name": "Portland Cement",
+  "product_category_id": 1,
+  "primary_unit_id": 2,  // Bag
+  "secondary_unit_id": 3,  // Kilogram
+  "secondary_per_primary": 50.0,  // 1 bag = 50 kg
+  "last_purchase_price": 1200.00,
+  "selling_price": 1400.00,  // Price per bag
+  "secondary_selling_price": 30.00,  // Price per kg (optional, allows different pricing)
+  "quantity": 5.0  // 5 bags in stock
+}
+```
+
+**Pricing Logic:**
+- If `secondary_selling_price` is provided, it will be used when selling in secondary units
+- If `secondary_selling_price` is NOT provided, the system calculates: `selling_price / secondary_per_primary`
+- This allows for flexible pricing strategies (e.g., bulk discounts, convenience pricing)
+
+### Invoice API
+
+#### Create Invoice
+
+**New field in items:**
+- `unit_type` (optional, default: 'primary') - Either 'primary' or 'secondary'
+
+**Request Example - Selling in Primary Units:**
+```json
+POST /api/invoices
+{
+  "customer_id": 1,
+  "items": [
+    {
+      "stock_item_id": 1,
+      "quantity": 2,  // 2 bags
+      "unit_type": "primary",  // Optional, defaults to 'primary'
+      "unit_price": 1400.00
+    }
+  ],
+  "deposit_account_id": 1,
+  "payment_method": "cash"
+}
+```
+
+**Request Example - Selling in Secondary Units:**
+```json
+POST /api/invoices
+{
+  "customer_id": 1,
+  "items": [
+    {
+      "stock_item_id": 1,
+      "quantity": 30,  // 30 kg
+      "unit_type": "secondary",  // Selling in kilograms
+      "unit_price": 30.00  // Optional: Price per kg (if not provided, uses secondary_selling_price or calculated price)
+    }
+  ],
+  "deposit_account_id": 1,
+  "payment_method": "cash"
+}
+```
+
+**Note:** If `unit_price` is not provided:
+- For `unit_type: "primary"` → Uses `selling_price`
+- For `unit_type: "secondary"` → Uses `secondary_selling_price` if set, otherwise calculates `selling_price / secondary_per_primary`
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "id": 123,
+    "items": [
+      {
+        "id": 456,
+        "stock_item_id": 1,
+        "name": "Portland Cement",
+        "quantity": 0.6,  // Stored in primary units (0.6 bags)
+        "unit_type": "secondary",
+        "sold_quantity": 30.0,  // Original quantity for display (30 kg)
+        "unit_price": 28.00,
+        "line_total": 840.00
+      }
+    ]
+  }
+}
+```
+
+**Important Notes:**
+- `quantity` field in response is always in **primary units** (for stock tracking)
+- `sold_quantity` field shows the **original quantity** in the unit_type specified
+- `unit_type` indicates which unit was used for the sale
+- Stock is decremented in primary units (e.g., 30 kg = 0.6 bags)
+
+### Reservation API
+
+#### Create Reservation
+
+**New field in items:**
+- `unit_type` (optional, default: 'primary') - Either 'primary' or 'secondary'
+
+**Request Example:**
+```json
+POST /api/reservations
+{
+  "customer_id": 1,
+  "items": [
+    {
+      "stock_item_id": 1,
+      "quantity": 25,  // 25 kg
+      "unit_type": "secondary",
+      "unit_price": 28.00
+    }
+  ],
+  "advance_payment": {
+    "amount": 200.00,
+    "deposit_account_id": 1,
+    "method": "cash"
+  }
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "id": 789,
+    "items": [
+      {
+        "id": 101,
+        "stock_item_id": 1,
+        "quantity": 0.5,  // Stored in primary units (0.5 bags)
+        "unit_type": "secondary",
+        "sold_quantity": 25.0,  // Original quantity (25 kg)
+        "unit_price": 28.00,
+        "total_price": 700.00
+      }
+    ]
+  }
+}
+```
+
+## Frontend Implementation Guide
+
+### Displaying Stock Quantities
+
+When displaying stock items, show both units if secondary unit is configured:
+
+```javascript
+// Example: Display stock quantity
+const stockItem = {
+  id: 1,
+  name: "Portland Cement",
+  quantity: 5.0,  // 5 bags (primary units)
+  primary_unit: "bag",
+  secondary_unit: "kg",
+  secondary_per_primary: 50.0,
+  selling_price: 1400.00,  // Price per bag
+  secondary_selling_price: 30.00  // Price per kg (optional)
+};
+
+// Display format
+const displayQuantity = stockItem.secondary_unit 
+  ? `${stockItem.quantity} ${stockItem.primary_unit} (${stockItem.quantity * stockItem.secondary_per_primary} ${stockItem.secondary_unit})`
+  : `${stockItem.quantity} ${stockItem.primary_unit}`;
+
+// Result: "5 bag (250 kg)"
+
+// Display prices
+const primaryPrice = stockItem.selling_price;  // 1400.00 per bag
+const secondaryPrice = stockItem.secondary_selling_price 
+  ? stockItem.secondary_selling_price  // Use explicit price if set
+  : stockItem.selling_price / stockItem.secondary_per_primary;  // Calculate: 1400 / 50 = 28.00 per kg
+
+// Result: "PKR 1,400.00 per bag" or "PKR 30.00 per kg"
+```
+
+### Creating Invoice Items
+
+**Allow user to select unit type:**
+
+```javascript
+// Example: Add item to invoice
+const addItemToInvoice = (stockItem, quantity, unitType = 'primary', customPrice = null) => {
+  // Determine unit price
+  let unitPrice;
+  if (customPrice !== null) {
+    unitPrice = customPrice;  // Use custom price if provided
+  } else if (unitType === 'primary') {
+    unitPrice = stockItem.selling_price;
+  } else {
+    // For secondary units, use secondary_selling_price if set, otherwise calculate
+    unitPrice = stockItem.secondary_selling_price 
+      ? stockItem.secondary_selling_price
+      : stockItem.selling_price / stockItem.secondary_per_primary;
+  }
+  
+  const payload = {
+    stock_item_id: stockItem.id,
+    quantity: quantity,
+    unit_type: unitType,
+    unit_price: unitPrice  // Optional: can be omitted to use default pricing
+  };
+  
+  // Add to invoice items array
+  invoiceItems.push(payload);
+};
+```
+
+**Display invoice items:**
+
+```javascript
+// Example: Display invoice item
+const displayInvoiceItem = (item) => {
+  const quantity = item.sold_quantity || item.quantity;
+  const unit = item.unit_type === 'secondary' 
+    ? item.stockItem.secondary_unit 
+    : item.stockItem.primary_unit;
+  
+  return `${quantity} ${unit} × ${item.unit_price} = ${item.line_total}`;
+};
+
+// Result: "30 kg × 28.00 = 840.00"
+```
+
+### Stock Validation
+
+**Check available quantity before sale:**
+
+```javascript
+// Example: Validate stock availability
+const validateStock = (stockItem, requestedQuantity, unitType = 'primary') => {
+  const availableQuantity = stockItem.available_quantity; // Already in primary units
+  
+  let requestedInPrimary = requestedQuantity;
+  if (unitType === 'secondary') {
+    requestedInPrimary = requestedQuantity / stockItem.secondary_per_primary;
+  }
+  
+  if (availableQuantity < requestedInPrimary) {
+    const availableDisplay = unitType === 'secondary'
+      ? availableQuantity * stockItem.secondary_per_primary
+      : availableQuantity;
+    
+    throw new Error(
+      `Insufficient stock. Available: ${availableDisplay} ${unitType === 'secondary' ? stockItem.secondary_unit : stockItem.primary_unit}`
+    );
+  }
+  
+  return true;
+};
+```
+
+### Example: Complete Invoice Form
+
+```javascript
+// Example: Complete invoice creation flow
+const createInvoice = async (customerId, items, paymentInfo) => {
+  const payload = {
+    customer_id: customerId,
+    items: items.map(item => ({
+      stock_item_id: item.stockItem.id,
+      quantity: item.quantity,
+      unit_type: item.unitType, // 'primary' or 'secondary'
+      unit_price: item.unitPrice,
+      hidden_cost: item.hiddenCost || 0
+    })),
+    deposit_account_id: paymentInfo.accountId,
+    payment_method: paymentInfo.method
+  };
+  
+  const response = await fetch('/api/invoices', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    },
+    body: JSON.stringify(payload)
+  });
+  
+  return response.json();
+};
+```
+
+## Real-World Example
+
+### Scenario: Cement Sales
+
+**Stock Item Setup:**
+- Name: Portland Cement
+- Primary Unit: Bag
+- Secondary Unit: Kilogram
+- Conversion: 1 bag = 50 kg
+- Stock: 5 bags (250 kg total)
+
+**Sale 1: Customer buys 2 bags**
+```json
+{
+  "quantity": 2,
+  "unit_type": "primary"
+}
+```
+- Stock after: 3 bags (150 kg)
+- Invoice shows: "2 bag × 1400.00 = 2800.00"
+
+**Sale 2: Customer buys 30 kg**
+```json
+{
+  "quantity": 30,
+  "unit_type": "secondary"
+  // unit_price not provided, so uses secondary_selling_price (30.00) or calculated (28.00)
+}
+```
+- Stock after: 2.4 bags (120 kg)
+- Invoice shows: "30 kg × 30.00 = 900.00" (if secondary_selling_price is 30.00)
+- Database stores: `quantity: 0.6` (in primary units), `sold_quantity: 30.0`, `unit_type: "secondary"`
+
+**Sale 3: Customer buys 1.5 bags**
+```json
+{
+  "quantity": 1.5,
+  "unit_type": "primary"
+}
+```
+- Stock after: 0.9 bags (45 kg)
+- Invoice shows: "1.5 bag × 1400.00 = 2100.00"
+
+## Error Handling
+
+### Common Errors
+
+1. **Item doesn't have secondary unit configured:**
+```json
+{
+  "success": false,
+  "message": "Item Portland Cement does not have a secondary unit configured. Cannot sell in secondary units."
+}
+```
+
+2. **Insufficient stock:**
+```json
+{
+  "success": false,
+  "message": "Insufficient stock for Portland Cement. Available: 45 kg, Required: 50 kg"
+}
+```
+
+## Migration Notes
+
+After running migrations:
+1. Existing invoices will have `unit_type: 'primary'` and `sold_quantity: null`
+2. Existing reservations will have `unit_type: 'primary'` and `sold_quantity: null`
+3. For display purposes, if `sold_quantity` is null, use `quantity` field
+
+## Best Practices
+
+1. **Always validate stock** before allowing sale in either unit
+2. **Display both units** when showing stock quantities (if secondary unit exists)
+3. **Show original unit** in invoices/receipts using `sold_quantity` and `unit_type`
+4. **Calculate prices** based on unit type (price per primary vs price per secondary)
+5. **Handle decimals** properly - stock quantities can now be fractional (e.g., 2.4 bags)
+
+## Summary
+
+- ✅ Removed unnecessary `qty_per_primary_unit` and `qty_per_secondary_unit` fields
+- ✅ Added `unit_type` and `sold_quantity` to invoice_items and reservation_items
+- ✅ Added `secondary_selling_price` field for flexible pricing per unit type
+- ✅ Stock is always tracked in primary units (supports decimals)
+- ✅ Sales can be made in either primary or secondary units
+- ✅ Automatic conversion between units using `secondary_per_primary` ratio
+- ✅ Automatic price selection based on unit type (uses `secondary_selling_price` if set, otherwise calculates)
+- ✅ Original sale quantity preserved for display purposes
+- ✅ Supports different pricing strategies (bulk discounts, convenience pricing, etc.)
+

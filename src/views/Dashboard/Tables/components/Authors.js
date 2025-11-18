@@ -42,6 +42,8 @@ import { useHistory } from "react-router-dom";
 import logo from "assets/img/avatars/placeholder.png";
 import { FaPlus, FaFileCsv, FaSearch, FaTimes, FaTags, FaInfoCircle } from "react-icons/fa";
 import { stockService } from "services/stockService";
+import { supplierService } from "services/supplierService";
+import { accountService } from "services/accountService";
 import StockTableRow from "components/Tables/StockTableRow";
 
 const Authors = ({ title, captions, data }) => {
@@ -55,16 +57,19 @@ const Authors = ({ title, captions, data }) => {
     name: "",
     serial_id: "",
     product_category_id: "",
+    supplier_id: "",
     primary_unit_id: "",
     secondary_unit_id: "",
     secondary_per_primary: "",
-    qty_per_primary_unit: "",
-    qty_per_secondary_unit: "1",
     quantity: "",
     last_purchase_price: "",
     selling_price: "",
     image_url: "",
     status: "In Stock",
+    create_supplier_transaction: false,
+    transaction_serial: "",
+    transaction_note: "",
+    deposit_account_id: "",
   });
   const [editingStock, setEditingStock] = React.useState(null);
   const [editIndex, setEditIndex] = React.useState(-1);
@@ -82,6 +87,12 @@ const Authors = ({ title, captions, data }) => {
   const [unitLoading, setUnitLoading] = React.useState(false);
   const [unitSearchInput, setUnitSearchInput] = React.useState("");
   const [unitForm, setUnitForm] = React.useState({ id: null, name: "", symbol: "", description: "" });
+  // Suppliers
+  const [suppliers, setSuppliers] = React.useState([]);
+  const [supplierLoading, setSupplierLoading] = React.useState(false);
+  // Accounts
+  const [accounts, setAccounts] = React.useState([]);
+  const [accountLoading, setAccountLoading] = React.useState(false);
 
   const getUnitLabel = React.useCallback((id) => {
     const u = units.find((x) => String(x.id) === String(id));
@@ -144,9 +155,8 @@ const Authors = ({ title, captions, data }) => {
           }
           return typeof it.secondary_unit === 'string' ? it.secondary_unit : '';
         })(),
-        qtyPerPrimary: it.qty_per_primary_unit ?? it.qty ?? 0,
-        qtyPerSecondary: it.qty_per_secondary_unit ?? 1,
         quantity: it.quantity ?? it.stock_quantity ?? it.inventory_quantity ?? it.qty ?? 0,
+        secondary_per_primary: it.secondary_per_primary ? Number(it.secondary_per_primary) : null,
         // Ensure category is rendered as text, not an object
         category: (() => {
           const cat = it.category;
@@ -158,6 +168,15 @@ const Authors = ({ title, captions, data }) => {
         status: it.status || 'In Stock',
         lastPurchase: `PKR.${it.last_purchase_price != null ? Number(it.last_purchase_price).toFixed(2) : '0.00'}`,
         sellingPrice: `PKR.${it.selling_price != null ? Number(it.selling_price).toFixed(2) : '0.00'}`,
+        supplier: (() => {
+          if (it.supplier && typeof it.supplier === 'object') {
+            return it.supplier.name || '';
+          }
+          return '';
+        })(),
+        highestPurchasePrice: it.highest_purchase_price != null ? Number(it.highest_purchase_price) : null,
+        lowestPurchasePrice: it.lowest_purchase_price != null ? Number(it.lowest_purchase_price) : null,
+        rawData: it, // Store raw data for editing
       }));
       setItems(rows);
     } catch (e) {
@@ -183,10 +202,42 @@ const Authors = ({ title, captions, data }) => {
     }
   }, [unitSearchInput]);
 
+  const loadSuppliers = React.useCallback(async () => {
+    try {
+      setSupplierLoading(true);
+      const resp = await supplierService.listSuppliers({ per_page: 100 });
+      const data = resp?.data || resp || {};
+      const list = Array.isArray(data) ? data : (data.data || data.suppliers || []);
+      setSuppliers(list);
+    } catch (e) {
+      // non-blocking
+    } finally {
+      setSupplierLoading(false);
+    }
+  }, []);
+
+  const loadAccounts = React.useCallback(async () => {
+    try {
+      setAccountLoading(true);
+      const resp = await accountService.listAccounts({ is_active: true });
+      const data = resp?.data || resp || {};
+      const accountsList = Array.isArray(data) ? data : (data.accounts || data.data || []);
+      // Show ALL active accounts (any account type can be used for payments)
+      const activeAccounts = accountsList.filter(acc => acc.is_active !== false);
+      setAccounts(activeAccounts);
+    } catch (e) {
+      // non-blocking
+    } finally {
+      setAccountLoading(false);
+    }
+  }, []);
+
   React.useEffect(() => {
     loadCategories();
     loadUnits();
-  }, [loadCategories, loadUnits]);
+    loadSuppliers();
+    loadAccounts();
+  }, [loadCategories, loadUnits, loadSuppliers, loadAccounts]);
 
   React.useEffect(() => {
     loadItems();
@@ -231,6 +282,7 @@ const Authors = ({ title, captions, data }) => {
     "Status",
     "Last Purchase",
     "Selling Price",
+    "Supplier",
     "",
   ];
 
@@ -248,34 +300,45 @@ const Authors = ({ title, captions, data }) => {
         name: newStock.name,
         serial_id: newStock.serial_id || undefined,
         product_category_id: Number(newStock.product_category_id),
+        supplier_id: newStock.supplier_id ? Number(newStock.supplier_id) : undefined,
         primary_unit_id: Number(newStock.primary_unit_id),
         primary_unit: primaryUnitText,
         secondary_unit_id: newStock.secondary_unit_id ? Number(newStock.secondary_unit_id) : undefined,
         secondary_unit: secondaryUnitText,
         secondary_per_primary: newStock.secondary_per_primary ? Number(newStock.secondary_per_primary) : undefined,
-        qty_per_primary_unit: Math.max(1, Number(newStock.qty_per_primary_unit) || 1),
-        qty_per_secondary_unit: Math.max(1, Number(newStock.qty_per_secondary_unit) || 1),
         quantity: newStock.quantity !== "" ? Math.max(0, Number(newStock.quantity)) : undefined,
         last_purchase_price: Math.max(0, Number(newStock.last_purchase_price) || 0),
         selling_price: Math.max(0, Number(newStock.selling_price) || 0),
         image_url: newStock.image_url || undefined,
+        create_supplier_transaction: newStock.create_supplier_transaction && newStock.quantity && Number(newStock.quantity) > 0 ? true : undefined,
+        transaction_serial: newStock.transaction_serial || undefined,
+        transaction_note: newStock.transaction_note || undefined,
+        deposit_account_id: newStock.deposit_account_id ? Number(newStock.deposit_account_id) : undefined,
       });
       onClose();
       await loadItems();
+      // Dispatch event to update accounts in real-time if supplier transaction was created
+      if (newStock.create_supplier_transaction && newStock.quantity && Number(newStock.quantity) > 0) {
+        window.dispatchEvent(new CustomEvent('supplier-transaction-created'));
+        window.dispatchEvent(new CustomEvent('accounts-updated'));
+      }
       setNewStock({
         name: "",
         serial_id: "",
         product_category_id: "",
+        supplier_id: "",
         primary_unit_id: "",
         secondary_unit_id: "",
         secondary_per_primary: "",
-        qty_per_primary_unit: "",
-        qty_per_secondary_unit: "1",
         quantity: "",
         last_purchase_price: "",
         selling_price: "",
         image_url: "",
         status: "In Stock",
+        create_supplier_transaction: false,
+        transaction_serial: "",
+        transaction_note: "",
+        deposit_account_id: "",
       });
     } catch (e) {
       alert(e?.message || 'Failed to create item');
@@ -283,19 +346,19 @@ const Authors = ({ title, captions, data }) => {
   };
 
   const handleEditStock = (row, index) => {
+    const raw = row.rawData || {};
     setEditingStock({
       name: row.name,
       serial_id: row.serialId || "",
-      product_category_id: "",
-      primary_unit_id: "",
-      secondary_unit_id: "",
-      secondary_per_primary: "",
-      qty_per_primary_unit: row.qtyPerPrimary || "",
-      qty_per_secondary_unit: row.qtyPerSecondary || "1",
+      product_category_id: raw.product_category_id || "",
+      supplier_id: raw.supplier_id ? String(raw.supplier_id) : "",
+      primary_unit_id: raw.primary_unit_id || "",
+      secondary_unit_id: raw.secondary_unit_id || "",
+      secondary_per_primary: raw.secondary_per_primary ? String(raw.secondary_per_primary) : "",
       quantity: row.quantity != null ? String(row.quantity) : "",
       last_purchase_price: (row.lastPurchase || '').replace('PKR.', ''),
       selling_price: (row.sellingPrice || '').replace('PKR.', ''),
-      image_url: "",
+      image_url: raw.image_url || "",
       status: row.status || 'In Stock',
     });
     setEditIndex(index);
@@ -318,13 +381,12 @@ const Authors = ({ title, captions, data }) => {
         name: editingStock.name,
         serial_id: editingStock.serial_id || undefined,
         product_category_id: editingStock.product_category_id ? Number(editingStock.product_category_id) : undefined,
+        supplier_id: editingStock.supplier_id ? Number(editingStock.supplier_id) : undefined,
         primary_unit_id: editingStock.primary_unit_id ? Number(editingStock.primary_unit_id) : undefined,
         primary_unit: primaryUnitText,
         secondary_unit_id: editingStock.secondary_unit_id ? Number(editingStock.secondary_unit_id) : undefined,
         secondary_unit: secondaryUnitText,
         secondary_per_primary: editingStock.secondary_per_primary ? Number(editingStock.secondary_per_primary) : undefined,
-        qty_per_primary_unit: Math.max(1, Number(editingStock.qty_per_primary_unit) || 1),
-        qty_per_secondary_unit: Math.max(1, Number(editingStock.qty_per_secondary_unit) || 1),
         quantity: editingStock.quantity !== "" ? Math.max(0, Number(editingStock.quantity)) : undefined,
         last_purchase_price: Math.max(0, Number(editingStock.last_purchase_price) || 0),
         selling_price: Math.max(0, Number(editingStock.selling_price) || 0),
@@ -465,10 +527,14 @@ const Authors = ({ title, captions, data }) => {
                   quantity={row.quantity}
                   primaryUnit={row.primaryUnit}
                   secondaryUnit={row.secondaryUnit}
+                  secondaryPerPrimary={row.secondary_per_primary}
                   category={row.category}
                   status={row.status}
                   lastPurchase={row.lastPurchase}
                   sellingPrice={row.sellingPrice}
+                  supplier={row.supplier}
+                  highestPurchasePrice={row.highestPurchasePrice}
+                  lowestPurchasePrice={row.lowestPurchasePrice}
                   onEdit={() => handleEditStock(row, index)}
                   onDelete={() => handleDelete(index)}
                   onView={() => history.push(`/admin/stock-management/${row.id}`)}
@@ -558,26 +624,6 @@ const Authors = ({ title, captions, data }) => {
                 </Text>
               )}
 
-              <FormControl isRequired>
-                <FormLabel color={textColor}>Qty per Primary Unit</FormLabel>
-                <Input
-                  type='number'
-                  placeholder='e.g., 50'
-                  value={newStock.qty_per_primary_unit}
-                  onChange={(e) => setNewStock({ ...newStock, qty_per_primary_unit: e.target.value })}
-                />
-              </FormControl>
-
-              <FormControl isRequired>
-                <FormLabel color={textColor}>Qty per Secondary Unit</FormLabel>
-                <Input
-                  type='number'
-                  placeholder='e.g., 1'
-                  value={newStock.qty_per_secondary_unit}
-                  onChange={(e) => setNewStock({ ...newStock, qty_per_secondary_unit: e.target.value })}
-                />
-              </FormControl>
-
               <FormControl>
                 <FormLabel color={textColor}>Initial Quantity</FormLabel>
                 <Input
@@ -602,6 +648,20 @@ const Authors = ({ title, captions, data }) => {
                     <option key={c.id} value={c.id}>{c.name}</option>
                   ))}
                 </Select>
+              </FormControl>
+
+              <FormControl>
+                <FormLabel color={textColor}>Supplier (Optional)</FormLabel>
+                <Select
+                  value={newStock.supplier_id}
+                  onChange={(e) => setNewStock({ ...newStock, supplier_id: e.target.value })}
+                  placeholder='Select supplier'
+                  isDisabled={supplierLoading}>
+                  {suppliers.map((s) => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </Select>
+                <Text mt='1' fontSize='sm' color='gray.500'>Link this item to a supplier</Text>
               </FormControl>
               
               <FormControl>
@@ -643,6 +703,63 @@ const Authors = ({ title, captions, data }) => {
                   onChange={(e) => setNewStock({ ...newStock, image_url: e.target.value })}
                 />
               </FormControl>
+
+              {newStock.quantity && Number(newStock.quantity) > 0 && newStock.supplier_id && (
+                <>
+                  <FormControl>
+                    <HStack>
+                      <input
+                        type='checkbox'
+                        checked={newStock.create_supplier_transaction}
+                        onChange={(e) => setNewStock({ ...newStock, create_supplier_transaction: e.target.checked })}
+                      />
+                      <FormLabel m='0' color={textColor}>Create supplier transaction for this purchase</FormLabel>
+                    </HStack>
+                    <Text mt='1' fontSize='sm' color='gray.500'>Record this purchase in supplier transaction history</Text>
+                  </FormControl>
+
+                  {newStock.create_supplier_transaction && (
+                    <>
+                      <FormControl>
+                        <FormLabel color={textColor}>Transaction Serial (Optional)</FormLabel>
+                        <Input
+                          placeholder='e.g., INV-2025-001'
+                          value={newStock.transaction_serial}
+                          onChange={(e) => setNewStock({ ...newStock, transaction_serial: e.target.value })}
+                        />
+                        <Text mt='1' fontSize='sm' color='gray.500'>Invoice/bill serial number (auto-generated if empty)</Text>
+                      </FormControl>
+
+                      <FormControl>
+                        <FormLabel color={textColor}>Transaction Note (Optional)</FormLabel>
+                        <Input
+                          placeholder='e.g., Initial stock purchase'
+                          value={newStock.transaction_note}
+                          onChange={(e) => setNewStock({ ...newStock, transaction_note: e.target.value })}
+                        />
+                      </FormControl>
+
+                      <FormControl>
+                        <FormLabel color={textColor}>Payment Account (Optional)</FormLabel>
+                        <Select
+                          value={newStock.deposit_account_id}
+                          onChange={(e) => setNewStock({ ...newStock, deposit_account_id: e.target.value })}
+                          placeholder='Select account to pay from (any account type)'
+                          isDisabled={accountLoading}>
+                          {accounts.map((acc) => (
+                            <option key={acc.id} value={acc.id}>
+                              {acc.name} ({acc.type || 'custom'}) - Balance: PKR {parseFloat(acc.balance || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </option>
+                          ))}
+                        </Select>
+                        <Text mt='1' fontSize='sm' color='gray.500'>
+                          Money will be deducted from this account. You can select any account type (cash, bank, revenue, expense, etc.). Defaults to cash if not selected.
+                        </Text>
+                      </FormControl>
+                    </>
+                  )}
+                </>
+              )}
               
               <Button
                 colorScheme='teal'
@@ -929,26 +1046,6 @@ const Authors = ({ title, captions, data }) => {
                  </Text>
                )}
 
-                <FormControl isRequired>
-                  <FormLabel color={textColor}>Qty per Primary Unit</FormLabel>
-                  <Input
-                    type='number'
-                    placeholder='e.g., 50'
-                    value={editingStock.qty_per_primary_unit}
-                    onChange={(e) => setEditingStock({ ...editingStock, qty_per_primary_unit: e.target.value })}
-                  />
-                </FormControl>
-
-                <FormControl isRequired>
-                  <FormLabel color={textColor}>Qty per Secondary Unit</FormLabel>
-                  <Input
-                    type='number'
-                    placeholder='e.g., 1'
-                    value={editingStock.qty_per_secondary_unit}
-                    onChange={(e) => setEditingStock({ ...editingStock, qty_per_secondary_unit: e.target.value })}
-                  />
-                </FormControl>
-
                 <FormControl>
                   <FormLabel color={textColor}>Quantity</FormLabel>
                   <Input
@@ -973,6 +1070,20 @@ const Authors = ({ title, captions, data }) => {
                       <option key={c.id} value={c.id}>{c.name}</option>
                     ))}
                   </Select>
+                </FormControl>
+
+                <FormControl>
+                  <FormLabel color={textColor}>Supplier (Optional)</FormLabel>
+                  <Select
+                    value={editingStock.supplier_id || ''}
+                    onChange={(e) => setEditingStock({ ...editingStock, supplier_id: e.target.value })}
+                    placeholder='Select supplier'
+                    isDisabled={supplierLoading}>
+                    {suppliers.map((s) => (
+                      <option key={s.id} value={s.id}>{s.name}</option>
+                    ))}
+                  </Select>
+                  <Text mt='1' fontSize='sm' color='gray.500'>Link this item to a supplier</Text>
                 </FormControl>
                  
                  <FormControl>

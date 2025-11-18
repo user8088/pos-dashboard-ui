@@ -40,13 +40,91 @@ import Card from "components/Card/Card.js";
 import CardBody from "components/Card/CardBody.js";
 import CardHeader from "components/Card/CardHeader.js";
 import React, { useState } from "react";
-import { FaPlus, FaFileCsv, FaDownload } from "react-icons/fa";
+import { FaPlus, FaFileCsv, FaDownload, FaStar, FaRegStar } from "react-icons/fa";
 import logo from "assets/img/avatars/placeholder.png";
 import { customerService } from "services/customerService";
 import { invoiceService } from "services/invoiceService";
 import { DownloadIcon } from "@chakra-ui/icons";
 import { useToast } from "@chakra-ui/react";
 import { FaEllipsisV } from "react-icons/fa";
+
+// Star Rating Display Component
+const StarRating = ({ rating, count, size = "14px", showText = true }) => {
+  const starColor = useColorModeValue("#FFD700", "#FFD700");
+  const fullStars = Math.floor(rating || 0);
+  const hasHalfStar = (rating || 0) - fullStars >= 0.5;
+  const emptyStars = 5 - fullStars - (hasHalfStar ? 1 : 0);
+
+  return (
+    <HStack spacing="4px" align="center">
+      {[...Array(fullStars)].map((_, i) => (
+        <FaStar key={`full-${i}`} color={starColor} size={size} />
+      ))}
+      {hasHalfStar && (
+        <Box position="relative" display="inline-block">
+          <FaRegStar color={starColor} size={size} />
+          <Box
+            position="absolute"
+            left="0"
+            top="0"
+            width="50%"
+            overflow="hidden"
+            style={{ pointerEvents: 'none' }}
+          >
+            <FaStar color={starColor} size={size} />
+          </Box>
+        </Box>
+      )}
+      {[...Array(emptyStars)].map((_, i) => (
+        <FaRegStar key={`empty-${i}`} color={starColor} size={size} />
+      ))}
+      {showText && (
+        <Text fontSize="sm" color="gray.500" ml="4px">
+          {rating ? rating.toFixed(1) : '0.0'} {count ? `(${count})` : ''}
+        </Text>
+      )}
+    </HStack>
+  );
+};
+
+// Interactive Star Rating Component (for rating modal)
+const InteractiveStarRating = ({ value, onChange, size = "24px" }) => {
+  const starColor = useColorModeValue("#FFD700", "#FFD700");
+  const hoverColor = useColorModeValue("#FFA500", "#FFA500");
+  const [hoveredStar, setHoveredStar] = React.useState(null);
+
+  return (
+    <HStack spacing="8px">
+      {[1, 2, 3, 4, 5].map((star) => {
+        const isFilled = star <= (hoveredStar || value);
+        const currentColor = hoveredStar && star <= hoveredStar ? hoverColor : starColor;
+        
+        return (
+          <Box
+            key={star}
+            as="button"
+            onClick={() => onChange(star)}
+            onMouseEnter={() => setHoveredStar(star)}
+            onMouseLeave={() => setHoveredStar(null)}
+            cursor="pointer"
+            transition="transform 0.2s"
+            _hover={{ transform: "scale(1.2)" }}
+            type="button"
+          >
+            {isFilled ? (
+              <FaStar color={currentColor} size={size} />
+            ) : (
+              <FaRegStar color={currentColor} size={size} />
+            )}
+          </Box>
+        );
+      })}
+      <Text fontSize="md" color="gray.600" ml="8px">
+        {hoveredStar || value} / 5
+      </Text>
+    </HStack>
+  );
+};
 
 // Customer Table Row Component
 const CustomerTableRow = ({ customer, onEdit, onDelete, onViewProfile, onRecordPayment, onCreateSale, onRate }) => {
@@ -100,7 +178,11 @@ const CustomerTableRow = ({ customer, onEdit, onDelete, onViewProfile, onRecordP
       </Td>
 
       <Td>
-        <Text fontSize="md" color={textColor} fontWeight="bold">{customer.rating}</Text>
+        {customer.ratingAverage !== undefined && customer.ratingAverage !== null ? (
+          <StarRating rating={customer.ratingAverage} count={customer.ratingCount} />
+        ) : (
+          <Text fontSize="sm" color="gray.400">No rating</Text>
+        )}
       </Td>
 
       <Td isNumeric>
@@ -351,14 +433,15 @@ function CustomerManagement() {
                     avatar: logo,
                     due: `PKR.${Number(c.due_balance || 0).toFixed(2)}`,
                     advance: `PKR.${Number(c.advance_balance || 0).toFixed(2)}`,
-                    rating: c.rating_count ? `${Number(c.rating_average || 0).toFixed(1)} (${c.rating_count})` : '-'
+                    ratingAverage: c.rating_average ? Number(c.rating_average) : null,
+                    ratingCount: c.rating_count || 0
                   }}
                   onEdit={handleEditCustomer}
                   onDelete={async (row) => { if (!window.confirm('Delete customer?')) return; try { await customerService.delete(row.id); await loadCustomers(); } catch (e) { alert(e?.message || 'Delete failed'); } }}
                   onViewProfile={(row) => { window.location.href = `#/admin/customers/${row.id}`; }}
                   onRecordPayment={(row) => { setSelectedCustomer(row); onPaymentOpen(); }}
                   onCreateSale={(row) => { setSelectedCustomer(row); onSaleOpen(); }}
-                  onRate={(row) => { setSelectedCustomer(row); onRateOpen(); }}
+                  onRate={(row) => { setSelectedCustomer(row); setRatingForm({ stars: 5, note: '' }); onRateOpen(); }}
                 />
               ))}
             </Tbody>
@@ -459,23 +542,61 @@ function CustomerManagement() {
       <Modal isOpen={isRateOpen} onClose={onRateClose}>
         <ModalOverlay />
         <ModalContent>
-          <ModalHeader color={textColor}>Rate Customer</ModalHeader>
+          <ModalHeader color={textColor}>
+            Rate Customer {selectedCustomer?.name ? `- ${selectedCustomer.name}` : ''}
+          </ModalHeader>
           <ModalCloseButton />
           <ModalBody>
-            <VStack spacing='12px'>
+            <VStack spacing='20px' align='stretch'>
               <FormControl>
-                <FormLabel>Stars (1-5)</FormLabel>
-                <Input type='number' min='1' max='5' value={ratingForm.stars} onChange={(e)=> setRatingForm({...ratingForm, stars: Number(e.target.value)})} />
+                <FormLabel fontSize='md' fontWeight='semibold' mb='12px'>Rating</FormLabel>
+                <InteractiveStarRating 
+                  value={ratingForm.stars} 
+                  onChange={(stars) => setRatingForm({...ratingForm, stars})} 
+                />
               </FormControl>
               <FormControl>
-                <FormLabel>Note</FormLabel>
-                <Input value={ratingForm.note} onChange={(e)=> setRatingForm({...ratingForm, note: e.target.value})} />
+                <FormLabel>Note (Optional)</FormLabel>
+                <Input 
+                  placeholder='Add a note about this customer...' 
+                  value={ratingForm.note} 
+                  onChange={(e)=> setRatingForm({...ratingForm, note: e.target.value})} 
+                />
               </FormControl>
             </VStack>
           </ModalBody>
           <ModalFooter>
             <Button onClick={onRateClose} mr='3'>Cancel</Button>
-            <Button bg='#FF8D28' color='white' _hover={{bg:'#E67E22'}} onClick={async ()=> { try { await customerService.rate(selectedCustomer.id, ratingForm); onRateClose(); await loadCustomers(); } catch(e){ alert(e?.message||'Failed'); } }}>Save</Button>
+            <Button 
+              bg='#FF8D28' 
+              color='white' 
+              _hover={{bg:'#E67E22'}} 
+              onClick={async ()=> { 
+                try { 
+                  await customerService.rate(selectedCustomer.id, ratingForm); 
+                  toast({
+                    title: 'Rating saved',
+                    description: `Customer rated ${ratingForm.stars} stars`,
+                    status: 'success',
+                    duration: 3000,
+                    isClosable: true,
+                  });
+                  onRateClose(); 
+                  setRatingForm({ stars: 5, note: '' });
+                  await loadCustomers(); 
+                } catch(e){ 
+                  toast({
+                    title: 'Rating failed',
+                    description: e?.message || 'Failed to save rating',
+                    status: 'error',
+                    duration: 3000,
+                    isClosable: true,
+                  });
+                } 
+              }}
+            >
+              Save Rating
+            </Button>
           </ModalFooter>
         </ModalContent>
       </Modal>

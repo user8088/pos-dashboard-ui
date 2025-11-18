@@ -45,7 +45,7 @@ export default function POS() {
   const [paymentMode, setPaymentMode] = React.useState('cash');
   const [discountPercent, setDiscountPercent] = React.useState('');
   const [discountAmount, setDiscountAmount] = React.useState('');
-  const [cart, setCart] = React.useState([]); // {id, name, price, basePrice, hiddenCost, qty}
+  const [cart, setCart] = React.useState([]); // {id, name, price, basePrice, hiddenCost, qty, unitType, primaryUnit, secondaryUnit, secondaryPerPrimary}
   const [categories, setCategories] = React.useState([]);
   const [categoryId, setCategoryId] = React.useState('');
   const [splitPayments, setSplitPayments] = React.useState({
@@ -346,6 +346,9 @@ export default function POS() {
           reserved: reservedQty,
           available: availableQty,
         };
+        const primaryUnit = it.primaryUnit?.symbol || it.primaryUnit?.name || it.primary_unit?.symbol || it.primary_unit?.name || '';
+        const secondaryUnit = it.secondaryUnit?.symbol || it.secondaryUnit?.name || it.secondary_unit?.symbol || it.secondary_unit?.name || '';
+        const secondaryPerPrimary = it.secondary_per_primary ? Number(it.secondary_per_primary) : null;
         return {
           id: it.id,
           name: it.name,
@@ -357,6 +360,9 @@ export default function POS() {
           stock_on_hand: onHand,
           reserved: reservedQty,
           available: availableQty,
+          primaryUnit,
+          secondaryUnit,
+          secondaryPerPrimary,
         };
       });
       setOriginalStock(prev => ({ ...prev, ...stockMap })); // Merge with existing to preserve reserved stock
@@ -494,18 +500,37 @@ export default function POS() {
     }
     const hydratedLines = reservation.items.map((item, idx) => {
       const product = items.find(prod => Number(prod.id) === Number(item.stock_item_id));
-      const unitPrice = Number(item.unit_price || item.price || product?.price || 0);
-      const quantity = Number(item.qty || item.quantity || 1);
+      const unitType = item.unit_type || 'primary';
+      // Use sold_quantity if available (original quantity in the unit_type), otherwise fall back to quantity
+      const quantity = Number(item.sold_quantity ?? item.qty ?? item.quantity ?? 1);
+      // Get unit price - should be in the unit_type specified
+      let unitPrice = Number(item.unit_price || item.price || 0);
+      const basePricePrimary = product?.price || 0;
+      
+      // If no unit_price from API and we have product info, calculate based on unit_type
+      if (!unitPrice && product) {
+        if (unitType === 'secondary' && product.secondaryPerPrimary && product.secondaryPerPrimary > 0) {
+          // Calculate secondary price from primary price
+          unitPrice = basePricePrimary / product.secondaryPerPrimary;
+        } else {
+          unitPrice = basePricePrimary;
+        }
+      }
+      
       return {
         id: item.stock_item_id || product?.id || `reserved-${idx}`,
         name: product?.name || item.name || `Reserved Item ${idx + 1}`,
         serial_id: product?.serial_id || '',
         price: unitPrice,
-        basePrice: product?.price || unitPrice,
+        basePrice: basePricePrimary,
         cost: product?.cost || 0,
         qty: quantity,
         reservedQty: quantity,
-        hiddenCost: 0,
+        hiddenCost: Number(item.hidden_cost || 0),
+        unitType,
+        primaryUnit: product?.primaryUnit || '',
+        secondaryUnit: product?.secondaryUnit || '',
+        secondaryPerPrimary: product?.secondaryPerPrimary || null,
       };
     });
 
@@ -575,11 +600,21 @@ export default function POS() {
 
 
   // Calculate additional stock (beyond reservation) from cart
+  // All stock is tracked in primary units, so convert secondary units to primary
   const reservedStock = React.useMemo(() => {
     const reserved = {};
     cart.forEach(item => {
-      const reservedQty = Math.max(0, item.reservedQty || 0);
-      const extraNeeded = Math.max(0, Number(item.qty || 0) - reservedQty);
+      // Both qty and reservedQty are in the same unit (primary or secondary)
+      // Convert both to primary units for stock calculation
+      let qtyInPrimary = Number(item.qty || 0);
+      let reservedQtyInPrimary = Math.max(0, item.reservedQty || 0);
+      
+      if (item.unitType === 'secondary' && item.secondaryPerPrimary && item.secondaryPerPrimary > 0) {
+        qtyInPrimary = qtyInPrimary / item.secondaryPerPrimary;
+        reservedQtyInPrimary = reservedQtyInPrimary / item.secondaryPerPrimary;
+      }
+      
+      const extraNeeded = Math.max(0, qtyInPrimary - reservedQtyInPrimary);
       if (extraNeeded > 0) {
         reserved[item.id] = (reserved[item.id] || 0) + extraNeeded;
       }
@@ -645,11 +680,21 @@ export default function POS() {
         const newQty = existing.qty + 1;
         
         // Double-check stock availability against original stock
-        if (original !== null && original !== undefined && newQty > original) {
-          const remaining = original - existing.qty;
+        // Convert to primary units if selling in secondary units
+        let requestedInPrimary = newQty;
+        if (existing.unitType === 'secondary' && existing.secondaryPerPrimary && existing.secondaryPerPrimary > 0) {
+          requestedInPrimary = newQty / existing.secondaryPerPrimary;
+        }
+        
+        if (original !== null && original !== undefined && requestedInPrimary > original) {
+          const remaining = original - (existing.unitType === 'secondary' && existing.secondaryPerPrimary ? existing.qty / existing.secondaryPerPrimary : existing.qty);
+          const remainingDisplay = existing.unitType === 'secondary' && existing.secondaryPerPrimary 
+            ? remaining * existing.secondaryPerPrimary 
+            : remaining;
+          const unitLabel = existing.unitType === 'secondary' ? existing.secondaryUnit : existing.primaryUnit;
           toast({
             title: 'Insufficient stock',
-            description: `Only ${remaining} more units available for ${p.name} (${original} total).`,
+            description: `Only ${remainingDisplay.toFixed(2)} more ${unitLabel} available for ${p.name}.`,
             status: 'warning',
             duration: 3000,
             isClosable: true,
@@ -666,7 +711,21 @@ export default function POS() {
         };
         return copy;
       }
-      return [...prev, { id: p.id, name: p.name, serial_id: p.serial_id || '', price: p.price, basePrice: p.price, cost: p.cost, qty: 1, reservedQty: 0, hiddenCost: 0 }];
+      return [...prev, { 
+        id: p.id, 
+        name: p.name, 
+        serial_id: p.serial_id || '', 
+        price: p.price, 
+        basePrice: p.price, 
+        cost: p.cost, 
+        qty: 1, 
+        reservedQty: 0, 
+        hiddenCost: 0,
+        unitType: 'primary',
+        primaryUnit: p.primaryUnit || '',
+        secondaryUnit: p.secondaryUnit || '',
+        secondaryPerPrimary: p.secondaryPerPrimary || null,
+      }];
     });
   };
   
@@ -685,12 +744,26 @@ export default function POS() {
     const newQty = currentQty + delta;
     
     // Check stock availability when increasing quantity
+    // Convert to primary units if selling in secondary units
     if (delta > 0 && original !== null && original !== undefined) {
-      if (newQty > original) {
-        const available = original - currentQty;
+      let requestedInPrimary = newQty;
+      if (cartItem.unitType === 'secondary' && cartItem.secondaryPerPrimary && cartItem.secondaryPerPrimary > 0) {
+        requestedInPrimary = newQty / cartItem.secondaryPerPrimary;
+      }
+      let currentInPrimary = currentQty;
+      if (cartItem.unitType === 'secondary' && cartItem.secondaryPerPrimary && cartItem.secondaryPerPrimary > 0) {
+        currentInPrimary = currentQty / cartItem.secondaryPerPrimary;
+      }
+      
+      if (requestedInPrimary > original) {
+        const available = original - currentInPrimary;
+        const availableDisplay = cartItem.unitType === 'secondary' && cartItem.secondaryPerPrimary 
+          ? available * cartItem.secondaryPerPrimary 
+          : available;
+        const unitLabel = cartItem.unitType === 'secondary' ? cartItem.secondaryUnit : cartItem.primaryUnit;
         toast({
           title: 'Insufficient stock',
-          description: `Only ${available} more units available for ${item.name} (${original} total).`,
+          description: `Only ${availableDisplay.toFixed(2)} more ${unitLabel} available for ${item.name}.`,
           status: 'warning',
           duration: 3000,
           isClosable: true,
@@ -714,10 +787,24 @@ export default function POS() {
   
   const removeLine = (id) => setCart(prev => prev.filter(x => x.id !== id));
 
-  const baseSubtotal = cart.reduce((s, l) => s + l.qty * getBasePrice(l), 0);
+  // Calculate base subtotal - convert base price to current unit type
+  const baseSubtotal = cart.reduce((s, l) => {
+    const basePricePrimary = getBasePrice(l);
+    let basePriceInCurrentUnit = basePricePrimary;
+    if (l.unitType === 'secondary' && l.secondaryPerPrimary && l.secondaryPerPrimary > 0) {
+      basePriceInCurrentUnit = basePricePrimary / l.secondaryPerPrimary;
+    }
+    return s + l.qty * basePriceInCurrentUnit;
+  }, 0);
+  
+  // Calculate manual discount - compare prices in the same unit type
   const manualDiscount = cart.reduce((s, l) => {
-    const base = getBasePrice(l);
-    const diff = base - l.price;
+    const basePricePrimary = getBasePrice(l);
+    let basePriceInCurrentUnit = basePricePrimary;
+    if (l.unitType === 'secondary' && l.secondaryPerPrimary && l.secondaryPerPrimary > 0) {
+      basePriceInCurrentUnit = basePricePrimary / l.secondaryPerPrimary;
+    }
+    const diff = basePriceInCurrentUnit - l.price;
     return diff > 0 ? s + diff * l.qty : s;
   }, 0);
   const subtotal = cart.reduce((s, l) => s + l.qty * l.price, 0);
@@ -846,6 +933,7 @@ export default function POS() {
         items: cart.map(l => ({
           stock_item_id: l.id,
           quantity: l.qty,
+          unit_type: l.unitType || 'primary',
           unit_price: l.price,
           hidden_cost: l.hiddenCost !== undefined ? Number(l.hiddenCost || 0) : undefined,
         })),
@@ -927,6 +1015,7 @@ export default function POS() {
         items: cart.map(l => ({
           stock_item_id: l.id,
           quantity: l.qty,
+          unit_type: l.unitType || 'primary',
           unit_price: l.price,
           hidden_cost: l.hiddenCost !== undefined ? Number(l.hiddenCost || 0) : undefined,
         })),
@@ -1173,7 +1262,16 @@ export default function POS() {
                                 borderRadius='full'
                                 fontWeight='bold'
                               >
-                                {isOutOfStock ? 'OUT OF STOCK (0)' : isLowStock ? `LOW STOCK: ${stock}` : `IN STOCK: ${stock}`}
+                                {(() => {
+                                  if (isOutOfStock) return 'OUT OF STOCK (0)';
+                                  if (p.secondaryUnit && p.secondaryPerPrimary && p.secondaryPerPrimary > 0) {
+                                    const secondaryQty = stock * p.secondaryPerPrimary;
+                                    return isLowStock 
+                                      ? `LOW: ${stock} ${p.primaryUnit} (${secondaryQty.toFixed(1)} ${p.secondaryUnit})`
+                                      : `${stock} ${p.primaryUnit} (${secondaryQty.toFixed(1)} ${p.secondaryUnit})`;
+                                  }
+                                  return isLowStock ? `LOW STOCK: ${stock}` : `IN STOCK: ${stock}`;
+                                })()}
                               </Badge>
                             ) : (
                               <Badge 
@@ -1335,12 +1433,19 @@ export default function POS() {
                               </HStack>
                               {reservation.items?.length ? (
                                 <VStack align='stretch' spacing='4px' mt='8px'>
-                                  {reservation.items.slice(0, 3).map((item, idx) => (
-                                    <HStack key={`${reservation.id}-item-${idx}`} justify='space-between' fontSize='xs'>
-                                      <Text noOfLines={1}>{item.name || `Item ${idx + 1}`}</Text>
-                                      <Text color='gray.600'>Qty {item.qty || item.quantity || 1}</Text>
-                                    </HStack>
-                                  ))}
+                                  {reservation.items.slice(0, 3).map((item, idx) => {
+                                    const qty = Number(item.sold_quantity ?? item.qty ?? item.quantity ?? 1);
+                                    const unitType = item.unit_type || 'primary';
+                                    const unitLabel = unitType === 'secondary' 
+                                      ? (item.stockItem?.secondaryUnit?.symbol || item.stockItem?.secondaryUnit?.name || item.secondary_unit?.symbol || item.secondary_unit?.name || 'secondary')
+                                      : (item.stockItem?.primaryUnit?.symbol || item.stockItem?.primaryUnit?.name || item.primary_unit?.symbol || item.primary_unit?.name || 'primary');
+                                    return (
+                                      <HStack key={`${reservation.id}-item-${idx}`} justify='space-between' fontSize='xs'>
+                                        <Text noOfLines={1}>{item.name || `Item ${idx + 1}`}</Text>
+                                        <Text color='gray.600'>Qty {qty} {unitLabel}</Text>
+                                      </HStack>
+                                    );
+                                  })}
                                   {reservation.items.length > 3 && (
                                     <Text fontSize='xs' color='gray.500'>+ {reservation.items.length - 3} more item(s)</Text>
                                   )}
@@ -1666,11 +1771,57 @@ export default function POS() {
                         onClick={()=> removeLine(line.id)} 
                       />
                     </HStack>
+                    {line.secondaryUnit && line.secondaryPerPrimary && line.secondaryPerPrimary > 0 && (
+                      <HStack mb='8px' spacing='8px'>
+                        <Text fontSize='xs' color='gray.600' minW='80px'>Sell in:</Text>
+                        <Select 
+                          size='sm' 
+                          value={line.unitType || 'primary'}
+                          onChange={(e) => {
+                            const newUnitType = e.target.value;
+                            const product = items.find(it => it.id === line.id);
+                            const basePrice = product?.price || line.basePrice;
+                            let newPrice = basePrice;
+                            let newQty = line.qty;
+                            
+                            // Adjust price and quantity based on unit type conversion
+                            if (line.secondaryPerPrimary && line.secondaryPerPrimary > 0) {
+                              if (line.unitType === 'primary' && newUnitType === 'secondary') {
+                                // Switching from primary to secondary: multiply quantity, divide price
+                                newQty = line.qty * line.secondaryPerPrimary;
+                                newPrice = basePrice / line.secondaryPerPrimary;
+                              } else if (line.unitType === 'secondary' && newUnitType === 'primary') {
+                                // Switching from secondary to primary: divide quantity, multiply price
+                                newQty = line.qty / line.secondaryPerPrimary;
+                                newPrice = basePrice * line.secondaryPerPrimary;
+                              }
+                            }
+                            
+                            setCart(prev => prev.map(x => x.id === line.id
+                              ? { ...x, unitType: newUnitType, price: newPrice, basePrice, qty: newQty }
+                              : x));
+                          }}
+                          width='150px'
+                        >
+                          <option value='primary'>{line.primaryUnit || 'Primary'}</option>
+                          <option value='secondary'>{line.secondaryUnit || 'Secondary'}</option>
+                        </Select>
+                        <Text fontSize='xs' color='gray.500'>
+                          {line.unitType === 'secondary' && line.secondaryPerPrimary 
+                            ? `1 ${line.secondaryUnit} = ${(1 / line.secondaryPerPrimary).toFixed(4)} ${line.primaryUnit}`
+                            : line.unitType === 'primary' && line.secondaryPerPrimary
+                            ? `1 ${line.primaryUnit} = ${line.secondaryPerPrimary} ${line.secondaryUnit}`
+                            : ''}
+                        </Text>
+                      </HStack>
+                    )}
                     <HStack justify='space-between' mb='12px' spacing='12px'>
                       <HStack spacing='8px'>
                         <Text fontSize='xs' color='gray.600' minW='60px'>Quantity:</Text>
                         <IconButton size='sm' icon={<FaMinus />} onClick={()=> changeQty(line.id, -1)} />
-                        <Text minW='32px' textAlign='center' fontWeight='semibold'>{line.qty}</Text>
+                        <Text minW='32px' textAlign='center' fontWeight='semibold'>
+                          {line.qty} {line.unitType === 'secondary' ? line.secondaryUnit : line.primaryUnit}
+                        </Text>
                         <IconButton size='sm' icon={<FaPlus />} onClick={()=> changeQty(line.id, 1)} />
                       </HStack>
                       <VStack align='flex-end' spacing='4px' flex='1'>
@@ -1695,17 +1846,37 @@ export default function POS() {
                           </Text>
                         </HStack>
                         {(() => {
-                          const basePrice = getBasePrice(line);
-                          const hasDiscount = basePrice > line.price;
+                          // Get base price in primary units (per bag)
+                          const basePricePrimary = getBasePrice(line);
+                          // Convert base price to current unit type for comparison
+                          let basePriceInCurrentUnit = basePricePrimary;
+                          if (line.unitType === 'secondary' && line.secondaryPerPrimary && line.secondaryPerPrimary > 0) {
+                            // Convert primary unit price to secondary unit price
+                            basePriceInCurrentUnit = basePricePrimary / line.secondaryPerPrimary;
+                          }
+                          
+                          const hasDiscount = basePriceInCurrentUnit > line.price;
                           if (hasDiscount) {
-                            const discountPerUnit = basePrice - line.price;
+                            const discountPerUnit = basePriceInCurrentUnit - line.price;
                             const totalDiscount = discountPerUnit * line.qty;
                             return (
                               <HStack spacing='4px' fontSize='xs' color='gray.500'>
                                 <Text>Original:</Text>
-                                <Text textDecoration='line-through'>PKR {basePrice.toFixed(2)}</Text>
+                                <Text textDecoration='line-through'>PKR {basePriceInCurrentUnit.toFixed(2)}</Text>
                                 <Text>•</Text>
                                 <Text color='red.500' fontWeight='medium'>Loss: PKR {totalDiscount.toFixed(2)}</Text>
+                              </HStack>
+                            );
+                          } else if (line.price > basePriceInCurrentUnit) {
+                            // Show profit if selling above base price
+                            const profitPerUnit = line.price - basePriceInCurrentUnit;
+                            const totalProfit = profitPerUnit * line.qty;
+                            return (
+                              <HStack spacing='4px' fontSize='xs' color='green.500'>
+                                <Text>Base:</Text>
+                                <Text>PKR {basePriceInCurrentUnit.toFixed(2)}</Text>
+                                <Text>•</Text>
+                                <Text fontWeight='medium'>Profit: PKR {totalProfit.toFixed(2)}</Text>
                               </HStack>
                             );
                           }
