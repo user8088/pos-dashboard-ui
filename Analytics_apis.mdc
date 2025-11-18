@@ -1,0 +1,1002 @@
+# Analytics API Documentation
+
+## Overview
+
+The Analytics API provides comprehensive accounting statistics for the store dashboard. It supports multiple time periods with comparative analysis:
+- **Today** (compared to yesterday)
+- **Monthly** (compared to previous month or custom month)
+- **Yearly** (compared to previous year or custom year)
+- **Business Season** (custom date ranges that you define)
+
+All endpoints require authentication via Sanctum (`auth:sanctum` middleware).
+
+---
+
+## Business Season Management
+
+Before using business season analytics, you need to create business seasons. A business season is a custom date range that you define (e.g., "Ramadan Season 2024", "Summer Sale 2024").
+
+### List Business Seasons
+
+**GET** `/api/business-seasons`
+
+**Query Parameters:**
+- `is_active` (optional, boolean): Filter by active status
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": 1,
+      "name": "Ramadan Season 2024",
+      "start_date": "2024-03-10",
+      "end_date": "2024-04-09",
+      "description": "Ramadan business season",
+      "is_active": true,
+      "created_at": "2024-03-01T10:00:00.000000Z",
+      "updated_at": "2024-03-01T10:00:00.000000Z"
+    }
+  ]
+}
+```
+
+### Create Business Season
+
+**POST** `/api/business-seasons`
+
+**Request Body:**
+```json
+{
+  "name": "Summer Sale 2024",
+  "start_date": "2024-06-01",
+  "end_date": "2024-08-31",
+  "description": "Summer business season",
+  "is_active": true
+}
+```
+
+**Validation:**
+- `name`: required, string, max 255 characters
+- `start_date`: required, date
+- `end_date`: required, date, must be after start_date
+- `description`: optional, string
+- `is_active`: optional, boolean (default: true)
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "id": 2,
+    "name": "Summer Sale 2024",
+    "start_date": "2024-06-01",
+    "end_date": "2024-08-31",
+    "description": "Summer business season",
+    "is_active": true,
+    "created_at": "2024-05-15T10:00:00.000000Z",
+    "updated_at": "2024-05-15T10:00:00.000000Z"
+  }
+}
+```
+
+### Get Business Season
+
+**GET** `/api/business-seasons/{id}`
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "id": 1,
+    "name": "Ramadan Season 2024",
+    "start_date": "2024-03-10",
+    "end_date": "2024-04-09",
+    "description": "Ramadan business season",
+    "is_active": true,
+    "created_at": "2024-03-01T10:00:00.000000Z",
+    "updated_at": "2024-03-01T10:00:00.000000Z"
+  }
+}
+```
+
+### Update Business Season
+
+**PUT/PATCH** `/api/business-seasons/{id}`
+
+**Request Body:** (all fields optional)
+```json
+{
+  "name": "Ramadan Season 2024 Updated",
+  "start_date": "2024-03-11",
+  "end_date": "2024-04-10",
+  "description": "Updated description",
+  "is_active": false
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "id": 1,
+    "name": "Ramadan Season 2024 Updated",
+    "start_date": "2024-03-11",
+    "end_date": "2024-04-10",
+    "description": "Updated description",
+    "is_active": false,
+    "created_at": "2024-03-01T10:00:00.000000Z",
+    "updated_at": "2024-11-18T12:00:00.000000Z"
+  }
+}
+```
+
+### Delete Business Season
+
+**DELETE** `/api/business-seasons/{id}`
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Business season deleted successfully"
+}
+```
+
+---
+
+## Analytics Endpoints
+
+### Dashboard Summary (All Analytics)
+
+**GET** `/api/analytics/dashboard`
+
+Returns all analytics in one response: today, monthly, yearly, and business season stats.
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "today": {
+      "stats": {
+        "revenue": 53000.00,
+        "customers": 45,
+        "losses": 3020.00,
+        "total_sales": 53000.00,
+        "loss_breakdown": {
+          "revenue_debits": 0.00,
+          "expense_transactions": 2500.00,
+          "loss_account_transactions": 0.00,
+          "cogs_loss": 520.00
+        },
+        "period": {
+          "start_date": "2024-11-18 00:00:00",
+          "end_date": "2024-11-18 23:59:59"
+        }
+      },
+      "comparison": {
+        "revenue": {
+          "current": 53000.00,
+          "previous": 34000.00,
+          "change": 19000.00,
+          "percentage": 55.88,
+          "is_positive": true
+        },
+        "customers": {
+          "current": 45,
+          "previous": 30,
+          "change": 15,
+          "percentage": 50.00,
+          "is_positive": true
+        },
+        "losses": {
+          "current": 3020.00,
+          "previous": 3500.00,
+          "change": -480.00,
+          "percentage": -13.71,
+          "is_positive": false
+        },
+        "total_sales": {
+          "current": 53000.00,
+          "previous": 34000.00,
+          "change": 19000.00,
+          "percentage": 55.88,
+          "is_positive": true
+        }
+      }
+    },
+    "monthly": {
+      "current": {
+        "revenue": 1200000.00,
+        "customers": 850,
+        "losses": 45000.00,
+        "total_sales": 1200000.00,
+        "loss_breakdown": {
+          "revenue_debits": 0.00,
+          "expense_transactions": 40000.00,
+          "loss_account_transactions": 2000.00,
+          "cogs_loss": 3000.00
+        },
+        "period": {
+          "start_date": "2024-11-01 00:00:00",
+          "end_date": "2024-11-30 23:59:59"
+        }
+      },
+      "previous": {
+        "revenue": 1100000.00,
+        "customers": 800,
+        "losses": 50000.00,
+        "total_sales": 1100000.00,
+        "period": {
+          "start_date": "2024-10-01 00:00:00",
+          "end_date": "2024-10-31 23:59:59"
+        }
+      },
+      "comparison": {
+        "revenue": {
+          "current": 1200000.00,
+          "previous": 1100000.00,
+          "change": 100000.00,
+          "percentage": 9.09,
+          "is_positive": true
+        },
+        "customers": {
+          "current": 850,
+          "previous": 800,
+          "change": 50,
+          "percentage": 6.25,
+          "is_positive": true
+        },
+        "losses": {
+          "current": 45000.00,
+          "previous": 50000.00,
+          "change": -5000.00,
+          "percentage": -10.00,
+          "is_positive": false
+        },
+        "total_sales": {
+          "current": 1200000.00,
+          "previous": 1100000.00,
+          "change": 100000.00,
+          "percentage": 9.09,
+          "is_positive": true
+        }
+      }
+    },
+    "yearly": {
+      "current": {
+        "revenue": 15000000.00,
+        "customers": 10000,
+        "losses": 600000.00,
+        "total_sales": 15000000.00,
+        "period": {
+          "start_date": "2024-01-01 00:00:00",
+          "end_date": "2024-12-31 23:59:59"
+        }
+      },
+      "previous": {
+        "revenue": 13500000.00,
+        "customers": 9500,
+        "losses": 650000.00,
+        "total_sales": 13500000.00,
+        "period": {
+          "start_date": "2023-01-01 00:00:00",
+          "end_date": "2023-12-31 23:59:59"
+        }
+      },
+      "comparison": {
+        "revenue": {
+          "current": 15000000.00,
+          "previous": 13500000.00,
+          "change": 1500000.00,
+          "percentage": 11.11,
+          "is_positive": true
+        },
+        "customers": {
+          "current": 10000,
+          "previous": 9500,
+          "change": 500,
+          "percentage": 5.26,
+          "is_positive": true
+        },
+        "losses": {
+          "current": 600000.00,
+          "previous": 650000.00,
+          "change": -50000.00,
+          "percentage": -7.69,
+          "is_positive": false
+        },
+        "total_sales": {
+          "current": 15000000.00,
+          "previous": 13500000.00,
+          "change": 1500000.00,
+          "percentage": 11.11,
+          "is_positive": true
+        }
+      }
+    },
+    "business_season": {
+      "season": {
+        "id": 1,
+        "name": "Ramadan Season 2024",
+        "start_date": "2024-03-10",
+        "end_date": "2024-04-09"
+      },
+      "stats": {
+        "revenue": 2500000.00,
+        "customers": 2000,
+        "losses": 100000.00,
+        "total_sales": 2500000.00,
+        "period": {
+          "start_date": "2024-03-10 00:00:00",
+          "end_date": "2024-04-09 23:59:59"
+        }
+      },
+      "comparison": {
+        "revenue": {
+          "current": 2500000.00,
+          "previous": 2200000.00,
+          "change": 300000.00,
+          "percentage": 13.64,
+          "is_positive": true
+        },
+        "customers": {
+          "current": 2000,
+          "previous": 1800,
+          "change": 200,
+          "percentage": 11.11,
+          "is_positive": true
+        },
+        "losses": {
+          "current": 100000.00,
+          "previous": 120000.00,
+          "change": -20000.00,
+          "percentage": -16.67,
+          "is_positive": false
+        },
+        "total_sales": {
+          "current": 2500000.00,
+          "previous": 2200000.00,
+          "change": 300000.00,
+          "percentage": 13.64,
+          "is_positive": true
+        }
+      }
+    }
+  }
+}
+```
+
+---
+
+### Today's Analytics
+
+**GET** `/api/analytics/today`
+
+Returns today's statistics compared to yesterday.
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "today": {
+      "revenue": 53000.00,
+      "customers": 45,
+      "losses": 3020.00,
+      "total_sales": 53000.00,
+      "loss_breakdown": {
+        "revenue_debits": 0.00,
+        "expense_transactions": 2500.00,
+        "loss_account_transactions": 520.00,
+        "cogs_loss": 520.00
+      },
+      "period": {
+        "start_date": "2024-11-18 00:00:00",
+        "end_date": "2024-11-18 23:59:59"
+      }
+    },
+    "yesterday": {
+      "revenue": 34000.00,
+      "customers": 30,
+      "losses": 3500.00,
+      "total_sales": 34000.00,
+      "loss_breakdown": {
+        "revenue_debits": 0.00,
+        "expense_transactions": 3000.00,
+        "loss_account_transactions": 500.00,
+        "cogs_loss": 500.00
+      },
+      "period": {
+        "start_date": "2024-11-17 00:00:00",
+        "end_date": "2024-11-17 23:59:59"
+      }
+    },
+    "comparison": {
+      "revenue": {
+        "current": 53000.00,
+        "previous": 34000.00,
+        "change": 19000.00,
+        "percentage": 55.88,
+        "is_positive": true
+      },
+      "customers": {
+        "current": 45,
+        "previous": 30,
+        "change": 15,
+        "percentage": 50.00,
+        "is_positive": true
+      },
+      "losses": {
+        "current": 3020.00,
+        "previous": 3500.00,
+        "change": -480.00,
+        "percentage": -13.71,
+        "is_positive": false
+      },
+      "total_sales": {
+        "current": 53000.00,
+        "previous": 34000.00,
+        "change": 19000.00,
+        "percentage": 55.88,
+        "is_positive": true
+      }
+    }
+  }
+}
+```
+
+---
+
+### Monthly Analytics
+
+**GET** `/api/analytics/monthly`
+
+**Query Parameters:**
+- `month` (optional, string): Month in format `YYYY-MM` (e.g., `2024-11`). Defaults to current month.
+- `compare_with` (optional, string): Month to compare with in format `YYYY-MM`. If not provided, compares with previous month.
+
+**Example Request:**
+```
+GET /api/analytics/monthly?month=2024-11&compare_with=2024-10
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "period": {
+      "month": "2024-11",
+      "start_date": "2024-11-01",
+      "end_date": "2024-11-30"
+    },
+    "stats": {
+      "revenue": 1200000.00,
+      "customers": 850,
+      "losses": 45000.00,
+      "total_sales": 1200000.00,
+      "loss_breakdown": {
+        "revenue_debits": 0.00,
+        "expense_transactions": 40000.00,
+        "loss_account_transactions": 2000.00,
+        "cogs_loss": 3000.00
+      },
+      "period": {
+        "start_date": "2024-11-01 00:00:00",
+        "end_date": "2024-11-30 23:59:59"
+      }
+    },
+    "comparison_period": {
+      "month": "2024-10",
+      "start_date": "2024-10-01",
+      "end_date": "2024-10-31"
+    },
+    "comparison_stats": {
+      "revenue": 1100000.00,
+      "customers": 800,
+      "losses": 50000.00,
+      "total_sales": 1100000.00,
+      "period": {
+        "start_date": "2024-10-01 00:00:00",
+        "end_date": "2024-10-31 23:59:59"
+      }
+    },
+    "comparison": {
+      "revenue": {
+        "current": 1200000.00,
+        "previous": 1100000.00,
+        "change": 100000.00,
+        "percentage": 9.09,
+        "is_positive": true
+      },
+      "customers": {
+        "current": 850,
+        "previous": 800,
+        "change": 50,
+        "percentage": 6.25,
+        "is_positive": true
+      },
+      "losses": {
+        "current": 45000.00,
+        "previous": 50000.00,
+        "change": -5000.00,
+        "percentage": -10.00,
+        "is_positive": false
+      },
+      "total_sales": {
+        "current": 1200000.00,
+        "previous": 1100000.00,
+        "change": 100000.00,
+        "percentage": 9.09,
+        "is_positive": true
+      }
+    }
+  }
+}
+```
+
+---
+
+### Yearly Analytics
+
+**GET** `/api/analytics/yearly`
+
+**Query Parameters:**
+- `year` (optional, integer): Year (e.g., `2024`). Defaults to current year.
+- `compare_with` (optional, integer): Year to compare with. If not provided, compares with previous year.
+
+**Example Request:**
+```
+GET /api/analytics/yearly?year=2024&compare_with=2023
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "period": {
+      "year": 2024,
+      "start_date": "2024-01-01",
+      "end_date": "2024-12-31"
+    },
+    "stats": {
+      "revenue": 15000000.00,
+      "customers": 10000,
+      "losses": 600000.00,
+      "total_sales": 15000000.00,
+      "loss_breakdown": {
+        "revenue_debits": 0.00,
+        "expense_transactions": 550000.00,
+        "loss_account_transactions": 40000.00,
+        "cogs_loss": 10000.00
+      },
+      "period": {
+        "start_date": "2024-01-01 00:00:00",
+        "end_date": "2024-12-31 23:59:59"
+      }
+    },
+    "comparison_period": {
+      "year": 2023,
+      "start_date": "2023-01-01",
+      "end_date": "2023-12-31"
+    },
+    "comparison_stats": {
+      "revenue": 13500000.00,
+      "customers": 9500,
+      "losses": 650000.00,
+      "total_sales": 13500000.00,
+      "period": {
+        "start_date": "2023-01-01 00:00:00",
+        "end_date": "2023-12-31 23:59:59"
+      }
+    },
+    "comparison": {
+      "revenue": {
+        "current": 15000000.00,
+        "previous": 13500000.00,
+        "change": 1500000.00,
+        "percentage": 11.11,
+        "is_positive": true
+      },
+      "customers": {
+        "current": 10000,
+        "previous": 9500,
+        "change": 500,
+        "percentage": 5.26,
+        "is_positive": true
+      },
+      "losses": {
+        "current": 600000.00,
+        "previous": 650000.00,
+        "change": -50000.00,
+        "percentage": -7.69,
+        "is_positive": false
+      },
+      "total_sales": {
+        "current": 15000000.00,
+        "previous": 13500000.00,
+        "change": 1500000.00,
+        "percentage": 11.11,
+        "is_positive": true
+      }
+    }
+  }
+}
+```
+
+---
+
+### Business Season Analytics
+
+**GET** `/api/analytics/business-season`
+
+**Query Parameters:**
+- `season_id` (optional, integer): Business season ID. If not provided, uses the most recent active season.
+- `compare_with` (optional, integer): Business season ID to compare with. If not provided, compares with previous season.
+
+**Example Request:**
+```
+GET /api/analytics/business-season?season_id=1&compare_with=2
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "period": {
+      "season_id": 1,
+      "season_name": "Ramadan Season 2024",
+      "start_date": "2024-03-10",
+      "end_date": "2024-04-09",
+      "description": "Ramadan business season"
+    },
+    "stats": {
+      "revenue": 2500000.00,
+      "customers": 2000,
+      "losses": 100000.00,
+      "total_sales": 2500000.00,
+      "loss_breakdown": {
+        "revenue_debits": 0.00,
+        "expense_transactions": 80000.00,
+        "loss_account_transactions": 15000.00,
+        "cogs_loss": 5000.00
+      },
+      "period": {
+        "start_date": "2024-03-10 00:00:00",
+        "end_date": "2024-04-09 23:59:59"
+      }
+    },
+    "comparison_period": {
+      "season_id": 2,
+      "season_name": "Summer Sale 2023",
+      "start_date": "2023-06-01",
+      "end_date": "2023-08-31",
+      "description": "Summer business season"
+    },
+    "comparison_stats": {
+      "revenue": 2200000.00,
+      "customers": 1800,
+      "losses": 120000.00,
+      "total_sales": 2200000.00,
+      "period": {
+        "start_date": "2023-06-01 00:00:00",
+        "end_date": "2023-08-31 23:59:59"
+      }
+    },
+    "comparison": {
+      "revenue": {
+        "current": 2500000.00,
+        "previous": 2200000.00,
+        "change": 300000.00,
+        "percentage": 13.64,
+        "is_positive": true
+      },
+      "customers": {
+        "current": 2000,
+        "previous": 1800,
+        "change": 200,
+        "percentage": 11.11,
+        "is_positive": true
+      },
+      "losses": {
+        "current": 100000.00,
+        "previous": 120000.00,
+        "change": -20000.00,
+        "percentage": -16.67,
+        "is_positive": false
+      },
+      "total_sales": {
+        "current": 2500000.00,
+        "previous": 2200000.00,
+        "change": 300000.00,
+        "percentage": 13.64,
+        "is_positive": true
+      }
+    }
+  }
+}
+```
+
+**Error Response (No Active Season):**
+```json
+{
+  "success": false,
+  "message": "No active business season found. Please create a business season first."
+}
+```
+
+---
+
+## Statistics Explained
+
+Each analytics response includes the following statistics:
+
+### Revenue
+- **Source**: Account transactions (credits to revenue account from Invoices and Sales)
+- **Fallback**: Direct sum of invoice totals and sale totals if account transactions don't exist
+- **Represents**: Total income earned from sales and invoices
+
+### Customers
+- **Source**: Unique customer count from both Invoices and Sales
+- **Calculation**: Count of distinct customer IDs from invoices and sales within the period
+- **Represents**: Number of unique customers who made purchases
+
+### Losses
+- **Source**: Total of all loss components (see Loss Breakdown below)
+- **Represents**: Total expenses and losses for the period
+- **Calculation**: Sum of all loss types (revenue debits + expense transactions + loss account transactions + COGS loss)
+
+### Loss Breakdown
+Each analytics response now includes a `loss_breakdown` object that shows the components of total losses:
+
+#### 1. Revenue Debits (`revenue_debits`)
+- **Source**: Direct debits to the revenue account
+- **Examples**: Manual adjustments that directly reduce revenue
+- **Account**: Revenue account (REV-001) debits
+
+#### 2. Expense Transactions (`expense_transactions`)
+- **Source**: All expense account transactions
+- **Includes**:
+  - **EXP-001**: Stock purchases/COGS (from supplier purchases)
+  - **EXP-002**: Staff salary expenses (from salary payments)
+  - **EXP-003**: Operational expenses (from bills - rent, utilities, fuel, etc.)
+- **Note**: Bills are included here (not counted separately to avoid double-counting)
+
+#### 3. Loss Account Transactions (`loss_account_transactions`)
+- **Source**: LOSS-001 account transactions
+- **Includes**:
+  - Bad debts (customer defaults)
+  - Damaged stock write-offs
+  - Other write-offs recorded via loss account
+
+#### 4. COGS Loss (`cogs_loss`) ⭐ **NEW**
+- **Source**: Calculated from invoice items and sale items
+- **Calculation**: For each item sold, if `selling_price < last_purchase_price` (cost), then:
+  ```
+  COGS Loss = (cost - selling_price) × quantity
+  ```
+- **Examples**:
+  - Product purchased at PKR 100, sold at PKR 80 → Loss of PKR 20 per unit
+  - Product purchased at PKR 500, sold at PKR 450 → Loss of PKR 50 per unit
+- **Represents**: Loss from selling products below their purchase cost
+- **Note**: Only calculated if the stock item has a `last_purchase_price` recorded
+- **Automatic Recording**: ⚡ When invoices or sales are created with items sold below cost, the COGS loss is **automatically recorded** to the LOSS-001 account. This ensures the loss appears in your accounting system and analytics immediately.
+
+### Total Sales
+- **Source**: Same as Revenue
+- **Represents**: Total sales amount (same as revenue)
+
+---
+
+## Loss Calculation Points
+
+The system tracks losses from the following sources:
+
+### 1. **COGS Loss (Cost of Goods Sold Loss)** ⭐ **NEW**
+- **When it occurs**: When a product is sold at a price lower than its purchase cost
+- **How it's calculated**: 
+  - System checks `last_purchase_price` (cost) vs `unit_price` (selling price) for each sold item
+  - If selling price < cost, calculates: `(cost - selling_price) × quantity`
+- **Example**: 
+  - Item cost: PKR 100
+  - Sold at: PKR 80
+  - Quantity: 10 units
+  - COGS Loss: (100 - 80) × 10 = PKR 200
+- **Automatic Recording**: ⚡ **The system now automatically records COGS loss when creating invoices or sales:**
+  - When you create an invoice via `POST /api/invoices` with items sold below cost
+  - When you create a sale via `POST /api/customers/{id}/sales` with items sold below cost
+  - The loss is automatically recorded to LOSS-001 account (debit) and reduces revenue account (credit)
+  - No additional API calls needed - it happens automatically!
+- **Tracked in**: 
+  - Analytics API `loss_breakdown.cogs_loss` (calculated value)
+  - Loss account transactions (LOSS-001 debits) - includes recorded COGS losses
+
+### 2. **Bad Debts**
+- **When it occurs**: Customer defaults on payment (unpaid invoices/dues written off)
+- **How it's recorded**: Via loss account (LOSS-001) transactions
+- **Tracked in**: Analytics API `loss_breakdown.loss_account_transactions`
+
+### 3. **Damaged Stock Write-offs**
+- **When it occurs**: Stock items are damaged and written off
+- **How it's recorded**: Via loss account (LOSS-001) transactions
+- **Tracked in**: Analytics API `loss_breakdown.loss_account_transactions`
+
+### 4. **Operational Expenses (Bills)**
+- **When it occurs**: Recording bills (rent, utilities, fuel, etc.)
+- **How it's recorded**: Creates expense account transactions (EXP-003)
+- **Tracked in**: Analytics API `loss_breakdown.expense_transactions`
+
+### 5. **Stock Purchases**
+- **When it occurs**: Purchasing stock from suppliers
+- **How it's recorded**: Creates expense account transactions (EXP-001)
+- **Tracked in**: Analytics API `loss_breakdown.expense_transactions`
+
+### 6. **Staff Salaries**
+- **When it occurs**: Paying staff salaries
+- **How it's recorded**: Creates expense account transactions (EXP-002)
+- **Tracked in**: Analytics API `loss_breakdown.expense_transactions`
+
+### 7. **Revenue Account Debits**
+- **When it occurs**: Manual adjustments that directly reduce revenue
+- **How it's recorded**: Direct debits to revenue account
+- **Tracked in**: Analytics API `loss_breakdown.revenue_debits`
+
+---
+
+## Comparison Data Structure
+
+The `comparison` object contains:
+- `current`: Current period value
+- `previous`: Previous period value
+- `change`: Absolute change (current - previous)
+- `percentage`: Percentage change ((current - previous) / previous * 100)
+- `is_positive`: Boolean indicating if the change is positive (true) or negative (false)
+
+**Note**: For losses, a negative percentage (or `is_positive: false`) is actually good (expenses decreased), while a positive percentage means expenses increased.
+
+---
+
+## Frontend Integration Example
+
+### Dashboard Cards Display
+
+```javascript
+// Fetch dashboard data
+const response = await fetch('/api/analytics/dashboard', {
+  headers: {
+    'Authorization': `Bearer ${token}`,
+    'Accept': 'application/json'
+  }
+});
+
+const { data } = await response.json();
+
+// Today's Moneys Card
+const todayMoneys = {
+  title: "Today's Moneys",
+  value: `PKR. ${data.today.stats.revenue.toLocaleString()}`,
+  percentage: data.today.comparison.revenue.percentage,
+  isPositive: data.today.comparison.revenue.is_positive
+};
+
+// Customers Today Card
+const customersToday = {
+  title: "Customers Today",
+  value: data.today.stats.customers.toString(),
+  percentage: data.today.comparison.customers.percentage,
+  isPositive: data.today.comparison.customers.is_positive
+};
+
+// Comparative Loss Card
+const comparativeLoss = {
+  title: "Comparative Loss",
+  value: `PKR. ${data.today.stats.losses.toLocaleString()}`,
+  percentage: data.today.comparison.losses.percentage,
+  isPositive: !data.today.comparison.losses.is_positive, // Inverted for losses
+  breakdown: data.today.stats.loss_breakdown // Show breakdown on hover/expand
+};
+
+// Total Sales Card
+const totalSales = {
+  title: "Total Sales",
+  value: `PKR. ${data.today.stats.total_sales.toLocaleString()}`,
+  percentage: data.today.comparison.total_sales.percentage,
+  isPositive: data.today.comparison.total_sales.is_positive
+};
+```
+
+### Displaying Loss Breakdown
+
+```javascript
+// Example: Show loss breakdown in a tooltip or expandable section
+const lossBreakdown = data.today.stats.loss_breakdown;
+
+// Display breakdown components
+const breakdownItems = [
+  {
+    label: "Expense Transactions",
+    value: `PKR ${lossBreakdown.expense_transactions.toLocaleString()}`,
+    description: "Bills, stock purchases, salaries"
+  },
+  {
+    label: "COGS Loss",
+    value: `PKR ${lossBreakdown.cogs_loss.toLocaleString()}`,
+    description: "Loss from selling below cost",
+    highlight: true // Highlight this as it's automatically recorded
+  },
+  {
+    label: "Loss Account Transactions",
+    value: `PKR ${lossBreakdown.loss_account_transactions.toLocaleString()}`,
+    description: "Bad debts, damaged stock, write-offs"
+  },
+  {
+    label: "Revenue Debits",
+    value: `PKR ${lossBreakdown.revenue_debits.toLocaleString()}`,
+    description: "Manual revenue adjustments"
+  }
+];
+```
+
+### Important: COGS Loss Auto-Recording
+
+⚡ **No Frontend Changes Required for COGS Loss Recording**
+
+When creating invoices or sales, the backend automatically:
+1. Calculates COGS loss for items sold below cost
+2. Records it to the LOSS-001 account
+3. Updates the revenue account accordingly
+
+**Frontend behavior:**
+- Continue showing the loss calculation in the UI (e.g., "Loss: PKR 500.00")
+- The backend automatically records this loss when the invoice/sale is created
+- The loss will appear in analytics immediately after creation
+- No additional API calls needed from the frontend
+
+**Example Invoice Creation (no changes needed):**
+```javascript
+// Creating an invoice with items sold below cost
+const invoiceData = {
+  customer_id: 1,
+  items: [
+    {
+      stock_item_id: 5,
+      quantity: 1,
+      unit_price: 2500, // Selling at PKR 2500
+      // Item cost is PKR 3000 (last_purchase_price)
+      // Frontend shows: "Loss: PKR 500.00"
+    }
+  ],
+  // ... other fields
+};
+
+// POST /api/invoices
+// Backend automatically:
+// 1. Calculates COGS loss: (3000 - 2500) × 1 = PKR 500
+// 2. Records to LOSS-001 account
+// 3. Loss appears in analytics immediately
+```
+
+---
+
+## Notes
+
+1. **Store Only**: These analytics are currently for the store only (not factory).
+2. **Revenue Calculation**: The system prioritizes account transactions for revenue calculation. If account transactions don't exist, it falls back to direct invoice and sale totals.
+3. **Date Ranges**: All date ranges are inclusive (start and end dates are included).
+4. **Business Seasons**: You must create business seasons before using business season analytics. The system will automatically use the most recent active season if no `season_id` is provided.
+5. **Comparison**: If no comparison period is specified, the system automatically compares with the previous period (previous day, month, year, or season).
+6. **COGS Loss Calculation**: COGS loss is only calculated if stock items have a `last_purchase_price` recorded. If an item doesn't have a purchase price, it won't contribute to COGS loss calculation.
+7. **Loss Breakdown**: The `loss_breakdown` object is included in all analytics responses to provide transparency into what contributes to total losses.
+8. **Automatic COGS Loss Recording**: ⚡ **NEW** - When creating invoices (`POST /api/invoices`) or sales (`POST /api/customers/{id}/sales`), if any items are sold below their purchase cost, the COGS loss is automatically calculated and recorded to the LOSS-001 account. This means:
+   - The loss shown in your frontend (e.g., "Loss: PKR 500.00") is now automatically recorded in the accounting system
+   - The loss will appear in analytics immediately after the invoice/sale is created
+   - No additional API calls are needed - it's handled automatically by the backend
+   - The loss is recorded as a debit to LOSS-001 and a credit to the revenue account
+

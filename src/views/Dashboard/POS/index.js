@@ -466,6 +466,28 @@ export default function POS() {
       setApplyWalletAdvance(false);
     }
   }, [customerId, activeReservation]);
+  
+  // Reset reservation mode and payment_as when customer is cleared (guest)
+  React.useEffect(() => {
+    if (!customerId) {
+      // Reset to sale mode if reservation mode was active
+      setReservationMode(prev => {
+        if (prev === 'reserve') {
+          toast({
+            title: 'Reservation mode disabled',
+            description: 'Reservations require a customer. Switched to immediate sale mode.',
+            status: 'info',
+            duration: 3000,
+            isClosable: true,
+          });
+          return 'sale';
+        }
+        return prev;
+      });
+      // Reset payment_as to 'payment' if it was 'advance'
+      setPaymentAs(prev => prev === 'advance' ? 'payment' : prev);
+    }
+  }, [customerId, toast]);
 
   const reservationsList = React.useMemo(() => {
     return (customerReservations || []).map((res, idx) => ({
@@ -813,6 +835,27 @@ export default function POS() {
   const hiddenCostsAmount = cart.reduce((s, l) => s + Number(l.hiddenCost || 0), 0);
   const total = Math.max(0, subtotal - discountFromPercent - discountFixed + hiddenCostsAmount);
   const totalDiscount = manualDiscount + discountFromPercent + discountFixed;
+  
+  // Calculate COGS Loss: when selling price < purchase cost
+  // Loss = (cost - selling_price) × quantity
+  const cogsLoss = cart.reduce((s, l) => {
+    const cost = Number(l.cost || 0);
+    const sellingPrice = Number(l.price || 0);
+    const qty = Number(l.qty || 0);
+    
+    // Convert cost to current unit type if selling in secondary units
+    let costInCurrentUnit = cost;
+    if (l.unitType === 'secondary' && l.secondaryPerPrimary && l.secondaryPerPrimary > 0) {
+      costInCurrentUnit = cost / l.secondaryPerPrimary;
+    }
+    
+    // Only calculate loss if cost > 0 and selling price < cost
+    if (costInCurrentUnit > 0 && sellingPrice < costInCurrentUnit) {
+      const lossPerUnit = costInCurrentUnit - sellingPrice;
+      return s + (lossPerUnit * qty);
+    }
+    return s;
+  }, 0);
 
   const totalQty = cart.reduce((s, l) => s + l.qty, 0);
   const originalUnitPrice = totalQty ? baseSubtotal / totalQty : 0;
@@ -987,6 +1030,19 @@ export default function POS() {
       await createReservationFlow();
       return;
     }
+    
+    // Prevent advance payments for guest customers
+    if (!customerId && paymentAs === 'advance') {
+      toast({
+        title: 'Advance payment requires customer',
+        description: 'Please select a customer to record advance payments. Guest customers cannot have advance payments.',
+        status: 'warning',
+        duration: 5000,
+        isClosable: true,
+      });
+      return;
+    }
+    
     if (paymentMode !== 'split' && !depositAccountId) {
       toast({
         title: 'Missing deposit account',
@@ -1106,19 +1162,57 @@ export default function POS() {
         payload.deposit_account_id = Number(depositAccountId);
         if (payAmountValue) {
           payload.paid_amount = payAmountValue;
-          payload.payment_as = paymentAs === 'advance' ? 'advance' : paymentAs;
+          // Prevent advance payments for guest customers
+          if (!customerId && paymentAs === 'advance') {
+            // Force to 'payment' for guests
+            payload.payment_as = 'payment';
+          } else {
+            payload.payment_as = paymentAs === 'advance' ? 'advance' : paymentAs;
+          }
         } else {
           // When customer is selected, always set payment_as to help backend calculate final due amount
-          // For guest, only set if payment_as is 'advance'
+          // For guest, never set payment_as to 'advance'
           if (customerId) {
             payload.payment_as = paymentAs === 'advance' ? 'advance' : 'payment';
-          } else if (paymentAs === 'advance') {
-            payload.payment_as = 'advance';
+          } else {
+            // Guest customers can only make payments, not advances
+            payload.payment_as = 'payment';
           }
         }
       }
       // Remove all undefined values from payload before sending
       const cleanedPayload = removeUndefined(payload);
+      
+      // Calculate and log COGS loss for debugging
+      const itemsWithLoss = cart.map(l => {
+        const cost = Number(l.cost || 0);
+        const sellingPrice = Number(l.price || 0);
+        const qty = Number(l.qty || 0);
+        
+        // Convert cost to current unit type if selling in secondary units
+        let costInCurrentUnit = cost;
+        if (l.unitType === 'secondary' && l.secondaryPerPrimary && l.secondaryPerPrimary > 0) {
+          costInCurrentUnit = cost / l.secondaryPerPrimary;
+        }
+        
+        const lossPerUnit = costInCurrentUnit > 0 && sellingPrice < costInCurrentUnit 
+          ? costInCurrentUnit - sellingPrice 
+          : 0;
+        const itemLoss = lossPerUnit * qty;
+        
+        return {
+          stock_item_id: l.id,
+          name: l.name,
+          cost: costInCurrentUnit,
+          selling_price: sellingPrice,
+          quantity: qty,
+          unit_type: l.unitType || 'primary',
+          loss_per_unit: lossPerUnit,
+          total_loss: itemLoss,
+          has_loss: itemLoss > 0
+        };
+      });
+      const totalCogsLoss = itemsWithLoss.reduce((sum, item) => sum + item.total_loss, 0);
       
       // Log the payload for debugging
       console.log('=== POS Invoice Payload ===');
@@ -1133,6 +1227,14 @@ export default function POS() {
       console.log('Reservation Mode:', reservationMode);
       console.log('Active Reservation:', activeReservation?.id || 'none');
       console.log('Payment Method in Payload:', cleanedPayload.payment_method);
+      console.log('--- COGS Loss Calculation ---');
+      console.log('Items with Loss Details:', itemsWithLoss);
+      console.log('Total COGS Loss:', totalCogsLoss);
+      console.log('Expected Loss Breakdown:', {
+        items_with_loss: itemsWithLoss.filter(i => i.has_loss),
+        total_cogs_loss: totalCogsLoss,
+        note: 'Backend should automatically record this to LOSS-001 account'
+      });
       console.log('Full Payload:', JSON.stringify(cleanedPayload, null, 2));
       console.log('==========================');
       
@@ -1502,11 +1604,31 @@ export default function POS() {
                         flex='1'
                         variant={reservationMode === 'reserve' ? 'solid' : 'outline'}
                         colorScheme='purple'
-                        onClick={()=> setReservationMode('reserve')}
+                        isDisabled={!customerId}
+                        onClick={()=> {
+                          if (!customerId) {
+                            toast({
+                              title: 'Reservation requires customer',
+                              description: 'Please select a customer to create a reservation. Reservations cannot be made for guest customers.',
+                              status: 'warning',
+                              duration: 5000,
+                              isClosable: true,
+                            });
+                            return;
+                          }
+                          setReservationMode('reserve');
+                        }}
                       >
                         Reserve + Advance
                       </Button>
                     </HStack>
+                    {!customerId && (
+                      <Box mt='8px' p='8px' borderRadius='6px' bg={useColorModeValue('yellow.50', 'yellow.900')}>
+                        <Text fontSize='xs' color='yellow.700'>
+                          ⚠️ Reservations and advances require a customer to be selected. Guest customers can only make immediate sales.
+                        </Text>
+                      </Box>
+                    )}
                     {reservationMode === 'reserve' && (
                       <VStack align='stretch' spacing='10px' mt='10px'>
                         <Text fontSize='xs' color='gray.500'>
@@ -1855,17 +1977,40 @@ export default function POS() {
                             basePriceInCurrentUnit = basePricePrimary / line.secondaryPerPrimary;
                           }
                           
+                          // Check for COGS loss (selling below purchase cost)
+                          const cost = Number(line.cost || 0);
+                          let costInCurrentUnit = cost;
+                          if (line.unitType === 'secondary' && line.secondaryPerPrimary && line.secondaryPerPrimary > 0) {
+                            costInCurrentUnit = cost / line.secondaryPerPrimary;
+                          }
+                          const hasCogsLoss = costInCurrentUnit > 0 && line.price < costInCurrentUnit;
+                          const cogsLossPerUnit = hasCogsLoss ? costInCurrentUnit - line.price : 0;
+                          const totalCogsLoss = cogsLossPerUnit * line.qty;
+                          
+                          // Check for discount (selling below base/selling price)
                           const hasDiscount = basePriceInCurrentUnit > line.price;
-                          if (hasDiscount) {
-                            const discountPerUnit = basePriceInCurrentUnit - line.price;
+                          if (hasDiscount || hasCogsLoss) {
+                            const discountPerUnit = basePriceInCurrentUnit > line.price ? basePriceInCurrentUnit - line.price : 0;
                             const totalDiscount = discountPerUnit * line.qty;
                             return (
-                              <HStack spacing='4px' fontSize='xs' color='gray.500'>
-                                <Text>Original:</Text>
-                                <Text textDecoration='line-through'>PKR {basePriceInCurrentUnit.toFixed(2)}</Text>
-                                <Text>•</Text>
-                                <Text color='red.500' fontWeight='medium'>Loss: PKR {totalDiscount.toFixed(2)}</Text>
-                              </HStack>
+                              <VStack align='stretch' spacing='2px' fontSize='xs' color='gray.500'>
+                                {hasDiscount && (
+                                  <HStack spacing='4px'>
+                                    <Text>Original:</Text>
+                                    <Text textDecoration='line-through'>PKR {basePriceInCurrentUnit.toFixed(2)}</Text>
+                                    <Text>•</Text>
+                                    <Text color='orange.500' fontWeight='medium'>Discount: PKR {totalDiscount.toFixed(2)}</Text>
+                                  </HStack>
+                                )}
+                                {hasCogsLoss && (
+                                  <HStack spacing='4px'>
+                                    <Text>Cost:</Text>
+                                    <Text>PKR {costInCurrentUnit.toFixed(2)}</Text>
+                                    <Text>•</Text>
+                                    <Text color='red.500' fontWeight='bold'>COGS Loss: PKR {totalCogsLoss.toFixed(2)}</Text>
+                                  </HStack>
+                                )}
+                              </VStack>
                             );
                           } else if (line.price > basePriceInCurrentUnit) {
                             // Show profit if selling above base price
@@ -1929,6 +2074,12 @@ export default function POS() {
                         <HStack justify='space-between'>
                           <Text color='orange.500' fontSize='sm'>Hidden Costs:</Text>
                           <Text color='orange.500' fontSize='sm' fontWeight='medium'>PKR {hiddenCostsAmount.toFixed(2)}</Text>
+                        </HStack>
+                      )}
+                      {cogsLoss > 0 && (
+                        <HStack justify='space-between'>
+                          <Text color='red.500' fontSize='sm' fontWeight='semibold'>COGS Loss (Below Cost):</Text>
+                          <Text color='red.500' fontSize='sm' fontWeight='bold'>PKR {cogsLoss.toFixed(2)}</Text>
                         </HStack>
                       )}
                     </VStack>
