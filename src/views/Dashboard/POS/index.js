@@ -374,7 +374,11 @@ export default function POS() {
     try {
       const resp = await customerService.list({ per_page: 50 });
       const list = resp?.data?.data || resp?.data || resp || [];
-      setCustomers(list);
+      const filtered = list.filter((customer) => {
+        const name = (customer?.name || '').trim().toLowerCase();
+        return name && name !== 'guest';
+      });
+      setCustomers(filtered);
     } catch (_) {}
   }, []);
 

@@ -37,6 +37,9 @@ class InvoiceService {
     );
     return this.request('/api/invoices', { method: 'POST', body: JSON.stringify(cleanPayload) });
   }
+  refundInvoice(id, payload) {
+    return this.request(`/api/invoices/${id}/refunds`, { method: 'POST', body: JSON.stringify(payload) });
+  }
 
   async downloadInvoice(id) {
     const token = localStorage.getItem('token');

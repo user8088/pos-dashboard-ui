@@ -36,8 +36,24 @@ import {
   Input,
   InputGroup,
   InputLeftElement,
+  Drawer,
+  DrawerOverlay,
+  DrawerContent,
+  DrawerHeader,
+  DrawerCloseButton,
+  DrawerBody,
+  DrawerFooter,
+  FormControl,
+  FormLabel,
+  NumberInput,
+  NumberInputField,
+  Textarea,
+  Tooltip,
+  Alert,
+  AlertIcon,
+  useDisclosure,
 } from '@chakra-ui/react';
-import { DownloadIcon, PhoneIcon, EditIcon, ChevronDownIcon, SearchIcon, CheckIcon, WarningIcon } from '@chakra-ui/icons';
+import { DownloadIcon, PhoneIcon, EditIcon, ChevronDownIcon, SearchIcon, CheckIcon, WarningIcon, RepeatIcon } from '@chakra-ui/icons';
 import Card from 'components/Card/Card';
 import CardBody from 'components/Card/CardBody';
 import CardHeader from 'components/Card/CardHeader';
@@ -53,6 +69,8 @@ export default function CustomerProfile() {
   const itemBg = useColorModeValue('white', 'gray.800');
   const itemBorder = useColorModeValue('gray.200', 'gray.600');
   const cardBg = useColorModeValue('white', 'gray.700');
+  const refundItemBg = useColorModeValue('gray.50', 'gray.800');
+  const refundSummaryBg = useColorModeValue('orange.50', 'whiteAlpha.100');
   const [loading, setLoading] = React.useState(true);
   const [data, setData] = React.useState(null);
   const [invoices, setInvoices] = React.useState([]);
@@ -62,25 +80,52 @@ export default function CustomerProfile() {
   const [invoiceSearch, setInvoiceSearch] = React.useState('');
   const [paymentSearch, setPaymentSearch] = React.useState('');
   const toast = useToast();
+  const mountedRef = React.useRef(true);
+  const brandColor = '#FF8D28';
+  const { isOpen: refundDrawerOpen, onOpen: onRefundOpen, onClose: onRefundClose } = useDisclosure();
+  const [refundContext, setRefundContext] = React.useState(null);
+  const [refundQuantities, setRefundQuantities] = React.useState({});
+  const setRefundQuantityValue = React.useCallback((lineId, value) => {
+    setRefundQuantities((prev) => ({
+      ...prev,
+      [lineId]: value,
+    }));
+  }, []);
+  const [refundNote, setRefundNote] = React.useState('');
+  const [refundDate, setRefundDate] = React.useState(() => new Date().toISOString().slice(0, 16));
+  const [submittingRefund, setSubmittingRefund] = React.useState(false);
+  const [refundError, setRefundError] = React.useState(null);
+  const [refundLoadingInvoiceId, setRefundLoadingInvoiceId] = React.useState(null);
+
+  const refreshProfile = React.useCallback(async ({ silent = false } = {}) => {
+    if (!silent) setLoading(true);
+    try {
+      const resp = await customerService.profile(id);
+      const d = resp?.data || resp;
+      if (mountedRef.current) setData(d);
+      try {
+        const inv = await invoiceService.listInvoices({ per_page: 100 });
+        const list = inv?.data?.data || inv?.data || inv || [];
+        if (mountedRef.current) {
+          setInvoices(list.filter((x) => String(x.customer_id) === String(id)));
+        }
+      } catch (error) {
+        if (process.env.NODE_ENV === 'development') {
+          console.warn('Failed to load invoices', error);
+        }
+      }
+    } finally {
+      if (!silent && mountedRef.current) setLoading(false);
+    }
+  }, [id]);
 
   React.useEffect(() => {
-    let mounted = true;
-    (async () => {
-      try {
-        setLoading(true);
-        const resp = await customerService.profile(id);
-        const d = resp?.data || resp;
-        if (mounted) setData(d);
-        // Load all invoices for this customer
-        try {
-          const inv = await invoiceService.listInvoices({ per_page: 100 });
-          const list = inv?.data?.data || inv?.data || inv || [];
-          if (mounted) setInvoices(list.filter((x) => String(x.customer_id) === String(id)));
-        } catch (_) {}
-      } finally { if (mounted) setLoading(false); }
-    })();
-    return () => { mounted = false; };
-  }, [id]);
+    mountedRef.current = true;
+    refreshProfile();
+    return () => {
+      mountedRef.current = false;
+    };
+  }, [refreshProfile]);
 
   // Calculate total spent from all invoices
   const totalSpent = React.useMemo(() => {
@@ -195,6 +240,201 @@ export default function CustomerProfile() {
   const invoiceList = React.useMemo(() => {
     return data?.invoices || invoices || [];
   }, [data, invoices]);
+
+  const buildItemsFromInvoice = React.useCallback((invoiceDetail = {}, { onlyRemaining = false } = {}) => {
+    const rawItems = invoiceDetail.items || invoiceDetail.invoice_items || [];
+    return rawItems
+      .map((item) => {
+        if (!item) return null;
+        const stockInfo = item.stock_item || item.product || {};
+        const soldQuantity = Number(item.quantity ?? item.qty ?? 0);
+        if (soldQuantity <= 0) return null;
+        const refundedQuantity = Number(item.refunded_quantity ?? item.refunded_qty ?? item.returned_quantity ?? 0);
+        const invoiceItemId = item.invoice_item_id ?? item.id ?? item.sale_item_id ?? item.pivot?.id;
+        if (!invoiceItemId) return null;
+        const remaining = Math.max(0, soldQuantity - refundedQuantity);
+        return {
+          invoiceItemId,
+          name: item.name || stockInfo.name || `Item #${invoiceItemId}`,
+          quantity: soldQuantity,
+          refunded: refundedQuantity,
+          remaining,
+          unitPrice: Number(item.unit_price ?? item.price ?? 0),
+          sku: stockInfo.serial_id || stockInfo.sku || item.stock_item_id || '',
+          unitLabel:
+            stockInfo.primary_unit?.symbol ||
+            stockInfo.primary_unit?.name ||
+            item.unit ||
+            '',
+          unitType:
+            item.unit_type ||
+            item.unitType ||
+            (item.unit && item.unit.toLowerCase().includes('secondary') ? 'secondary' : 'primary'),
+        };
+      })
+      .filter((item) => item && (!onlyRemaining || item.remaining > 0));
+  }, []);
+
+  const invoiceItemsByInvoiceId = React.useMemo(() => {
+    const map = {};
+    (invoiceList || []).forEach((inv) => {
+      if (!inv || !inv.id) return;
+      const items = buildItemsFromInvoice(inv, { onlyRemaining: true });
+      if (items.length > 0) {
+        map[String(inv.id)] = items;
+      }
+    });
+    return map;
+  }, [invoiceList, buildItemsFromInvoice]);
+
+  const fetchInvoiceDetail = React.useCallback(async (invoiceId) => {
+    const resp = await invoiceService.getInvoice(invoiceId);
+    return resp?.data || resp;
+  }, []);
+
+  const handleStartRefund = React.useCallback(async (invoice) => {
+    setRefundLoadingInvoiceId(invoice?.id || null);
+    try {
+      const invoiceKey = invoice?.id ? String(invoice.id) : null;
+      let items = invoiceKey ? invoiceItemsByInvoiceId[invoiceKey] || [] : [];
+
+      if ((!items || items.length === 0) && invoice?.id) {
+        try {
+          const invoiceDetail = await fetchInvoiceDetail(invoice.id);
+          items = buildItemsFromInvoice(invoiceDetail, { onlyRemaining: true });
+          if (items.length === 0 && invoiceDetail) {
+            const fallbackItems = buildItemsFromInvoice(invoiceDetail);
+            if (fallbackItems.length === 0) {
+              items = [];
+            }
+          }
+        } catch (error) {
+          console.warn('Failed to load invoice detail for refund', error);
+        }
+      }
+
+      if (!items || items.length === 0) {
+        toast({
+          title: 'Nothing left to refund',
+          description: 'Could not find refundable items on this invoice.',
+          status: 'info',
+          duration: 4000,
+          isClosable: true,
+        });
+        return;
+      }
+
+      const initialQuantities = items.reduce((acc, item) => {
+        acc[item.invoiceItemId] = '';
+        return acc;
+      }, {});
+      setRefundContext({ invoice, items });
+      setRefundQuantities(initialQuantities);
+      setRefundNote('');
+      setRefundDate(new Date().toISOString().slice(0, 16));
+      setRefundError(null);
+      onRefundOpen();
+    } finally {
+      setRefundLoadingInvoiceId(null);
+    }
+  }, [invoiceItemsByInvoiceId, fetchInvoiceDetail, buildItemsFromInvoice, onRefundOpen, toast]);
+
+  const handleCloseRefundDrawer = React.useCallback(() => {
+    onRefundClose();
+    setRefundContext(null);
+    setRefundQuantities({});
+    setRefundNote('');
+    setRefundDate(new Date().toISOString().slice(0, 16));
+    setRefundError(null);
+  }, [onRefundClose]);
+
+  const selectedRefundItems = React.useMemo(() => {
+    if (!refundContext) return [];
+    return refundContext.items
+      .map((item) => {
+        const value = refundQuantities[item.invoiceItemId];
+        if (value === '' || value === undefined || value === null) return null;
+        const quantity = Number(value);
+        if (!Number.isFinite(quantity) || quantity <= 0) return null;
+        return {
+          invoice_item_id: item.invoiceItemId,
+          quantity: Math.min(quantity, item.remaining),
+          unitPrice: item.unitPrice || 0,
+          unitType: item.unitType || undefined,
+        };
+      })
+      .filter(Boolean);
+  }, [refundContext, refundQuantities]);
+
+  const refundTotal = React.useMemo(() => {
+    return selectedRefundItems.reduce((sum, line) => {
+      return sum + Number(line.quantity || 0) * Number(line.unitPrice || 0);
+    }, 0);
+  }, [selectedRefundItems]);
+
+  const handleSubmitRefund = React.useCallback(async () => {
+    if (!refundContext) return;
+    if (selectedRefundItems.length === 0) {
+      toast({
+        title: 'Select items to refund',
+        description: 'Enter a quantity for at least one item before continuing.',
+        status: 'warning',
+        duration: 4000,
+        isClosable: true,
+      });
+      return;
+    }
+    const invoiceId = refundContext.invoice?.id ?? refundContext.invoice?.invoice_id;
+    if (!invoiceId) {
+      setRefundError('Missing invoice reference for this refund.');
+      return;
+    }
+    setSubmittingRefund(true);
+    setRefundError(null);
+    try {
+      const parsedDate = refundDate ? new Date(refundDate) : null;
+      const refundDateIso = parsedDate && !Number.isNaN(parsedDate.getTime()) ? parsedDate.toISOString() : undefined;
+      const payload = {
+        items: selectedRefundItems.map((item) => ({
+          invoice_item_id: item.invoice_item_id,
+          quantity: item.quantity,
+          ...(item.unitType ? { unit_type: item.unitType } : {}),
+        })),
+        note: refundNote?.trim() ? refundNote.trim() : undefined,
+        refund_date: refundDateIso,
+      };
+      await invoiceService.refundInvoice(invoiceId, payload);
+      toast({
+        title: 'Refund created',
+        description: 'Stock and balances have been updated.',
+        status: 'success',
+        duration: 4000,
+        isClosable: true,
+      });
+      handleCloseRefundDrawer();
+      await refreshProfile({ silent: true });
+    } catch (error) {
+      const message = error?.message || 'Failed to process refund';
+      setRefundError(message);
+      toast({
+        title: 'Refund failed',
+        description: message,
+        status: 'error',
+        duration: 5000,
+        isClosable: true,
+      });
+    } finally {
+      setSubmittingRefund(false);
+    }
+  }, [
+    refundContext,
+    refundDate,
+    refundNote,
+    selectedRefundItems,
+    toast,
+    handleCloseRefundDrawer,
+    refreshProfile,
+  ]);
 
   // Filter invoices based on search query
   const filteredInvoices = React.useMemo(() => {
@@ -350,6 +590,7 @@ export default function CustomerProfile() {
   const name = data.name || `#${id}`;
 
   return (
+    <>
     <Box pt={{ base: '120px', md: '75px' }}>
       {/* Header Section */}
       <Card mb='24px' bg={cardBg}>
@@ -874,8 +1115,8 @@ export default function CustomerProfile() {
                       borderRadius='8px'
                     >
                       <CardBody p='16px' w='100%'>
-                        <Flex justify='space-between' align='center' w='100%'>
-                          <Box flex='1'>
+                        <Flex justify='space-between' align='center' w='100%' gap='12px' flexWrap='wrap'>
+                          <Box flex='1' minW='200px'>
                             <Text fontWeight='600' fontSize='sm' color={textColor} mb='4px'>
                               {inv.invoice_number || `Invoice #${inv.id}`}
                             </Text>
@@ -903,15 +1144,50 @@ export default function CustomerProfile() {
                               </Badge>
                             </HStack>
                           </Box>
-                          <IconButton
-                            icon={<DownloadIcon />}
-                            size='sm'
-                            variant='outline'
-                            colorScheme='orange'
-                            onClick={() => handleDownload(inv.id)}
-                            isLoading={downloadingIds.has(inv.id)}
-                            aria-label='Download invoice'
-                          />
+                          <HStack spacing='8px'>
+                            {(() => {
+                              const key = inv?.id ? String(inv.id) : null;
+                              const invoiceItems = key ? invoiceItemsByInvoiceId[key] : null;
+                              const hasRemaining = invoiceItems ? invoiceItems.some((item) => item.remaining > 0) : null;
+                              const disabled = invoiceItems ? !hasRemaining : false;
+                              const tooltipLabel = invoiceItems
+                                ? (hasRemaining ? null : 'All items already refunded')
+                                : 'Click to load invoice items for refund';
+                              const button = (
+                                <Button
+                                  size='sm'
+                                  leftIcon={<RepeatIcon />}
+                                  bg={brandColor}
+                                  color='white'
+                                  _hover={{ bg: '#e67815' }}
+                                  _active={{ bg: '#cf6910' }}
+                                  onClick={() => handleStartRefund(inv)}
+                                  isLoading={refundLoadingInvoiceId === inv.id}
+                                  isDisabled={disabled || refundLoadingInvoiceId === inv.id}
+                                >
+                                  Refund
+                                </Button>
+                              );
+                              return tooltipLabel ? (
+                                <Tooltip label={tooltipLabel}>
+                                  <span style={{ display: 'inline-block' }}>
+                                    {button}
+                                  </span>
+                                </Tooltip>
+                              ) : (
+                                button
+                              );
+                            })()}
+                            <IconButton
+                              icon={<DownloadIcon />}
+                              size='sm'
+                              variant='outline'
+                              colorScheme='orange'
+                              onClick={() => handleDownload(inv.id)}
+                              isLoading={downloadingIds.has(inv.id)}
+                              aria-label='Download invoice'
+                            />
+                          </HStack>
                         </Flex>
                       </CardBody>
                     </Card>
@@ -931,5 +1207,161 @@ export default function CustomerProfile() {
         </TabPanels>
       </Tabs>
     </Box>
+      <Drawer
+        isOpen={refundDrawerOpen}
+        placement='right'
+        size='lg'
+        onClose={handleCloseRefundDrawer}
+      >
+        <DrawerOverlay />
+        <DrawerContent>
+          <DrawerCloseButton color='white' />
+          <DrawerHeader bg={brandColor} color='white' borderBottomWidth='1px'>
+            Refund Invoice
+            {refundContext && (
+              <Text fontSize='sm' color='whiteAlpha.800' mt='2'>
+                {refundContext.invoice?.invoice_number || `Invoice #${refundContext.invoice?.id}`}
+              </Text>
+            )}
+          </DrawerHeader>
+          <DrawerBody>
+            {refundError && (
+              <Alert status='error' mb='4' borderRadius='md'>
+                <AlertIcon />
+                {refundError}
+              </Alert>
+            )}
+            {refundContext ? (
+              <VStack align='stretch' spacing='6'>
+                <Box>
+                  <Text fontWeight='semibold' color={textColor}>
+                    Customer
+                  </Text>
+                  <Text color='gray.500'>
+                    {data?.name || `#${id}`} • {refundContext.invoice?.invoice_number || `Invoice #${refundContext.invoice?.id}`}
+                  </Text>
+                </Box>
+                <Box>
+                  <Text fontWeight='semibold' color={textColor} mb='2'>
+                    Items to refund
+                  </Text>
+                  <VStack align='stretch' spacing='4'>
+                    {refundContext.items.map((item) => (
+                      <Box
+                        key={item.invoiceItemId}
+                        p='4'
+                        borderWidth='1px'
+                        borderRadius='lg'
+                        bg={refundItemBg}
+                      >
+                        <Flex align='flex-start' gap='16px' flexWrap='wrap'>
+                          <Box flex='1' minW='200px'>
+                            <Text fontWeight='semibold' color={textColor}>
+                              {item.name}
+                            </Text>
+                            <Text fontSize='sm' color='gray.500'>
+                              Purchased: {item.quantity}{item.unitLabel ? ` ${item.unitLabel}` : ''}
+                            </Text>
+                            {item.refunded > 0 && (
+                              <Text fontSize='sm' color='gray.500'>
+                                Refunded: {item.refunded}
+                              </Text>
+                            )}
+                            <Text fontSize='sm' color='gray.600' fontWeight='medium'>
+                              Remaining refundable: {item.remaining}
+                            </Text>
+                            <Text fontSize='sm' color='gray.500'>
+                              Unit price: PKR {Number(item.unitPrice || 0).toFixed(2)}
+                            </Text>
+                          </Box>
+                          <FormControl maxW='160px'>
+                            <FormLabel fontSize='xs' color='gray.500'>
+                              Quantity to refund
+                            </FormLabel>
+                            <NumberInput
+                              size='sm'
+                              min={0}
+                              max={item.remaining}
+                              step={0.01}
+                              precision={3}
+                              value={refundQuantities[item.invoiceItemId] ?? ''}
+                              onChange={(valueString, valueNumber) => {
+                                if (valueString === '' || Number.isNaN(valueNumber)) {
+                                  setRefundQuantityValue(item.invoiceItemId, '');
+                                  return;
+                                }
+                                const safeValue = Math.min(valueNumber, item.remaining);
+                                setRefundQuantityValue(item.invoiceItemId, safeValue);
+                              }}
+                            >
+                              <NumberInputField />
+                            </NumberInput>
+                          </FormControl>
+                        </Flex>
+                      </Box>
+                    ))}
+                  </VStack>
+                </Box>
+                <SimpleGrid columns={{ base: 1, md: 2 }} spacing='4'>
+                  <FormControl>
+                    <FormLabel>Refund date</FormLabel>
+                    <Input
+                      type='datetime-local'
+                      value={refundDate}
+                      onChange={(e) => setRefundDate(e.target.value)}
+                    />
+                  </FormControl>
+                  <FormControl>
+                    <FormLabel>Note</FormLabel>
+                    <Textarea
+                      rows={3}
+                      placeholder='Optional note for history'
+                      value={refundNote}
+                      onChange={(e) => setRefundNote(e.target.value)}
+                    />
+                  </FormControl>
+                </SimpleGrid>
+                <Box
+                  borderWidth='1px'
+                  borderRadius='lg'
+                  p='4'
+                  bg={refundSummaryBg}
+                >
+                  <Text fontSize='sm' color='gray.500'>
+                    Refund total
+                  </Text>
+                  <Text fontSize='2xl' fontWeight='bold' color={brandColor}>
+                    PKR {refundTotal.toFixed(2)}
+                  </Text>
+                  <Text fontSize='xs' color='gray.600'>
+                    Stock will be returned, revenue debited, and the LOSS-001 account will record this refund automatically.
+                  </Text>
+                </Box>
+              </VStack>
+            ) : (
+              <Flex align='center' justify='center' minH='200px'>
+                <Text color='gray.500'>Select an invoice to begin a refund.</Text>
+              </Flex>
+            )}
+          </DrawerBody>
+          <DrawerFooter borderTopWidth='1px'>
+            <Button variant='ghost' mr={3} onClick={handleCloseRefundDrawer}>
+              Cancel
+            </Button>
+            <Button
+              bg={brandColor}
+              color='white'
+              _hover={{ bg: '#e67815' }}
+              _active={{ bg: '#cf6910' }}
+              onClick={handleSubmitRefund}
+              isLoading={submittingRefund}
+              isDisabled={!refundContext || selectedRefundItems.length === 0 || submittingRefund}
+            >
+              Process Refund
+            </Button>
+          </DrawerFooter>
+        </DrawerContent>
+      </Drawer>
+    </>
   );
 }

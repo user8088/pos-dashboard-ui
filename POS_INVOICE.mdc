@@ -149,6 +149,36 @@ Validation errors 422
 
 ---
 
+### Refund Items from an Invoice
+POST `/api/invoices/{invoice}/refunds`
+
+Body
+```json
+{
+  "items": [
+    { "invoice_item_id": 201, "quantity": 1.5 },
+    { "invoice_item_id": 202, "quantity": 1 }
+  ],
+  "note": "Customer returned damaged stock",
+  "refund_date": "2025-11-18T14:30:00Z"
+}
+```
+
+Rules & behavior
+- Only works for invoices linked to a customer.
+- Each `invoice_item_id` must belong to the invoice. Quantity must use the **same unit type** as originally sold (primary vs secondary).
+- Stock is replenished for every returned item.
+- Creates `invoice_returns` / `invoice_return_items` for traceability, and tracks per-line `returned_quantity` & `returned_sold_quantity`.
+- Updates invoice aggregates: `refunded_amount`, `due_amount`, `paid_amount`.
+- Customer balances update automatically: refund reduces `due_balance` first, remainder is paid out immediately (not stored as advance).
+- The refund cash/bank movement is booked against whichever deposit account collected the invoice (falls back to `CASH-001` if none was recorded).
+- A `customer_transactions` row with `type: refund` is written.
+- Accounting: revenue is debited and the refund also hits `LOSS-001` so the amount shows in analytics.
+- Response: `201` with the invoice return + items.
+- Guest invoices: if `customer_id` is `null`, the refund automatically attaches to a synthetic `Guest` customer record so ledger balances and history remain consistent.
+
+---
+
 ## List Invoices (for table)
 GET `/api/invoices?per_page=20`
 - Returns paginated invoices; each row includes `customer_name` (defaults to `Guest`) and eager loads `items` so hidden costs are available per line.
@@ -473,6 +503,13 @@ if (response.ok) {
 - **When to use:** Draft invoices, testing, or when you need to create invoices without immediately affecting customer balances
 - **Behavior:** Invoice is created normally, but customer balances and transactions are not updated
 - **Note:** Skipped invoices can later have their balances updated manually or through a separate process
+
+### Refund Data Model
+- `invoices.refunded_amount` keeps a running total of refunds applied to the invoice.
+- `invoice_items.returned_quantity` (primary units) and `returned_sold_quantity` (display units) prevent double refunds per line.
+- `invoice_returns` / `invoice_return_items` log each refund batch with timestamps, notes, and per-line amounts.
+- Stock levels are replenished from `invoice_return_items.quantity`.
+- Customer ledger entries use `customer_transactions.type = refund`, so the profile timeline shows payouts/credits.
 
 ### Invoice PDF
 - **Format:** Thermal printer format (80mm width, A4-style layout)

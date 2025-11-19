@@ -170,13 +170,42 @@ Example (truncated):
 - Effects: creates `sales` and `sale_items`, updates customer balances, writes `customer_transactions` (`sale`, optional `adjustment` for advance used, optional `payment` for cash-at-sale).
 - 201 → sale with `items`.
 
+### Refund Items from a Sale
+- POST `/api/customers/{customer}/sales/{sale}/refunds`
+- Body:
+```json
+{
+  "items": [
+    { "sale_item_id": 10, "quantity": 1.5 },
+    { "sale_item_id": 11, "quantity": 2 }
+  ],
+  "note": "Customer returned damaged bags",
+  "refund_date": "2025-11-18T14:30:00Z"
+}
+```
+- Rules:
+  - Each `sale_item_id` must belong to the sale.
+  - Quantity cannot exceed the remaining (non-refunded) quantity for that sale item.
+- Effects:
+  - Stock quantity is increased for every returned item.
+  - Creates `sale_returns` and `sale_return_items` records for audit.
+  - Updates the sale's `refunded_amount`, `due_amount`, and `paid_amount`.
+  - Customer balances are updated: refund first reduces `due_balance`, any remainder is paid out immediately (does **not** become customer advance).
+  - A `customer_transactions` entry with type `refund` is recorded.
+  - Accounting: revenue is debited and the amount is also logged under the LOSS-001 account.
+- 201 → sale return with `items`.
+
 ---
 
 ## Data Model Summary
 - `customers`: serial_id (nullable, unique), name, phone (unique), address, due_balance, advance_balance, advance_start_date, advance_end_date, rating_average, rating_count, timestamps, softDeletes
 - `sales`: customer_id, total_amount, paid_amount, due_amount, sale_date, reference, timestamps
 - `sale_items`: sale_id, stock_item_id, quantity, unit_price, total_price, timestamps
-- `customer_transactions`: customer_id, type [sale|payment|advance|adjustment], amount, direction [debit|credit], due_balance_after, advance_balance_after, description, occurred_at, timestamps
+- `sale_returns`: sale_id, customer_id, refund_amount, refund_date, note, timestamps
+- `sale_return_items`: sale_return_id, sale_item_id, stock_item_id, quantity, unit_price, refund_amount, timestamps
+- `invoice_returns`: invoice_id, customer_id, refund_amount, refund_date, note, timestamps
+- `invoice_return_items`: invoice_return_id, invoice_item_id, stock_item_id, quantity, sold_quantity, unit_type, refund_amount, timestamps
+- `customer_transactions`: customer_id, type [sale|payment|advance|adjustment|refund], amount, direction [debit|credit], due_balance_after, advance_balance_after, description, occurred_at, timestamps
 - `customer_ratings`: customer_id, stars, note, created_by, timestamps
 
 ## Validation Notes

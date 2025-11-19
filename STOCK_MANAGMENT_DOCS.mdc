@@ -1,6 +1,3 @@
----
-alwaysApply: true
----
 # Store Stock Management — Frontend Docs
 
 Base namespace (web views)
@@ -117,3 +114,12 @@ await fetch('/admin/items', {
 - For SPA, either:
   - Handle 302 by following redirect, or
   - Switch to API endpoints that return JSON 200/201 without redirects.
+
+## Stock Refunds (API)
+- POS sale refunds: `POST /api/customers/{customer}/sales/{sale}/refunds`
+  - Body: `{ items: [{ sale_item_id, quantity }], note?, refund_date? }`
+  - Replenishes stock, writes a `customer_transactions` refund entry, debits revenue + LOSS-001, and pays the customer back from `CASH-001` (no advance credit).
+- Invoice refunds: `POST /api/invoices/{invoice}/refunds`
+  - Body: `{ items: [{ invoice_item_id, quantity, unit_type? }], note?, refund_date? }`
+  - Uses the same unit type that was sold, restocks inventory, updates invoice totals, and books the payout against the same deposit account that collected the invoice (fallback: `CASH-001`).
+- Both endpoints automatically reduce the customer's due balance; any remainder is paid out immediately rather than being stored as customer advance.
