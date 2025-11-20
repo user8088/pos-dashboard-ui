@@ -22,7 +22,7 @@ import {
   GlobeIcon,
   WalletIcon,
 } from "components/Icons/Icons.js";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { dashboardTableData, timelineData } from "variables/general";
 import ActiveUsers from "./components/ActiveUsers";
 import BuiltByDevelopers from "./components/BuiltByDevelopers";
@@ -32,22 +32,31 @@ import Projects from "./components/Projects";
 import SalesOverview from "./components/SalesOverview";
 import WorkWithTheRockets from "./components/WorkWithTheRockets";
 import analyticsService from "services/analyticsService";
+import { useAuth } from "contexts/AuthContext";
 
 export default function Dashboard() {
   const iconBoxInside = useColorModeValue("white", "white");
   const [statsData, setStatsData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const { token, isAuthenticated, loading: authLoading } = useAuth();
 
-  useEffect(() => {
-    fetchDashboardStats();
-  }, []);
+  const fetchDashboardStats = useCallback(async () => {
+    if (authLoading) {
+      return;
+    }
 
-  const fetchDashboardStats = async () => {
+    if (!isAuthenticated || !token) {
+      setStatsData(null);
+      setError("You are not authenticated. Please sign in again.");
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
       setError(null);
-      const response = await analyticsService.getDashboardAnalytics();
+      const response = await analyticsService.getDashboardAnalytics(token);
       if (response.success && response.data) {
         setStatsData(response.data);
         
@@ -83,7 +92,11 @@ export default function Dashboard() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [authLoading, isAuthenticated, token]);
+
+  useEffect(() => {
+    fetchDashboardStats();
+  }, [fetchDashboardStats]);
 
   // Format currency value
   const formatPKR = (value) => {

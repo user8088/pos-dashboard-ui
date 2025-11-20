@@ -516,3 +516,67 @@ if (response.ok) {
 - **Content:** All invoice details except hidden costs as a separate line item
 - **Total:** Includes hidden costs (they're just not displayed separately)
 - **Filename:** `invoice-{invoice_number}.pdf`
+
+---
+
+## Stock Item Price History API (NEW)
+
+### 1. List Price History
+GET `/api/stock-items/{stockItem}/price-history?start_date=2025-09-01&end_date=2025-11-19&limit=50`
+
+Query params:
+- `start_date`, `end_date` (optional ISO dates)
+- `range` quick filters (`30`, `60`, `90`, `180`, `365`, `all`)
+- `limit` (default 50) + `page`
+
+Response
+```json
+{
+  "data": {
+    "stats": {
+      "average_purchase": "1943.75",
+      "average_selling": "2977.50",
+      "best_margin": "1145.00",
+      "lowest_margin": "940.00"
+    },
+    "entries": {
+      "data": [
+        {
+          "id": 12,
+          "invoice_id": 99,
+          "invoice_number": "INV-20251119-001",
+          "purchase_price": "2000.00",
+          "selling_price": "3000.00",
+          "margin_amount": "1000.00",
+          "margin_percent": "33.33",
+          "note": null,
+          "recorded_at": "2025-11-19T12:45:00.000000Z",
+          "created_at": "2025-11-19T12:45:00.000000Z"
+        }
+      ],
+      "current_page": 1,
+      "last_page": 1
+    }
+  }
+}
+```
+
+### 2. Lookup by Invoice
+GET `/api/stock-items/{stockItem}/price-history/invoice-lookup?invoice_number=INV-20251119-001`
+- Returns latest entry for that invoice + item or `404` if not sold.
+
+### 3. Create Manual Entry
+POST `/api/stock-items/{stockItem}/price-history`
+```json
+{
+  "invoice_number": "INV-20251001-010",
+  "purchase_price": 1800,
+  "selling_price": 2600,
+  "recorded_at": "2025-10-01T10:00:00Z",
+  "note": "Seasonal discount"
+}
+```
+- Body fields optional except `purchase_price` & `selling_price`. `invoice_id` may be provided for linking.
+
+### Automatic Logging
+- Every time an invoice is created, the backend now logs a price history row for each line item using the current stock `last_purchase_price` and invoice line `unit_price`. Recorded_at defaults to the invoice timestamp, so the frontend timeline stays up to date without extra calls.

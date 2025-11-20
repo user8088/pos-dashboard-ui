@@ -1,0 +1,113 @@
+## Stock Item Price History API Requirements
+
+### Context
+Frontend now shows a **Price History** tab in the stock item detail page (tabs similar to the customer profile). The UI needs real price history and invoice lookups. This document describes the backend work required.
+
+---
+
+### Data Model
+Introduce a new table (naming suggestion: `stock_price_histories`):
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | PK | |
+| `stock_item_id` | FK | references `stock_items.id` |
+| `invoice_id` | FK nullable | references `invoices.id` when entry comes from an invoice |
+| `invoice_number` | string nullable | cached for quick lookup |
+| `purchase_price` | decimal(12, 2) | cost we paid for the item at that time |
+| `selling_price` | decimal(12, 2) | retail price at that time |
+| `margin_amount` | decimal(12, 2) | optional cached value (`selling_price - purchase_price`) |
+| `margin_percent` | decimal(5, 2) | optional cached percentage |
+| `note` | text nullable | short annotation (e.g., “Seasonal bump”) |
+| `recorded_at` | datetime | when this price was active |
+| `created_at/updated_at` | timestamps | standard |
+
+Notes:
+- Calculated fields (`margin_amount`, `margin_percent`) can be stored for easy reporting but can also be computed on the fly if preferred.
+- Add indexes on `stock_item_id`, `invoice_number`, and `recorded_at` (descending) for fast filtering/sorting.
+
+---
+
+### API Endpoints
+1. **GET `/api/stock-items/{stock_item}/price-history`**
+   - Query params:
+     - `start_date`, `end_date` (optional, ISO date)
+     - `range` (e.g., `90`, `365`, `all`) – front-end uses this for quick filters
+     - `limit` (default 50) and `page` for pagination if needed
+     - `invoice` optional to return a single invoice entry directly (see endpoint 2)
+   - Response shape:
+     ```jsonc
+     {
+       "data": {
+         "stats": {
+           "average_purchase": "1943.75",
+           "average_selling": "2977.50",
+           "best_margin": "1145.00",
+           "lowest_margin": "940.00"
+         },
+         "entries": [
+           {
+             "id": 12,
+             "recorded_at": "2025-11-19T00:00:00Z",
+             "invoice_number": "INV-20251119-001",
+             "purchase_price": "2000.00",
+             "selling_price": "3000.00",
+             "margin_amount": "1000.00",
+             "margin_percent": "33.3",
+             "note": "Latest cost update from supplier"
+           }
+         ]
+       }
+     }
+     ```
+   - Stats should be computed after applying filters (avg purchase/selling, max/min margin).
+   - Protect with Sanctum (same guard as other stock APIs).
+
+2. **GET `/api/stock-items/{stock_item}/price-history/invoice-lookup`**
+   - Query param: `invoice_number`
+   - Returns single entry + stats for that invoice if it contains the stock item:
+     ```jsonc
+     {
+       "data": {
+         "invoice_number": "INV-20251119-001",
+         "recorded_at": "2025-11-19T00:00:00Z",
+         "purchase_price": "2000.00",
+         "selling_price": "3000.00",
+         "margin_amount": "1000.00",
+         "margin_percent": "33.3",
+         "note": "Latest cost update from supplier"
+       }
+     }
+     ```
+   - If invoice doesn’t include the stock item, return 404 with message “Invoice not found for this item”.
+
+3. **(Optional) POST `/api/stock-items/{stock_item}/price-history`**
+   - Allows backend jobs or admins to append manual entries.
+   - Body: purchase_price, selling_price, recorded_at, note, invoice_number? etc.
+
+---
+
+### Hooks / Data Sources
+- When an invoice is created or updated, log an entry for each stock item sold. Use the invoice purchase and selling price to populate the record, and store the invoice number/date automatically.
+- Also allow manual seeding for older history (artisan command or one-off script).
+
+---
+
+### Validation & Security
+- Ensure user has permission to view the stock item (reuse existing policy or create `StockItemPolicy@view`).
+- Validate date ranges (`start_date <= end_date`), enforce max range (e.g., 2 years) to avoid heavy queries.
+- For invoice lookup, sanitize invoice number, respond with 404 for unknown results.
+
+---
+
+### Tests
+1. Migration/Model test ensures relationships (`stockItem->priceHistories`).
+2. Feature tests:
+   - Returns history with correct stats (fixtures for multiple entries).
+   - Applies `start_date/end_date` filters.
+   - Invoice lookup returns correct item or 404.
+   - Access control (unauthenticated request returns 401).
+
+---
+
+### Summary
+Backend needs a new history table, automatic logging (likely triggered on invoice creation), and read APIs providing stats + timeline data + invoice search results. This will power the new Price History tab without relying on placeholder data.

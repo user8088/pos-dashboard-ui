@@ -87,6 +87,14 @@ class StockService {
   showItem(id) {
     return this.request(`/api/items/${id}`);
   }
+  listPriceHistory(itemId, params = {}) {
+    const qs = new URLSearchParams(params).toString();
+    return this.request(`/api/stock-items/${itemId}/price-history${qs ? `?${qs}` : ''}`);
+  }
+  lookupPriceHistoryInvoice(itemId, invoiceNumber) {
+    const qs = new URLSearchParams({ invoice_number: invoiceNumber }).toString();
+    return this.request(`/api/stock-items/${itemId}/price-history/invoice-lookup?${qs}`);
+  }
   createItem(payload) {
     return this.request('/api/items', { method: 'POST', body: JSON.stringify(payload) });
   }

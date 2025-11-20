@@ -1,9 +1,9 @@
 const API_BASE_URL = 'http://localhost:8000/api';
 
 class AnalyticsService {
-  async makeRequest(endpoint, options = {}) {
+  async makeRequest(endpoint, options = {}, authToken = null) {
     const url = `${API_BASE_URL}${endpoint}`;
-    const token = localStorage.getItem('token');
+    const token = authToken ?? localStorage.getItem('token');
     
     const config = {
       headers: {
@@ -54,72 +54,72 @@ class AnalyticsService {
   }
 
   // Get dashboard analytics (all analytics in one call)
-  async getDashboardAnalytics() {
-    return this.makeRequest('/analytics/dashboard');
+  async getDashboardAnalytics(authToken = null) {
+    return this.makeRequest('/analytics/dashboard', {}, authToken);
   }
 
   // Get today's analytics
-  async getTodayAnalytics() {
-    return this.makeRequest('/analytics/today');
+  async getTodayAnalytics(authToken = null) {
+    return this.makeRequest('/analytics/today', {}, authToken);
   }
 
   // Get monthly analytics
-  async getMonthlyAnalytics(month = null, compareWith = null) {
+  async getMonthlyAnalytics(month = null, compareWith = null, authToken = null) {
     const params = new URLSearchParams();
     if (month) params.append('month', month);
     if (compareWith) params.append('compare_with', compareWith);
     const queryString = params.toString();
-    return this.makeRequest(`/analytics/monthly${queryString ? `?${queryString}` : ''}`);
+    return this.makeRequest(`/analytics/monthly${queryString ? `?${queryString}` : ''}`, {}, authToken);
   }
 
   // Get yearly analytics
-  async getYearlyAnalytics(year = null, compareWith = null) {
+  async getYearlyAnalytics(year = null, compareWith = null, authToken = null) {
     const params = new URLSearchParams();
     if (year) params.append('year', year);
     if (compareWith) params.append('compare_with', compareWith);
     const queryString = params.toString();
-    return this.makeRequest(`/analytics/yearly${queryString ? `?${queryString}` : ''}`);
+    return this.makeRequest(`/analytics/yearly${queryString ? `?${queryString}` : ''}`, {}, authToken);
   }
 
   // Get business season analytics
-  async getBusinessSeasonAnalytics(seasonId = null, compareWith = null) {
+  async getBusinessSeasonAnalytics(seasonId = null, compareWith = null, authToken = null) {
     const params = new URLSearchParams();
     if (seasonId) params.append('season_id', seasonId);
     if (compareWith) params.append('compare_with', compareWith);
     const queryString = params.toString();
-    return this.makeRequest(`/analytics/business-season${queryString ? `?${queryString}` : ''}`);
+    return this.makeRequest(`/analytics/business-season${queryString ? `?${queryString}` : ''}`, {}, authToken);
   }
 
   // Business Season Management
-  async listBusinessSeasons(isActive = null) {
+  async listBusinessSeasons(isActive = null, authToken = null) {
     const params = new URLSearchParams();
     if (isActive !== null) params.append('is_active', isActive);
     const queryString = params.toString();
-    return this.makeRequest(`/business-seasons${queryString ? `?${queryString}` : ''}`);
+    return this.makeRequest(`/business-seasons${queryString ? `?${queryString}` : ''}`, {}, authToken);
   }
 
-  async getBusinessSeason(id) {
-    return this.makeRequest(`/business-seasons/${id}`);
+  async getBusinessSeason(id, authToken = null) {
+    return this.makeRequest(`/business-seasons/${id}`, {}, authToken);
   }
 
-  async createBusinessSeason(payload) {
+  async createBusinessSeason(payload, authToken = null) {
     return this.makeRequest('/business-seasons', {
       method: 'POST',
       body: JSON.stringify(payload),
-    });
+    }, authToken);
   }
 
-  async updateBusinessSeason(id, payload) {
+  async updateBusinessSeason(id, payload, authToken = null) {
     return this.makeRequest(`/business-seasons/${id}`, {
       method: 'PUT',
       body: JSON.stringify(payload),
-    });
+    }, authToken);
   }
 
-  async deleteBusinessSeason(id) {
+  async deleteBusinessSeason(id, authToken = null) {
     return this.makeRequest(`/business-seasons/${id}`, {
       method: 'DELETE',
-    });
+    }, authToken);
   }
 }
 
