@@ -7,6 +7,7 @@ The stock management system is now fully integrated with the supplier management
 - Tracks purchase prices (last, highest, lowest)
 - Records expenses in the stock account (EXP-001)
 - Links stock items to their suppliers
+- Calculates total sales revenue for each product (from invoices and sales, minus refunds)
 
 ## Database Changes
 
@@ -590,6 +591,7 @@ POST /api/items/50/add-quantity
   "selling_price": "1400.00",
   "quantity": "15.00",
   "available_quantity": "15.00",
+  "total_sales_revenue": "21000.00",
   "primary_unit": "bag",
   "secondary_unit": "kg",
   "primaryUnit": {
@@ -605,6 +607,69 @@ POST /api/items/50/add-quantity
 }
 ```
 
+## Total Sales Revenue
+
+### Overview
+Each stock item automatically includes a `total_sales_revenue` field that shows the total revenue generated from all sales of that product. This includes revenue from both invoice sales and customer sales, minus any refunds processed.
+
+### Field Details
+- **Field Name**: `total_sales_revenue`
+- **Type**: String (decimal formatted to 2 decimal places)
+- **Availability**: Automatically included in all stock item API responses
+- **Calculation**: Real-time calculation based on all sales transactions
+
+### Calculation
+
+The total sales revenue is calculated using the following formula:
+
+```
+Total Sales Revenue = (Invoice Item Revenue + Sale Item Revenue) - (Invoice Refunds + Sale Refunds)
+```
+
+**Components:**
+- **Invoice Item Revenue**: Sum of `line_total` from all `invoice_items` where `stock_item_id` matches
+- **Sale Item Revenue**: Sum of `total_price` from all `sale_items` where `stock_item_id` matches
+- **Invoice Refunds**: Sum of `refund_amount` from all `invoice_return_items` where `stock_item_id` matches
+- **Sale Refunds**: Sum of `refund_amount` from all `sale_return_items` where `stock_item_id` matches
+
+### Example Usage
+
+```javascript
+// Fetch stock items
+const response = await fetch('/api/items?q=cement');
+const { data } = await response.json();
+
+// Display revenue for each item
+data.data.forEach(item => {
+  console.log(`${item.name}:`);
+  console.log(`  Revenue: PKR ${item.total_sales_revenue}`);
+  console.log(`  Quantity: ${item.quantity}`);
+  console.log(`  Selling Price: PKR ${item.selling_price}`);
+});
+
+// Sort by revenue (highest first)
+const topProducts = data.data.sort((a, b) => 
+  parseFloat(b.total_sales_revenue) - parseFloat(a.total_sales_revenue)
+);
+```
+
+### Use Cases
+
+- **Product Performance**: Identify which products generate the most revenue
+- **Inventory Analysis**: Understand revenue contribution of each product
+- **Business Insights**: Track sales performance for business decisions
+- **Reporting**: Include revenue data in stock reports and dashboards
+
+### Important Notes
+
+- The revenue calculation includes **all historical sales** (no date filtering)
+- Refunds are automatically deducted from the total revenue
+- The value is always non-negative (cannot be negative)
+- Calculation is done on-the-fly for each API request
+- For products with no sales, the value will be `"0.00"`
+
+---
+
 ## Best Practices
 
 1. **Always set supplier_id** when creating stock items from suppliers
@@ -613,6 +678,7 @@ POST /api/items/50/add-quantity
 4. **Use repeatBySerial** for quick restocking of common orders
 5. **Monitor price tracking** to identify price trends and negotiate better deals
 6. **Link stock items to suppliers** for better inventory management
+7. **Monitor total_sales_revenue** to track product performance and identify top-selling items
 
 ## Summary
 
@@ -623,6 +689,7 @@ POST /api/items/50/add-quantity
 - ✅ **Direct money deduction** - Selected account is debited (money deducted directly)
 - ✅ Quick restock via serial number
 - ✅ Supplier history automatically maintained
+- ✅ **Total sales revenue tracking** - Automatic calculation of revenue generated per product
 
 ## Important Notes
 

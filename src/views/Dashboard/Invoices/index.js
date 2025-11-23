@@ -89,6 +89,7 @@ export default function Invoices() {
               : formatLabel(r.payment_method) || '-');
         const totalNumber = Number(r.total || 0);
         const refundedAmount = Number(r.refunded_amount || 0);
+        const hiddenCosts = Number(r.hidden_costs || 0);
         const customerLabel = r.customer_name || r.customer?.name || (r.customer_id ? `#${r.customer_id}` : 'Guest');
         const displayCustomer =
           customerLabel && customerLabel.trim().toLowerCase() === 'guest'
@@ -101,6 +102,7 @@ export default function Invoices() {
           method: methodLabel,
           total: totalNumber,
           refundedAmount,
+          hiddenCosts,
           date: (r.created_at || '').toString().slice(0,10),
           customerId: r.customer_id || r.customer?.id || null,
           raw: r,
@@ -441,7 +443,16 @@ export default function Invoices() {
                   </Td>
                   <Td>{r.customer}</Td>
                   <Td>{r.method}</Td>
-                  <Td isNumeric>PKR {r.total.toFixed(2)}</Td>
+                  <Td isNumeric>
+                    <VStack align='flex-end' spacing='2px'>
+                      <Text>PKR {r.total.toFixed(2)}</Text>
+                      {r.hiddenCosts > 0 && (
+                        <Text fontSize='xs' color='orange.500' fontWeight='medium'>
+                          + PKR {r.hiddenCosts.toFixed(2)} hidden
+                        </Text>
+                      )}
+                    </VStack>
+                  </Td>
                   <Td isNumeric>
                     {r.refundedAmount > 0 ? `PKR ${r.refundedAmount.toFixed(2)}` : '-'}
                   </Td>

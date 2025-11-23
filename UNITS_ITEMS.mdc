@@ -1,0 +1,292 @@
+# Units and Items API
+
+All endpoints require Bearer auth. Base prefix: `/api`.
+
+## Units
+
+### List Units
+GET `/api/units?q=kg&page=1`
+
+### Create Unit
+POST `/api/units`
+```json
+{ "name": "Kilogram", "symbol": "kg", "description": "Weight" }
+```
+
+### Show Unit
+GET `/api/units/{id}`
+
+### Update Unit
+PUT/PATCH `/api/units/{id}`
+```json
+{ "name": "Bag" }
+```
+
+### Delete Unit
+DELETE `/api/units/{id}`
+
+---
+
+## Items (updated)
+
+Fields:
+- `serial_id` (optional) → unique identifier for the item
+- `product_category_id` (required)
+- `primary_unit_id` (required) → references `units.id`
+- `secondary_unit_id` (optional) → references `units.id`
+- `secondary_per_primary` (optional, numeric > 0) → how many secondary units in one primary
+- `qty_per_primary_unit`, `qty_per_secondary_unit` (existing integer fields)
+- `last_purchase_price`, `selling_price`, `quantity`, `image_url`
+
+Rules:
+- If either `secondary_unit_id` or `secondary_per_primary` is provided, both must be provided.
+- `serial_id`: optional, string, max 100 characters, must be unique across all items
+- If `serial_id` is NOT provided and the category has a `serial_alias`, serial ID is auto-generated
+
+### List Items
+GET `/api/items?q=cement&product_category_id=1&page=1`
+- Returns items with `category`, `primaryUnit`, `secondaryUnit` relations.
+- Search (`q` parameter) searches by `name` and `serial_id`
+- Each item includes `serial_id` field (may be null)
+
+Example response:
+```json
+{
+  "success": true,
+  "data": {
+    "data": [
+      {
+        "id": 5,
+        "name": "Cement",
+        "serial_id": "PROD-001",
+        "selling_price": "1000.00",
+        "product_category_id": 1,
+        "category": { "id": 1, "name": "Construction", "serial_alias": "PROD" },
+        "primaryUnit": { "id": 2, "name": "Bag", "symbol": "bag" },
+        "secondaryUnit": { "id": 3, "name": "Kilogram", "symbol": "kg" },
+        "total_sales_revenue": "12500.75",
+        "available_quantity": "50.00"
+      }
+    ]
+  }
+}
+```
+
+### Create Item
+POST `/api/items`
+```json
+{
+  "name": "Cement",
+  "serial_id": "CUSTOM-123",  // Optional: manual serial ID
+  "product_category_id": 1,
+  "primary_unit_id": 2,
+  "secondary_unit_id": 3,
+  "secondary_per_primary": 2.0,
+  "qty_per_primary_unit": 1,
+  "qty_per_secondary_unit": 1,
+  "last_purchase_price": 900.0,
+  "selling_price": 1000.0,
+  "quantity": 0.0,
+  "image_url": null
+}
+```
+
+**Serial ID Behavior:**
+- If `serial_id` is provided: uses the provided value (validated for uniqueness)
+- If `serial_id` is NOT provided and category has `serial_alias`: auto-generates serial ID (e.g., `PROD-001`, `PROD-002`)
+- If `serial_id` is NOT provided and category has no `serial_alias`: `serial_id` remains NULL
+
+### Show Item
+GET `/api/items/{id}`
+
+Returns item with `serial_id` field and calculated fields:
+```json
+{
+  "success": true,
+  "data": {
+    "id": 5,
+    "name": "Cement",
+    "serial_id": "PROD-001",
+    "product_category_id": 1,
+    "category": { "id": 1, "name": "Construction", "serial_alias": "PROD" },
+    "primaryUnit": { "id": 2, "name": "Bag" },
+    "secondaryUnit": { "id": 3, "name": "Kilogram" },
+    "total_sales_revenue": "12500.75",
+    "available_quantity": "50.00"
+  }
+}
+```
+
+### Update Item
+PUT/PATCH `/api/items/{id}`
+```json
+{ 
+  "secondary_unit_id": 3, 
+  "secondary_per_primary": 2.5,
+  "serial_id": "UPDATED-123"  // Optional: update serial_id manually
+}
+```
+
+**Note:** Updating `serial_id` manually is allowed, but changing the category does NOT regenerate the `serial_id`. The original `serial_id` is preserved.
+
+### Delete Item
+DELETE `/api/items/{id}`
+
+---
+
+## Serial ID Feature
+
+### Overview
+Each stock item can have a unique `serial_id` that can be manually set or auto-generated based on the category's `serial_alias`.
+
+### Auto-Generation
+When creating an item:
+1. **With `serial_id`**: The provided `serial_id` is used (must be unique)
+2. **Without `serial_id` + category has `serial_alias`**: Serial is auto-generated
+   - Format: `{serial_alias}-{number}` (e.g., `PROD-001`, `PROD-002`)
+   - Number is zero-padded (minimum 3 digits: 001, 002, ..., 100, 101)
+   - System finds the highest existing serial number in the category and increments it
+3. **Without `serial_id` + category has no `serial_alias`**: `serial_id` remains NULL
+
+### Serial ID Format
+- Format: `{ALIAS}-{NUMBER}`
+- Example: `PROD-001`, `ELEC-002`, `SNK-100`
+- Padding: Minimum 3 digits, preserves longer padding if existing serials use it
+- Uniqueness: Must be unique across ALL stock items
+
+### Examples
+
+**Create item with auto-generated serial:**
+```json
+POST /api/items
+{
+  "name": "Laptop",
+  "product_category_id": 1,  // Category with serial_alias: "ELEC"
+  "primary_unit_id": 1,
+  "selling_price": 50000,
+  // serial_id not provided → auto-generated as "ELEC-001"
+}
+```
+
+**Create item with manual serial:**
+```json
+POST /api/items
+{
+  "name": "Desktop",
+  "serial_id": "CUSTOM-123",  // Manual serial_id
+  "product_category_id": 1,
+  "primary_unit_id": 1,
+  "selling_price": 40000
+}
+```
+
+**Response includes serial_id:**
+```json
+{
+  "success": true,
+  "data": {
+    "id": 10,
+    "name": "Laptop",
+    "serial_id": "ELEC-001",  // Auto-generated
+    "product_category_id": 1,
+    "category": { "id": 1, "name": "Electronics", "serial_alias": "ELEC" }
+  }
+}
+```
+
+### Important Notes
+- **Uniqueness**: `serial_id` must be unique. If you provide a duplicate, validation will fail.
+- **Category Change**: If you change an item's category, the `serial_id` is NOT regenerated (preserves original).
+- **Search**: You can search items by `serial_id` using the `q` parameter.
+- **Update**: You can update `serial_id` manually, but it's not auto-regenerated on update.
+
+## Total Sales Revenue
+
+### Overview
+Each stock item automatically includes a `total_sales_revenue` field that calculates the total revenue generated from sales of that product. This field is automatically calculated and included in all stock item responses.
+
+### Field Details
+- **Field Name**: `total_sales_revenue`
+- **Type**: String (decimal with 2 decimal places)
+- **Availability**: Automatically included in all stock item responses
+- **Calculation**: Real-time calculation based on sales data
+
+### Calculation Logic
+
+The total sales revenue is calculated as follows:
+
+```
+Total Sales Revenue = (Invoice Revenue + Sale Revenue) - (Invoice Refunds + Sale Refunds)
+```
+
+Where:
+- **Invoice Revenue**: Sum of all `line_total` from `invoice_items` for this product
+- **Sale Revenue**: Sum of all `total_price` from `sale_items` for this product
+- **Invoice Refunds**: Sum of all `refund_amount` from `invoice_return_items` for this product
+- **Sale Refunds**: Sum of all `refund_amount` from `sale_return_items` for this product
+
+### Key Features
+
+1. **Automatic Calculation**: The revenue is calculated on-the-fly when fetching stock items
+2. **Net Revenue**: Returns net revenue (sales minus refunds) to show actual revenue generated
+3. **Always Non-Negative**: The value is always >= 0 (cannot be negative)
+4. **Precise Formatting**: Returns as a string with exactly 2 decimal places
+
+### Example Response
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": 5,
+    "name": "Portland Cement",
+    "serial_id": "CEM-001",
+    "selling_price": "1000.00",
+    "quantity": "50.00",
+    "available_quantity": "50.00",
+    "total_sales_revenue": "12500.75",
+    "category": { "id": 1, "name": "Construction" }
+  }
+}
+```
+
+### Use Cases
+
+- **Product Performance Analysis**: Identify top-performing products by revenue
+- **Inventory Management**: Understand which products generate the most revenue
+- **Business Insights**: Track revenue generation per product for business decisions
+- **Reporting**: Include revenue data in stock reports and analytics
+
+### Performance Notes
+
+- The calculation queries invoice items, sale items, and return items for each stock item
+- For large datasets, consider implementing caching if performance becomes a concern
+- The calculation includes all historical sales data (no date filtering)
+
+### Example Usage
+
+```javascript
+// Fetch stock items with total sales revenue
+const response = await fetch('/api/items?q=cement');
+const { data } = await response.json();
+
+// Display revenue information
+data.data.forEach(item => {
+  console.log(`${item.name}: Revenue = PKR ${item.total_sales_revenue}`);
+});
+
+// Sort by revenue
+const sortedByRevenue = data.data.sort((a, b) => 
+  parseFloat(b.total_sales_revenue) - parseFloat(a.total_sales_revenue)
+);
+```
+
+---
+
+## Notes
+- Use `secondary_per_primary` to convert between units in your UI.
+- Old text fields `primary_unit` and `secondary_unit` are deprecated in the API.
+- The `quantity` field tracks current inventory levels. It defaults to `0` if not provided during creation. Update this field manually when items are purchased or sold.
+- `serial_id` is searchable and displayed in item listings.
+- For categories with `serial_alias`, consider showing a hint in the UI that serial IDs will be auto-generated.
+- `total_sales_revenue` provides real-time revenue calculation for each product based on all sales transactions and refunds.

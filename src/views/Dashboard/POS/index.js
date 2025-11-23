@@ -1047,6 +1047,18 @@ export default function POS() {
       return;
     }
     
+    // Prevent guests from having any due balance
+    if (!customerId && estimatedDue > 0) {
+      toast({
+        title: 'Guest customers cannot have due balance',
+        description: 'Please add this customer to the system to enable due balance tracking. Guest customers must pay the full amount.',
+        status: 'warning',
+        duration: 6000,
+        isClosable: true,
+      });
+      return;
+    }
+    
     if (paymentMode !== 'split' && !depositAccountId) {
       toast({
         title: 'Missing deposit account',
@@ -1906,25 +1918,31 @@ export default function POS() {
                           onChange={(e) => {
                             const newUnitType = e.target.value;
                             const product = items.find(it => it.id === line.id);
-                            const basePrice = product?.price || line.basePrice;
-                            let newPrice = basePrice;
+                            // Always get the original primary unit price from product catalog
+                            // This ensures we always convert from the correct base price
+                            const basePricePrimary = product?.price || getBasePrice(line);
+                            let newPrice;
                             let newQty = line.qty;
                             
                             // Adjust price and quantity based on unit type conversion
+                            // Always calculate from the original primary unit price to avoid accumulation errors
                             if (line.secondaryPerPrimary && line.secondaryPerPrimary > 0) {
-                              if (line.unitType === 'primary' && newUnitType === 'secondary') {
-                                // Switching from primary to secondary: multiply quantity, divide price
+                              if (newUnitType === 'secondary') {
+                                // Switching to secondary: multiply quantity, divide primary price
                                 newQty = line.qty * line.secondaryPerPrimary;
-                                newPrice = basePrice / line.secondaryPerPrimary;
-                              } else if (line.unitType === 'secondary' && newUnitType === 'primary') {
-                                // Switching from secondary to primary: divide quantity, multiply price
+                                newPrice = basePricePrimary / line.secondaryPerPrimary;
+                              } else {
+                                // Switching to primary: divide quantity, use primary price directly
                                 newQty = line.qty / line.secondaryPerPrimary;
-                                newPrice = basePrice * line.secondaryPerPrimary;
+                                newPrice = basePricePrimary;
                               }
+                            } else {
+                              // No conversion, use primary price
+                              newPrice = basePricePrimary;
                             }
                             
                             setCart(prev => prev.map(x => x.id === line.id
-                              ? { ...x, unitType: newUnitType, price: newPrice, basePrice, qty: newQty }
+                              ? { ...x, unitType: newUnitType, price: newPrice, basePrice: basePricePrimary, qty: newQty }
                               : x));
                           }}
                           width='150px'
@@ -1981,7 +1999,7 @@ export default function POS() {
                             basePriceInCurrentUnit = basePricePrimary / line.secondaryPerPrimary;
                           }
                           
-                          // Check for COGS loss (selling below purchase cost)
+                          // Get cost (last purchase price) and convert to current unit type
                           const cost = Number(line.cost || 0);
                           let costInCurrentUnit = cost;
                           if (line.unitType === 'secondary' && line.secondaryPerPrimary && line.secondaryPerPrimary > 0) {
@@ -1991,45 +2009,56 @@ export default function POS() {
                           const cogsLossPerUnit = hasCogsLoss ? costInCurrentUnit - line.price : 0;
                           const totalCogsLoss = cogsLossPerUnit * line.qty;
                           
+                          // Calculate profit from cost
+                          const profitFromCost = costInCurrentUnit > 0 ? line.price - costInCurrentUnit : 0;
+                          const totalProfitFromCost = profitFromCost * line.qty;
+                          
                           // Check for discount (selling below base/selling price)
                           const hasDiscount = basePriceInCurrentUnit > line.price;
-                          if (hasDiscount || hasCogsLoss) {
-                            const discountPerUnit = basePriceInCurrentUnit > line.price ? basePriceInCurrentUnit - line.price : 0;
-                            const totalDiscount = discountPerUnit * line.qty;
-                            return (
-                              <VStack align='stretch' spacing='2px' fontSize='xs' color='gray.500'>
-                                {hasDiscount && (
-                                  <HStack spacing='4px'>
-                                    <Text>Original:</Text>
-                                    <Text textDecoration='line-through'>PKR {basePriceInCurrentUnit.toFixed(2)}</Text>
-                                    <Text>•</Text>
-                                    <Text color='orange.500' fontWeight='medium'>Discount: PKR {totalDiscount.toFixed(2)}</Text>
-                                  </HStack>
-                                )}
-                                {hasCogsLoss && (
-                                  <HStack spacing='4px'>
-                                    <Text>Cost:</Text>
-                                    <Text>PKR {costInCurrentUnit.toFixed(2)}</Text>
-                                    <Text>•</Text>
-                                    <Text color='red.500' fontWeight='bold'>COGS Loss: PKR {totalCogsLoss.toFixed(2)}</Text>
-                                  </HStack>
-                                )}
-                              </VStack>
-                            );
-                          } else if (line.price > basePriceInCurrentUnit) {
-                            // Show profit if selling above base price
-                            const profitPerUnit = line.price - basePriceInCurrentUnit;
-                            const totalProfit = profitPerUnit * line.qty;
-                            return (
-                              <HStack spacing='4px' fontSize='xs' color='green.500'>
-                                <Text>Base:</Text>
-                                <Text>PKR {basePriceInCurrentUnit.toFixed(2)}</Text>
-                                <Text>•</Text>
-                                <Text fontWeight='medium'>Profit: PKR {totalProfit.toFixed(2)}</Text>
-                              </HStack>
-                            );
-                          }
-                          return null;
+                          const discountPerUnit = hasDiscount ? basePriceInCurrentUnit - line.price : 0;
+                          const totalDiscount = discountPerUnit * line.qty;
+                          
+                          return (
+                            <VStack align='stretch' spacing='2px' fontSize='xs' color='gray.500'>
+                              {/* Always show cost price */}
+                              {costInCurrentUnit > 0 && (
+                                <HStack spacing='4px'>
+                                  <Text>Cost:</Text>
+                                  <Text fontWeight='medium' color={textColor}>PKR {costInCurrentUnit.toFixed(2)}</Text>
+                                  {profitFromCost > 0 && (
+                                    <>
+                                      <Text>•</Text>
+                                      <Text color='green.500' fontWeight='medium'>Profit: PKR {totalProfitFromCost.toFixed(2)}</Text>
+                                    </>
+                                  )}
+                                  {hasCogsLoss && (
+                                    <>
+                                      <Text>•</Text>
+                                      <Text color='red.500' fontWeight='bold'>Loss: PKR {totalCogsLoss.toFixed(2)}</Text>
+                                    </>
+                                  )}
+                                </HStack>
+                              )}
+                              {/* Show discount if selling below base price */}
+                              {hasDiscount && (
+                                <HStack spacing='4px'>
+                                  <Text>Original:</Text>
+                                  <Text textDecoration='line-through'>PKR {basePriceInCurrentUnit.toFixed(2)}</Text>
+                                  <Text>•</Text>
+                                  <Text color='orange.500' fontWeight='medium'>Discount: PKR {totalDiscount.toFixed(2)}</Text>
+                                </HStack>
+                              )}
+                              {/* Show profit from base price if selling above base and no cost info */}
+                              {!costInCurrentUnit && line.price > basePriceInCurrentUnit && (
+                                <HStack spacing='4px' color='green.500'>
+                                  <Text>Base:</Text>
+                                  <Text>PKR {basePriceInCurrentUnit.toFixed(2)}</Text>
+                                  <Text>•</Text>
+                                  <Text fontWeight='medium'>Profit: PKR {((line.price - basePriceInCurrentUnit) * line.qty).toFixed(2)}</Text>
+                                </HStack>
+                              )}
+                            </VStack>
+                          );
                         })()}
                       </VStack>
                     </HStack>
@@ -2102,7 +2131,24 @@ export default function POS() {
                       <Box fontSize='sm' color='gray.600' p='12px' bg={useColorModeValue('blue.50', 'blue.900')} borderRadius='8px'>
                         <Text fontWeight='medium' mb='4px'>Split Payment Total: PKR {splitPaidTotal.toFixed(2)}</Text>
                         <Text fontSize='xs' color='gray.500'>Split payments are applied immediately to this invoice.</Text>
-                        {splitPaidTotal < remainingAfterAdvance && (
+                        {!customerId && splitPaidTotal < remainingAfterAdvance && (
+                          <Box
+                            mt='8px'
+                            p='8px'
+                            borderRadius='6px'
+                            bg={useColorModeValue('red.50', 'red.900')}
+                            borderWidth='1px'
+                            borderColor={useColorModeValue('red.200', 'red.700')}
+                          >
+                            <Text color='red.700' fontSize='xs' fontWeight='semibold' mb='2px'>
+                              ⚠️ Guest customers cannot have due balance
+                            </Text>
+                            <Text color='red.600' fontSize='xs'>
+                              Please add this customer to enable due balance tracking.
+                            </Text>
+                          </Box>
+                        )}
+                        {customerId && splitPaidTotal < remainingAfterAdvance && (
                           <Text color='orange.500' fontSize='xs' mt='4px'>Remaining balance will stay as due until settled.</Text>
                         )}
                       </Box>
@@ -2129,6 +2175,22 @@ export default function POS() {
                         size='md'
                       />
                     </Box>
+                    {!customerId && estimatedDue > 0 && (
+                      <Box
+                        p='12px'
+                        borderRadius='8px'
+                        bg={useColorModeValue('red.50', 'red.900')}
+                        borderWidth='1px'
+                        borderColor={useColorModeValue('red.200', 'red.700')}
+                      >
+                        <Text fontSize='sm' fontWeight='semibold' color='red.700' mb='4px'>
+                          ⚠️ Guest customers cannot have due balance
+                        </Text>
+                        <Text fontSize='xs' color='red.600'>
+                          Please add this customer to the system to enable due balance tracking. Guest customers must pay the full amount.
+                        </Text>
+                      </Box>
+                    )}
                     {customerId && (
                       <Box fontSize='sm' color='gray.600' p='12px' bg={useColorModeValue('gray.50', 'gray.800')} borderRadius='8px'>
                         <VStack align='stretch' spacing='6px'>
@@ -2204,7 +2266,7 @@ export default function POS() {
                         color='white' 
                         _hover={{ bg: '#E67E22' }} 
                         onClick={generateInvoice} 
-                        isDisabled={cart.length===0 || checkoutLoading}
+                        isDisabled={cart.length===0 || checkoutLoading || (!customerId && estimatedDue > 0)}
                         isLoading={checkoutLoading}
                         loadingText={reservationMode === 'reserve' ? 'Saving reservation...' : 'Processing...'}
                         size='lg'

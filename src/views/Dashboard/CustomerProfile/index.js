@@ -77,6 +77,7 @@ export default function CustomerProfile() {
   const [downloadingIds, setDownloadingIds] = React.useState(new Set());
   const [statementLoading, setStatementLoading] = React.useState(false);
   const [paymentPeriod, setPaymentPeriod] = React.useState('12');
+  const [paymentOrder, setPaymentOrder] = React.useState('LIFO'); // FIFO or LIFO
   const [invoiceSearch, setInvoiceSearch] = React.useState('');
   const [paymentSearch, setPaymentSearch] = React.useState('');
   const toast = useToast();
@@ -173,13 +174,19 @@ export default function CustomerProfile() {
     const cutoffDate = new Date();
     cutoffDate.setMonth(cutoffDate.getMonth() - period);
     
-    return invoiceList
+    const filtered = invoiceList
       .filter(inv => {
         if (!inv.created_at) return false;
         const invDate = new Date(inv.created_at);
         return invDate >= cutoffDate;
-      })
-      .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))
+      });
+    
+    // Sort based on FIFO/LIFO selection
+    const sorted = paymentOrder === 'FIFO'
+      ? [...filtered].sort((a, b) => new Date(a.created_at || 0) - new Date(b.created_at || 0)) // Oldest first
+      : [...filtered].sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0)); // Newest first
+    
+    return sorted
       .map(inv => {
         const total = Number(inv.total || inv.total_amount || 0);
         const paid = Number(inv.paid_amount || 0);
@@ -204,7 +211,7 @@ export default function CustomerProfile() {
           date: inv.created_at,
         };
       });
-  }, [data, invoices, paymentPeriod]);
+  }, [data, invoices, paymentPeriod, paymentOrder]);
 
   const handleDownload = async (invoiceId) => {
     if (downloadingIds.has(invoiceId)) return;
@@ -707,19 +714,30 @@ export default function CustomerProfile() {
               {/* Payment History Card */}
               <Card bg={cardBg} w='100%' h='100%'>
                 <CardHeader pb='20px'>
-                  <Flex justify='space-between' align='center' w='100%'>
+                  <Flex justify='space-between' align='center' w='100%' flexWrap='wrap' gap='12px'>
                     <Text fontWeight='bold' color={textColor} fontSize='lg'>Payment History</Text>
-                    <Select
-                      size='sm'
-                      value={paymentPeriod}
-                      onChange={(e) => setPaymentPeriod(e.target.value)}
-                      w='180px'
-                    >
-                      <option value='3'>Last 3 months</option>
-                      <option value='6'>Last 6 months</option>
-                      <option value='12'>Last 12 months</option>
-                      <option value='24'>Last 24 months</option>
-                    </Select>
+                    <HStack spacing='12px'>
+                      <Select
+                        size='sm'
+                        value={paymentOrder}
+                        onChange={(e) => setPaymentOrder(e.target.value)}
+                        w='120px'
+                      >
+                        <option value='LIFO'>LIFO (Newest)</option>
+                        <option value='FIFO'>FIFO (Oldest)</option>
+                      </Select>
+                      <Select
+                        size='sm'
+                        value={paymentPeriod}
+                        onChange={(e) => setPaymentPeriod(e.target.value)}
+                        w='180px'
+                      >
+                        <option value='3'>Last 3 months</option>
+                        <option value='6'>Last 6 months</option>
+                        <option value='12'>Last 12 months</option>
+                        <option value='24'>Last 24 months</option>
+                      </Select>
+                    </HStack>
                   </Flex>
                 </CardHeader>
                 <CardBody pt={0} px='24px' pb='24px' w='100%'>
@@ -758,15 +776,26 @@ export default function CustomerProfile() {
                                     })}
                                   </Text>
                                 </Box>
-                                <Badge 
-                                  colorScheme={inv.due > 0 ? 'orange' : 'green'} 
-                                  fontSize='sm' 
-                                  px='12px' 
-                                  py='4px'
-                                  borderRadius='full'
-                                >
-                                  {inv.due > 0 ? 'Due' : 'Paid'}
-                                </Badge>
+                                <HStack spacing='8px'>
+                                  <IconButton
+                                    icon={<DownloadIcon />}
+                                    size='sm'
+                                    variant='outline'
+                                    colorScheme='orange'
+                                    onClick={() => handleDownload(inv.id)}
+                                    isLoading={downloadingIds.has(inv.id)}
+                                    aria-label='Download invoice'
+                                  />
+                                  <Badge 
+                                    colorScheme={inv.due > 0 ? 'orange' : 'green'} 
+                                    fontSize='sm' 
+                                    px='12px' 
+                                    py='4px'
+                                    borderRadius='full'
+                                  >
+                                    {inv.due > 0 ? 'Due' : 'Paid'}
+                                  </Badge>
+                                </HStack>
                               </HStack>
 
                               {/* Payment Breakdown */}
@@ -777,6 +806,11 @@ export default function CustomerProfile() {
                                     <Text fontWeight='bold' fontSize='md' color={textColor}>
                                       PKR {inv.total.toFixed(2)}
                                     </Text>
+                                    {inv.hidden_costs > 0 && (
+                                      <Text fontSize='xs' color='orange.500' fontWeight='medium' mt='2px'>
+                                        + PKR {Number(inv.hidden_costs || 0).toFixed(2)} hidden
+                                      </Text>
+                                    )}
                                   </Box>
                                   <Box>
                                     <Text fontSize='xs' color='gray.500' mb='4px' fontWeight='medium'>Paid Amount</Text>
@@ -1039,6 +1073,7 @@ export default function CustomerProfile() {
                       <Th>Advance Applied</Th>
                       <Th>Due Amount</Th>
                       <Th>Status</Th>
+                      <Th>Actions</Th>
                     </Tr>
                   </Thead>
                   <Tbody>
@@ -1047,6 +1082,7 @@ export default function CustomerProfile() {
                         const total = Number(inv.total || inv.total_amount || 0);
                         const paid = Number(inv.paid_amount || 0);
                         const due = Number(inv.due_amount || 0);
+                        const hiddenCosts = Number(inv.hidden_costs || 0);
                         const status = due > 0 ? 'Due' : 'Paid';
                         let advanceApplied = Number(inv.advance_amount || inv.advance_applied || 0);
                         if (advanceApplied === 0 && inv.payment_as === 'advance' && paid > 0) {
@@ -1056,7 +1092,16 @@ export default function CustomerProfile() {
                           <Tr key={inv.id}>
                             <Td fontWeight='medium'>{inv.invoice_number || `#${inv.id}`}</Td>
                             <Td>{inv.created_at ? new Date(inv.created_at).toLocaleDateString() : 'N/A'}</Td>
-                            <Td>PKR {total.toFixed(2)}</Td>
+                            <Td>
+                              <VStack align='flex-start' spacing='2px'>
+                                <Text>PKR {total.toFixed(2)}</Text>
+                                {hiddenCosts > 0 && (
+                                  <Text fontSize='xs' color='orange.500' fontWeight='medium'>
+                                    + PKR {hiddenCosts.toFixed(2)} hidden
+                                  </Text>
+                                )}
+                              </VStack>
+                            </Td>
                             <Td>PKR {paid.toFixed(2)}</Td>
                             <Td>{advanceApplied > 0 ? `PKR ${advanceApplied.toFixed(2)}` : '-'}</Td>
                             <Td color={due > 0 ? 'orange.500' : 'green.500'} fontWeight={due > 0 ? 'semibold' : 'normal'}>
@@ -1067,12 +1112,23 @@ export default function CustomerProfile() {
                                 {status}
                               </Badge>
                             </Td>
+                            <Td>
+                              <IconButton
+                                icon={<DownloadIcon />}
+                                size='sm'
+                                variant='outline'
+                                colorScheme='orange'
+                                onClick={() => handleDownload(inv.id)}
+                                isLoading={downloadingIds.has(inv.id)}
+                                aria-label='Download invoice'
+                              />
+                            </Td>
                           </Tr>
                         );
                       })
                     ) : (
                       <Tr>
-                        <Td colSpan={7} textAlign='center' color='gray.500' py='40px'>
+                        <Td colSpan={8} textAlign='center' color='gray.500' py='40px'>
                           {paymentSearch ? 'No invoices match your search' : 'No invoices found'}
                         </Td>
                       </Tr>
@@ -1103,6 +1159,7 @@ export default function CustomerProfile() {
                 filteredInvoices.map((inv) => {
                   const total = Number(inv.total || inv.total_amount || 0);
                   const due = Number(inv.due_amount || 0);
+                  const hiddenCosts = Number(inv.hidden_costs || 0);
                   const status = due > 0 ? 'Due' : 'Paid';
                   const invDate = inv.created_at ? new Date(inv.created_at) : null;
                   
@@ -1120,29 +1177,36 @@ export default function CustomerProfile() {
                             <Text fontWeight='600' fontSize='sm' color={textColor} mb='4px'>
                               {inv.invoice_number || `Invoice #${inv.id}`}
                             </Text>
-                            <HStack spacing='12px' fontSize='xs' color='gray.500'>
-                              {invDate && (
-                                <Text>
-                                  {invDate.toLocaleDateString('en-US', {
-                                    month: 'short',
-                                    day: 'numeric',
-                                    year: 'numeric'
-                                  })}
+                            <VStack align='flex-start' spacing='2px'>
+                              <HStack spacing='12px' fontSize='xs' color='gray.500'>
+                                {invDate && (
+                                  <Text>
+                                    {invDate.toLocaleDateString('en-US', {
+                                      month: 'short',
+                                      day: 'numeric',
+                                      year: 'numeric'
+                                    })}
+                                  </Text>
+                                )}
+                                <Text>•</Text>
+                                <Text fontWeight='500' color={textColor}>PKR {total.toFixed(2)}</Text>
+                                <Text>•</Text>
+                                <Badge 
+                                  colorScheme={status === 'Paid' ? 'green' : 'orange'} 
+                                  fontSize='10px' 
+                                  px='6px' 
+                                  py='1px'
+                                  borderRadius='full'
+                                >
+                                  {status}
+                                </Badge>
+                              </HStack>
+                              {hiddenCosts > 0 && (
+                                <Text fontSize='xs' color='orange.500' fontWeight='medium' ml='0'>
+                                  + PKR {hiddenCosts.toFixed(2)} hidden charges
                                 </Text>
                               )}
-                              <Text>•</Text>
-                              <Text fontWeight='500' color={textColor}>PKR {total.toFixed(2)}</Text>
-                              <Text>•</Text>
-                              <Badge 
-                                colorScheme={status === 'Paid' ? 'green' : 'orange'} 
-                                fontSize='10px' 
-                                px='6px' 
-                                py='1px'
-                                borderRadius='full'
-                              >
-                                {status}
-                              </Badge>
-                            </HStack>
+                            </VStack>
                           </Box>
                           <HStack spacing='8px'>
                             {(() => {
