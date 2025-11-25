@@ -33,7 +33,7 @@ import placeholder from 'assets/img/avatars/placeholder.png';
 import { FaPlus, FaMinus, FaTrash } from 'react-icons/fa';
 
 export default function POS() {
-  const textColor = useColorModeValue('gray.700','white');
+  const textColor = useColorModeValue('gray.700', 'white');
   const toast = useToast();
   const { user } = useAuth();
   const [catalogSearch, setCatalogSearch] = React.useState('');
@@ -71,7 +71,8 @@ export default function POS() {
   const [reservationPrintLoading, setReservationPrintLoading] = React.useState(false);
   const [reservationActionLoading, setReservationActionLoading] = React.useState(false);
   const [reservationActionId, setReservationActionId] = React.useState(null);
-  const [applyWalletAdvance, setApplyWalletAdvance] = React.useState(false);
+  const [customAdvanceAmount, setCustomAdvanceAmount] = React.useState(''); // For manual override of advance usage
+
 
   const cashAccounts = React.useMemo(
     () => accounts.filter(acc => {
@@ -87,7 +88,7 @@ export default function POS() {
     }),
     [accounts]
   );
-  
+
   // Helper to format account display name
   const formatAccountName = React.useCallback((acc) => {
     const type = (acc?.type || '').toLowerCase();
@@ -379,7 +380,7 @@ export default function POS() {
         return name && name !== 'guest';
       });
       setCustomers(filtered);
-    } catch (_) {}
+    } catch (_) { }
   }, []);
 
   const loadCategories = React.useCallback(async () => {
@@ -387,7 +388,7 @@ export default function POS() {
       const resp = await stockService.listCategories({});
       const list = resp?.data?.data || resp?.data || resp || [];
       setCategories(list);
-    } catch (_) {}
+    } catch (_) { }
   }, []);
 
   const loadAccounts = React.useCallback(async () => {
@@ -396,17 +397,17 @@ export default function POS() {
       const data = resp?.data || resp || {};
       const accountsList = Array.isArray(data) ? data : (data.accounts || []);
       // Filter only active accounts that can receive payments (cash, bank, custom)
-      const activeAccounts = accountsList.filter(acc => 
-        acc.is_active !== false && 
+      const activeAccounts = accountsList.filter(acc =>
+        acc.is_active !== false &&
         ['cash', 'bank', 'custom'].includes((acc.type || '').toLowerCase())
       );
       setAccounts(activeAccounts);
-      
+
       // Auto-select cash account if available
       const normalizeType = (acc) => (acc?.type || '').toLowerCase();
       const cashAccount = activeAccounts.find(acc => normalizeType(acc) === 'cash');
       const bankAccount = activeAccounts.find(acc => normalizeType(acc) === 'bank');
-      
+
       // Set default deposit account based on current payment mode
       if (paymentMode === 'cash' && cashAccount) {
         setDepositAccountId(String(cashAccount.id));
@@ -417,7 +418,7 @@ export default function POS() {
       } else if (activeAccounts.length > 0) {
         setDepositAccountId(String(activeAccounts[0].id));
       }
-      
+
       // Set split payment defaults
       setSplitPayments(prev => ({
         cash: {
@@ -429,48 +430,43 @@ export default function POS() {
           accountId: prev.online.accountId || (bankAccount ? String(bankAccount.id) : (activeAccounts[0] ? String(activeAccounts[0].id) : '')),
         },
       }));
-    } catch (_) {}
+    } catch (_) { }
   }, [paymentMode]);
 
   React.useEffect(() => { loadCatalog(); }, [loadCatalog]);
   const loadCustomerProfile = React.useCallback(async (id) => {
-    if (!id) { 
-      setCustomerProfile(null); 
+    if (!id) {
+      setCustomerProfile(null);
       setCustomerReservations([]);
       setActiveReservation(null);
-      return null; 
+      return null;
     }
     try {
       const resp = await customerService.profile(id);
       const profile = resp?.data || resp || {};
       setCustomerProfile(profile);
-      const reservationsPayload = profile?.reservations 
-        || profile?.pending_reservations 
-        || profile?.active_reservations 
-        || profile?.reservation_preview 
+      const reservationsPayload = profile?.reservations
+        || profile?.pending_reservations
+        || profile?.active_reservations
+        || profile?.reservation_preview
         || [];
       setCustomerReservations(Array.isArray(reservationsPayload) ? reservationsPayload : []);
       setActiveReservation(null);
       setReservationBannerDismissed(false);
       return profile;
-    } catch (_) { 
-      setCustomerProfile(null); 
+    } catch (_) {
+      setCustomerProfile(null);
       setCustomerReservations([]);
-      return null; 
+      return null;
     }
   }, []);
 
   React.useEffect(() => { loadCustomers(); loadCategories(); }, [loadCustomers, loadCategories]);
   React.useEffect(() => { loadAccounts(); }, [loadAccounts]);
   React.useEffect(() => { loadCustomerProfile(customerId); }, [customerId, loadCustomerProfile]);
-  
-  // Reset wallet advance toggle when customer changes or reservation is loaded
-  React.useEffect(() => {
-    if (!customerId || activeReservation) {
-      setApplyWalletAdvance(false);
-    }
-  }, [customerId, activeReservation]);
-  
+
+
+
   // Reset reservation mode and payment_as when customer is cleared (guest)
   React.useEffect(() => {
     if (!customerId) {
@@ -532,7 +528,7 @@ export default function POS() {
       // Get unit price - should be in the unit_type specified
       let unitPrice = Number(item.unit_price || item.price || 0);
       const basePricePrimary = product?.price || 0;
-      
+
       // If no unit_price from API and we have product info, calculate based on unit_type
       if (!unitPrice && product) {
         if (unitType === 'secondary' && product.secondaryPerPrimary && product.secondaryPerPrimary > 0) {
@@ -542,7 +538,7 @@ export default function POS() {
           unitPrice = basePricePrimary;
         }
       }
-      
+
       return {
         id: item.stock_item_id || product?.id || `reserved-${idx}`,
         name: product?.name || item.name || `Reserved Item ${idx + 1}`,
@@ -634,12 +630,12 @@ export default function POS() {
       // Convert both to primary units for stock calculation
       let qtyInPrimary = Number(item.qty || 0);
       let reservedQtyInPrimary = Math.max(0, item.reservedQty || 0);
-      
+
       if (item.unitType === 'secondary' && item.secondaryPerPrimary && item.secondaryPerPrimary > 0) {
         qtyInPrimary = qtyInPrimary / item.secondaryPerPrimary;
         reservedQtyInPrimary = reservedQtyInPrimary / item.secondaryPerPrimary;
       }
-      
+
       const extraNeeded = Math.max(0, qtyInPrimary - reservedQtyInPrimary);
       if (extraNeeded > 0) {
         reserved[item.id] = (reserved[item.id] || 0) + extraNeeded;
@@ -682,10 +678,10 @@ export default function POS() {
       ? ledger.available
       : ledger;
     const reserved = reservedStock[p.id] || 0;
-    const available = original !== null && original !== undefined 
-      ? Math.max(0, original - reserved) 
+    const available = original !== null && original !== undefined
+      ? Math.max(0, original - reserved)
       : null;
-    
+
     // Check if stock is available
     if (available !== null && available <= 0) {
       toast({
@@ -704,18 +700,18 @@ export default function POS() {
         const copy = [...prev];
         const existing = copy[idx];
         const newQty = existing.qty + 1;
-        
+
         // Double-check stock availability against original stock
         // Convert to primary units if selling in secondary units
         let requestedInPrimary = newQty;
         if (existing.unitType === 'secondary' && existing.secondaryPerPrimary && existing.secondaryPerPrimary > 0) {
           requestedInPrimary = newQty / existing.secondaryPerPrimary;
         }
-        
+
         if (original !== null && original !== undefined && requestedInPrimary > original) {
           const remaining = original - (existing.unitType === 'secondary' && existing.secondaryPerPrimary ? existing.qty / existing.secondaryPerPrimary : existing.qty);
-          const remainingDisplay = existing.unitType === 'secondary' && existing.secondaryPerPrimary 
-            ? remaining * existing.secondaryPerPrimary 
+          const remainingDisplay = existing.unitType === 'secondary' && existing.secondaryPerPrimary
+            ? remaining * existing.secondaryPerPrimary
             : remaining;
           const unitLabel = existing.unitType === 'secondary' ? existing.secondaryUnit : existing.primaryUnit;
           toast({
@@ -727,7 +723,7 @@ export default function POS() {
           });
           return prev;
         }
-        
+
         const reservedQty = Math.min(existing.reservedQty || 0, newQty);
         copy[idx] = {
           ...existing,
@@ -737,15 +733,15 @@ export default function POS() {
         };
         return copy;
       }
-      return [...prev, { 
-        id: p.id, 
-        name: p.name, 
-        serial_id: p.serial_id || '', 
-        price: p.price, 
-        basePrice: p.price, 
-        cost: p.cost, 
-        qty: 1, 
-        reservedQty: 0, 
+      return [...prev, {
+        id: p.id,
+        name: p.name,
+        serial_id: p.serial_id || '',
+        price: p.price,
+        basePrice: p.price,
+        cost: p.cost,
+        qty: 1,
+        reservedQty: 0,
         hiddenCost: 0,
         unitType: 'primary',
         primaryUnit: p.primaryUnit || '',
@@ -754,21 +750,21 @@ export default function POS() {
       }];
     });
   };
-  
+
   const changeQty = (id, delta) => {
     const item = items.find(it => it.id === id);
     if (!item) return;
-    
+
     const cartItem = cart.find(x => x.id === id);
     if (!cartItem) return;
-    
+
     const ledger = originalStock[id];
     const original = ledger && typeof ledger === 'object'
       ? ledger.available
       : ledger;
     const currentQty = cartItem.qty;
     const newQty = currentQty + delta;
-    
+
     // Check stock availability when increasing quantity
     // Convert to primary units if selling in secondary units
     if (delta > 0 && original !== null && original !== undefined) {
@@ -780,11 +776,11 @@ export default function POS() {
       if (cartItem.unitType === 'secondary' && cartItem.secondaryPerPrimary && cartItem.secondaryPerPrimary > 0) {
         currentInPrimary = currentQty / cartItem.secondaryPerPrimary;
       }
-      
+
       if (requestedInPrimary > original) {
         const available = original - currentInPrimary;
-        const availableDisplay = cartItem.unitType === 'secondary' && cartItem.secondaryPerPrimary 
-          ? available * cartItem.secondaryPerPrimary 
+        const availableDisplay = cartItem.unitType === 'secondary' && cartItem.secondaryPerPrimary
+          ? available * cartItem.secondaryPerPrimary
           : available;
         const unitLabel = cartItem.unitType === 'secondary' ? cartItem.secondaryUnit : cartItem.primaryUnit;
         toast({
@@ -797,7 +793,7 @@ export default function POS() {
         return;
       }
     }
-    
+
     setCart(prev => prev.map(x => {
       if (x.id !== id) return x;
       const updatedQty = Math.max(1, x.qty + delta);
@@ -810,7 +806,7 @@ export default function POS() {
       };
     }));
   };
-  
+
   const removeLine = (id) => setCart(prev => prev.filter(x => x.id !== id));
 
   // Calculate base subtotal - convert base price to current unit type
@@ -822,7 +818,7 @@ export default function POS() {
     }
     return s + l.qty * basePriceInCurrentUnit;
   }, 0);
-  
+
   // Calculate manual discount - compare prices in the same unit type
   const manualDiscount = cart.reduce((s, l) => {
     const basePricePrimary = getBasePrice(l);
@@ -839,20 +835,20 @@ export default function POS() {
   const hiddenCostsAmount = cart.reduce((s, l) => s + Number(l.hiddenCost || 0), 0);
   const total = Math.max(0, subtotal - discountFromPercent - discountFixed + hiddenCostsAmount);
   const totalDiscount = manualDiscount + discountFromPercent + discountFixed;
-  
+
   // Calculate COGS Loss: when selling price < purchase cost
   // Loss = (cost - selling_price) × quantity
   const cogsLoss = cart.reduce((s, l) => {
     const cost = Number(l.cost || 0);
     const sellingPrice = Number(l.price || 0);
     const qty = Number(l.qty || 0);
-    
+
     // Convert cost to current unit type if selling in secondary units
     let costInCurrentUnit = cost;
     if (l.unitType === 'secondary' && l.secondaryPerPrimary && l.secondaryPerPrimary > 0) {
       costInCurrentUnit = cost / l.secondaryPerPrimary;
     }
-    
+
     // Only calculate loss if cost > 0 and selling price < cost
     if (costInCurrentUnit > 0 && sellingPrice < costInCurrentUnit) {
       const lossPerUnit = costInCurrentUnit - sellingPrice;
@@ -881,39 +877,66 @@ export default function POS() {
   const applyReservationAdvance = Boolean(activeReservation) &&
     paymentAs !== 'advance' &&
     reservationAdvanceAvailable > 0;
-  
+
   // Determine if we should apply advance from wallet (separate from reservations)
-  const applyWalletAdvanceEffective = applyWalletAdvance &&
-    !activeReservation &&
-    paymentAs !== 'advance' &&
-    existingAdvance > 0;
-  
+  // Automatically apply if available, unless it's a reservation (handled separately)
+  const applyWalletAdvanceEffective = existingAdvance > 0 && !activeReservation;
+
   const customerAdvanceAvailable = Math.max(0, existingAdvance);
-  
+
   // Calculate advance pool: reservation advance takes priority, then wallet advance
   const advancePool = applyReservationAdvance
     ? (customerAdvanceAvailable > 0
-        ? Math.min(customerAdvanceAvailable, reservationAdvanceAvailable || customerAdvanceAvailable)
-        : reservationAdvanceAvailable)
+      ? Math.min(customerAdvanceAvailable, reservationAdvanceAvailable || customerAdvanceAvailable)
+      : reservationAdvanceAvailable)
     : (applyWalletAdvanceEffective
-        ? customerAdvanceAvailable
-        : 0);
-  
-  const applyAdvanceEffective = applyReservationAdvance || applyWalletAdvanceEffective;
-  const applyFromAdvance = applyAdvanceEffective
-    ? Math.min(total, advancePool)
-    : 0;
-  const remainingAfterAdvance = Math.max(0, total - applyFromAdvance);
+      ? customerAdvanceAvailable
+      : 0);
+
   const splitPaidTotal = Number(splitPayments.cash.amount || 0) + Number(splitPayments.online.amount || 0);
   const payNow = paymentMode === 'split'
     ? splitPaidTotal
     : Number(paidAmount || 0);
-  const remainingAfterPay = paymentAs === 'payment' ? Math.max(0, remainingAfterAdvance - payNow) : remainingAfterAdvance;
-  const newAdvance = paymentAs === 'payment'
-    ? Math.max(0, payNow - remainingAfterAdvance) // overflow becomes advance
-    : existingAdvance + payNow; // entire paid becomes advance
-  const estimatedDue = paymentAs === 'advance' ? remainingAfterAdvance : remainingAfterPay;
-  const estimatedNewAdvance = paymentAs === 'advance' ? existingAdvance + payNow : newAdvance;
+
+  // New Logic: Cash First, then Advance
+  // 1. Calculate how much is remaining after manual payment
+  const remainingAfterPayNow = Math.max(0, total - payNow);
+
+  // 2. Calculate max possible advance to apply (capped by remaining amount and available advance)
+  const maxAdvanceToApply = Math.min(remainingAfterPayNow, advancePool);
+
+  // 3. Determine final advance amount to apply
+  // If user specified a custom amount, use it (clamped), otherwise use max possible
+  const applyAdvanceEffective = applyReservationAdvance || applyWalletAdvanceEffective;
+
+  let applyFromAdvance = 0;
+  if (applyAdvanceEffective) {
+    if (customAdvanceAmount !== '') {
+      // User entered a specific amount
+      // Clamp it between 0 and max possible (cannot use more than needed or more than available)
+      applyFromAdvance = Math.min(Number(customAdvanceAmount), maxAdvanceToApply);
+    } else {
+      // Default behavior: Auto-fill remainder
+      applyFromAdvance = maxAdvanceToApply;
+    }
+  }
+
+  const remainingAfterAdvance = Math.max(0, total - applyFromAdvance);
+
+  // Update remainingAfterPay calculation to reflect that payNow is already accounted for in advance logic
+  // Actually, we need to calculate the final due/excess based on both
+  // Total Paid = payNow + applyFromAdvance
+  const totalPaid = payNow + applyFromAdvance;
+  const remainingDue = Math.max(0, total - totalPaid);
+  const excessPaid = Math.max(0, totalPaid - total);
+
+  // New Advance Balance Calculation
+  // If we used advance, it decreases. If we overpaid with cash, it increases.
+  // Note: applyFromAdvance comes FROM advance. payNow might go TO advance if excess.
+  const newAdvance = existingAdvance - applyFromAdvance + excessPaid;
+
+  const estimatedDue = remainingDue;
+  const estimatedNewAdvance = newAdvance;
 
   // Helper function to remove undefined values from payload
   const removeUndefined = (obj) => {
@@ -968,10 +991,10 @@ export default function POS() {
       const advancePayment =
         advanceAmountNumeric > 0
           ? {
-              amount: advanceAmountNumeric,
-              deposit_account_id: Number(depositAccountId),
-              method: paymentMode === 'online' ? 'bank' : 'cash',
-            }
+            amount: advanceAmountNumeric,
+            deposit_account_id: Number(depositAccountId),
+            method: paymentMode === 'online' ? 'bank' : 'cash',
+          }
           : undefined;
       const payload = {
         customer_id: Number(customerId),
@@ -1034,7 +1057,7 @@ export default function POS() {
       await createReservationFlow();
       return;
     }
-    
+
     // Prevent advance payments for guest customers
     if (!customerId && paymentAs === 'advance') {
       toast({
@@ -1046,7 +1069,7 @@ export default function POS() {
       });
       return;
     }
-    
+
     // Prevent guests from having any due balance
     if (!customerId && estimatedDue > 0) {
       toast({
@@ -1058,7 +1081,7 @@ export default function POS() {
       });
       return;
     }
-    
+
     if (paymentMode !== 'split' && !depositAccountId) {
       toast({
         title: 'Missing deposit account',
@@ -1162,7 +1185,7 @@ export default function POS() {
         // Check account type to determine correct payment method
         const selectedAccount = accounts.find(acc => String(acc.id) === String(depositAccountId));
         const accountType = (selectedAccount?.type || '').toLowerCase();
-        
+
         let paymentMethodValue;
         if (paymentMode === 'cash') {
           paymentMethodValue = 'cash';
@@ -1173,7 +1196,7 @@ export default function POS() {
         } else {
           paymentMethodValue = 'cash'; // fallback
         }
-        
+
         payload.payment_method = paymentMethodValue;
         payload.deposit_account_id = Number(depositAccountId);
         if (payAmountValue) {
@@ -1198,24 +1221,24 @@ export default function POS() {
       }
       // Remove all undefined values from payload before sending
       const cleanedPayload = removeUndefined(payload);
-      
+
       // Calculate and log COGS loss for debugging
       const itemsWithLoss = cart.map(l => {
         const cost = Number(l.cost || 0);
         const sellingPrice = Number(l.price || 0);
         const qty = Number(l.qty || 0);
-        
+
         // Convert cost to current unit type if selling in secondary units
         let costInCurrentUnit = cost;
         if (l.unitType === 'secondary' && l.secondaryPerPrimary && l.secondaryPerPrimary > 0) {
           costInCurrentUnit = cost / l.secondaryPerPrimary;
         }
-        
-        const lossPerUnit = costInCurrentUnit > 0 && sellingPrice < costInCurrentUnit 
-          ? costInCurrentUnit - sellingPrice 
+
+        const lossPerUnit = costInCurrentUnit > 0 && sellingPrice < costInCurrentUnit
+          ? costInCurrentUnit - sellingPrice
           : 0;
         const itemLoss = lossPerUnit * qty;
-        
+
         return {
           stock_item_id: l.id,
           name: l.name,
@@ -1229,7 +1252,7 @@ export default function POS() {
         };
       });
       const totalCogsLoss = itemsWithLoss.reduce((sum, item) => sum + item.total_loss, 0);
-      
+
       // Log the payload for debugging
       console.log('=== POS Invoice Payload ===');
       console.log('Customer ID:', customerId);
@@ -1253,7 +1276,7 @@ export default function POS() {
       });
       console.log('Full Payload:', JSON.stringify(cleanedPayload, null, 2));
       console.log('==========================');
-      
+
       const response = activeReservation?.id
         ? await reservationService.completeReservation(activeReservation.id, cleanedPayload)
         : await invoiceService.createInvoice(cleanedPayload);
@@ -1325,7 +1348,7 @@ export default function POS() {
     <Flex direction='column' pt={{ base: '120px', md: '75px' }}>
       <Text fontSize='2xl' color={textColor} fontWeight='bold' mb='3'>Point of Sale</Text>
 
-     
+
 
       <Grid templateColumns={{ base: '1fr', lg: '2fr 1fr' }} gap='16px'>
         {/* Left: Catalog */}
@@ -1333,8 +1356,8 @@ export default function POS() {
           <Card>
             <CardHeader>
               <HStack spacing='12px' wrap='wrap'>
-                <Input placeholder='Search products...' value={catalogSearch} onChange={(e)=> setCatalogSearch(e.target.value)} width='260px' onKeyDown={(e)=> { if (e.key==='Enter') loadCatalog(); }} />
-                <Select placeholder='All Categories' value={categoryId} onChange={(e)=> setCategoryId(e.target.value)} width='200px'>
+                <Input placeholder='Search products...' value={catalogSearch} onChange={(e) => setCatalogSearch(e.target.value)} width='260px' onKeyDown={(e) => { if (e.key === 'Enter') loadCatalog(); }} />
+                <Select placeholder='All Categories' value={categoryId} onChange={(e) => setCategoryId(e.target.value)} width='200px'>
                   {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </Select>
                 <Button onClick={loadCatalog} variant='outline' borderColor='#FF8D28' color='#FF8D28'>Search</Button>
@@ -1351,10 +1374,10 @@ export default function POS() {
                     const isOutOfStock = stock !== null && stock === 0;
                     const hasStock = stock !== null;
                     return (
-                      <Box 
-                        key={p.id} 
+                      <Box
+                        key={p.id}
                         borderWidth={isLowStock || isOutOfStock ? '2px' : '1px'}
-                        borderRadius='12px' 
+                        borderRadius='12px'
                         p='12px'
                         borderColor={isLowStock ? 'orange.400' : isOutOfStock ? 'red.300' : 'gray.200'}
                         bg={isLowStock ? 'orange.50' : isOutOfStock ? 'red.50' : undefined}
@@ -1372,7 +1395,7 @@ export default function POS() {
                           <Box>
                             <Text fontSize='xs' color='gray.500' mb='1'>Stock Quantity:</Text>
                             {hasStock ? (
-                              <Badge 
+                              <Badge
                                 colorScheme={isOutOfStock ? 'red' : isLowStock ? 'orange' : 'green'}
                                 fontSize='sm'
                                 px='3'
@@ -1384,7 +1407,7 @@ export default function POS() {
                                   if (isOutOfStock) return 'OUT OF STOCK (0)';
                                   if (p.secondaryUnit && p.secondaryPerPrimary && p.secondaryPerPrimary > 0) {
                                     const secondaryQty = stock * p.secondaryPerPrimary;
-                                    return isLowStock 
+                                    return isLowStock
                                       ? `LOW: ${stock} ${p.primaryUnit} (${secondaryQty.toFixed(1)} ${p.secondaryUnit})`
                                       : `${stock} ${p.primaryUnit} (${secondaryQty.toFixed(1)} ${p.secondaryUnit})`;
                                   }
@@ -1392,7 +1415,7 @@ export default function POS() {
                                 })()}
                               </Badge>
                             ) : (
-                              <Badge 
+                              <Badge
                                 colorScheme='gray'
                                 fontSize='sm'
                                 px='3'
@@ -1404,12 +1427,12 @@ export default function POS() {
                             )}
                           </Box>
                         </VStack>
-                        <Button 
-                          size='sm' 
-                          variant='outline' 
-                          borderColor='#FF8D28' 
-                          color='#FF8D28' 
-                          onClick={()=> addToCart(p)} 
+                        <Button
+                          size='sm'
+                          variant='outline'
+                          borderColor='#FF8D28'
+                          color='#FF8D28'
+                          onClick={() => addToCart(p)}
                           w='100%'
                           isDisabled={isOutOfStock}
                         >
@@ -1433,12 +1456,12 @@ export default function POS() {
             <CardHeader>
               <HStack justify='space-between'>
                 <Text color={textColor} fontWeight='bold'>Cart ({cart.length} items)</Text>
-                {cart.length>0 && (
-                  <Button 
-                    size='sm' 
-                    variant='ghost' 
-                    color='red.400' 
-                    onClick={()=> {
+                {cart.length > 0 && (
+                  <Button
+                    size='sm'
+                    variant='ghost'
+                    color='red.400'
+                    onClick={() => {
                       setCart([]);
                       setActiveReservation(null);
                       setReservationMode('sale');
@@ -1455,17 +1478,17 @@ export default function POS() {
                 {/* Checkout controls */}
                 <VStack align='stretch' spacing='12px'>
                   <HStack align='stretch' spacing='12px'>
-                    <Select 
-                      placeholder='Select customer' 
-                      value={customerId} 
-                      onChange={(e)=> setCustomerId(e.target.value)} 
+                    <Select
+                      placeholder='Select customer'
+                      value={customerId}
+                      onChange={(e) => setCustomerId(e.target.value)}
                       width='100%'
                       size='md'>
                       {customers.map(c => <option key={c.id} value={c.id}>{c.name} {c.phone ? `(${c.phone})` : ''}</option>)}
                     </Select>
-                    <Select 
-                      value={paymentMode} 
-                      onChange={(e)=> handlePaymentModeChange(e.target.value)} 
+                    <Select
+                      value={paymentMode}
+                      onChange={(e) => handlePaymentModeChange(e.target.value)}
                       width='220px'
                       size='md'>
                       <option value='cash'>Cash</option>
@@ -1490,10 +1513,10 @@ export default function POS() {
                           </Text>
                         </Box>
                         <HStack spacing='8px'>
-                          <Button size='xs' colorScheme='orange' onClick={()=> handleReservationLoad(reservationsList[0])}>
+                          <Button size='xs' colorScheme='orange' onClick={() => handleReservationLoad(reservationsList[0])}>
                             Load
                           </Button>
-                          <Button size='xs' variant='ghost' onClick={()=> setReservationBannerDismissed(true)}>
+                          <Button size='xs' variant='ghost' onClick={() => setReservationBannerDismissed(true)}>
                             Dismiss
                           </Button>
                         </HStack>
@@ -1526,10 +1549,7 @@ export default function POS() {
                             PKR {outstandingDue.toFixed(2)}
                           </Text>
                         </Box>
-                        <Box borderWidth='1px' borderRadius='10px' p='10px' bg={useColorModeValue('white', 'gray.800')}>
-                          <Text fontSize='xs' color='gray.500'>Reserved value</Text>
-                          <Text fontWeight='bold' fontSize='lg'>PKR {reservedValue.toFixed(2)}</Text>
-                        </Box>
+
                       </SimpleGrid>
                       {hasReservations ? (
                         <VStack align='stretch' spacing='10px' mt='14px'>
@@ -1554,7 +1574,7 @@ export default function POS() {
                                   {reservation.items.slice(0, 3).map((item, idx) => {
                                     const qty = Number(item.sold_quantity ?? item.qty ?? item.quantity ?? 1);
                                     const unitType = item.unit_type || 'primary';
-                                    const unitLabel = unitType === 'secondary' 
+                                    const unitLabel = unitType === 'secondary'
                                       ? (item.stockItem?.secondaryUnit?.symbol || item.stockItem?.secondaryUnit?.name || item.secondary_unit?.symbol || item.secondary_unit?.name || 'secondary')
                                       : (item.stockItem?.primaryUnit?.symbol || item.stockItem?.primaryUnit?.name || item.primary_unit?.symbol || item.primary_unit?.name || 'primary');
                                     return (
@@ -1572,13 +1592,13 @@ export default function POS() {
                                 <Text fontSize='xs' color='gray.500' mt='6px'>No items returned for this reservation.</Text>
                               )}
                               <HStack justify='flex-end' spacing='8px' mt='10px'>
-                                <Button size='sm' colorScheme='orange' onClick={()=> handleReservationLoad(reservation)}>
+                                <Button size='sm' colorScheme='orange' onClick={() => handleReservationLoad(reservation)}>
                                   Load items
                                 </Button>
                                 <Button
                                   size='sm'
                                   variant='ghost'
-                                  onClick={()=> handleReservationRelease(reservation)}
+                                  onClick={() => handleReservationRelease(reservation)}
                                   isLoading={reservationActionLoading && reservationActionId === reservation.id}
                                   loadingText='Releasing...'
                                 >
@@ -1612,7 +1632,7 @@ export default function POS() {
                         flex='1'
                         variant={reservationMode === 'sale' ? 'solid' : 'outline'}
                         colorScheme='green'
-                        onClick={()=> setReservationMode('sale')}
+                        onClick={() => setReservationMode('sale')}
                       >
                         Immediate Sale
                       </Button>
@@ -1621,7 +1641,7 @@ export default function POS() {
                         variant={reservationMode === 'reserve' ? 'solid' : 'outline'}
                         colorScheme='purple'
                         isDisabled={!customerId}
-                        onClick={()=> {
+                        onClick={() => {
                           if (!customerId) {
                             toast({
                               title: 'Reservation requires customer',
@@ -1653,13 +1673,13 @@ export default function POS() {
                         <Input
                           type='date'
                           value={reservePickupDate}
-                          onChange={(e)=> setReservePickupDate(e.target.value)}
+                          onChange={(e) => setReservePickupDate(e.target.value)}
                           placeholder='Pickup date'
                           size='sm'
                         />
                         <Input
                           value={reserveNote}
-                          onChange={(e)=> setReserveNote(e.target.value)}
+                          onChange={(e) => setReserveNote(e.target.value)}
                           placeholder='Reservation note / reference'
                           size='sm'
                         />
@@ -1696,7 +1716,7 @@ export default function POS() {
                               min='0'
                               step='0.01'
                               value={splitPayments.cash.amount}
-                              onChange={(e)=> handleSplitPaymentChange('cash', 'amount', e.target.value)}
+                              onChange={(e) => handleSplitPaymentChange('cash', 'amount', e.target.value)}
                               placeholder='0.00'
                               size='md'
                             />
@@ -1704,7 +1724,7 @@ export default function POS() {
                               flex='1'
                               placeholder={cashAccounts.length ? 'Select cash account *' : 'Select account *'}
                               value={splitPayments.cash.accountId}
-                              onChange={(e)=> handleSplitPaymentChange('cash', 'accountId', e.target.value)}
+                              onChange={(e) => handleSplitPaymentChange('cash', 'accountId', e.target.value)}
                               borderColor={!splitPayments.cash.accountId && Number(splitPayments.cash.amount || 0) > 0 ? 'red.300' : undefined}
                               size='md'
                             >
@@ -1746,7 +1766,7 @@ export default function POS() {
                               min='0'
                               step='0.01'
                               value={splitPayments.online.amount}
-                              onChange={(e)=> handleSplitPaymentChange('online', 'amount', e.target.value)}
+                              onChange={(e) => handleSplitPaymentChange('online', 'amount', e.target.value)}
                               placeholder='0.00'
                               size='md'
                             />
@@ -1754,7 +1774,7 @@ export default function POS() {
                               flex='1'
                               placeholder={onlineAccounts.length ? 'Select online account *' : 'Select account *'}
                               value={splitPayments.online.accountId}
-                              onChange={(e)=> handleSplitPaymentChange('online', 'accountId', e.target.value)}
+                              onChange={(e) => handleSplitPaymentChange('online', 'accountId', e.target.value)}
                               borderColor={!splitPayments.online.accountId && Number(splitPayments.online.amount || 0) > 0 ? 'red.300' : undefined}
                               size='md'
                             >
@@ -1799,10 +1819,10 @@ export default function POS() {
                       <Text fontSize='sm' fontWeight='semibold' color='gray.700' mb='8px'>
                         Deposit Account *
                       </Text>
-                      <Select 
-                        placeholder={`Select ${paymentMode === 'cash' ? 'cash' : paymentMode === 'online' ? 'bank/online' : 'deposit'} account *`} 
-                        value={depositAccountId} 
-                        onChange={(e)=> setDepositAccountId(e.target.value)} 
+                      <Select
+                        placeholder={`Select ${paymentMode === 'cash' ? 'cash' : paymentMode === 'online' ? 'bank/online' : 'deposit'} account *`}
+                        value={depositAccountId}
+                        onChange={(e) => setDepositAccountId(e.target.value)}
                         isRequired
                         borderColor={!depositAccountId ? 'red.300' : undefined}
                         size='md'>
@@ -1858,8 +1878,8 @@ export default function POS() {
                           const type = (selectedAcc.type || '').toLowerCase();
                           return (
                             <Text fontSize='xs' color='gray.500' mt='8px'>
-                              Selected: {selectedAcc.name} {selectedAcc.code ? `(${selectedAcc.code})` : ''} • 
-                              Balance: PKR {Number(selectedAcc.balance || 0).toFixed(2)} • 
+                              Selected: {selectedAcc.name} {selectedAcc.code ? `(${selectedAcc.code})` : ''} •
+                              Balance: PKR {Number(selectedAcc.balance || 0).toFixed(2)} •
                               Type: {type === 'cash' ? 'Cash' : type === 'bank' ? 'Bank' : 'Custom'}
                             </Text>
                           );
@@ -1871,21 +1891,21 @@ export default function POS() {
                   <HStack spacing='12px'>
                     <Box flex='1'>
                       <Text fontSize='xs' color='gray.600' mb='4px'>Discount %</Text>
-                      <Input 
-                        placeholder='0' 
-                        type='number' 
-                        value={discountPercent} 
-                        onChange={(e)=> setDiscountPercent(e.target.value)} 
+                      <Input
+                        placeholder='0'
+                        type='number'
+                        value={discountPercent}
+                        onChange={(e) => setDiscountPercent(e.target.value)}
                         size='md'
                       />
                     </Box>
                     <Box flex='1'>
                       <Text fontSize='xs' color='gray.600' mb='4px'>Discount Amount</Text>
-                      <Input 
-                        placeholder='0.00' 
-                        type='number' 
-                        value={discountAmount} 
-                        onChange={(e)=> setDiscountAmount(e.target.value)} 
+                      <Input
+                        placeholder='0.00'
+                        type='number'
+                        value={discountAmount}
+                        onChange={(e) => setDiscountAmount(e.target.value)}
                         size='md'
                       />
                     </Box>
@@ -1900,20 +1920,20 @@ export default function POS() {
                           <Text fontSize='xs' color='gray.500'>Serial: {line.serial_id}</Text>
                         )}
                       </VStack>
-                      <IconButton 
-                        size='sm' 
-                        aria-label='remove' 
-                        icon={<FaTrash />} 
-                        variant='ghost' 
-                        color='red.400' 
-                        onClick={()=> removeLine(line.id)} 
+                      <IconButton
+                        size='sm'
+                        aria-label='remove'
+                        icon={<FaTrash />}
+                        variant='ghost'
+                        color='red.400'
+                        onClick={() => removeLine(line.id)}
                       />
                     </HStack>
                     {line.secondaryUnit && line.secondaryPerPrimary && line.secondaryPerPrimary > 0 && (
                       <HStack mb='8px' spacing='8px'>
                         <Text fontSize='xs' color='gray.600' minW='80px'>Sell in:</Text>
-                        <Select 
-                          size='sm' 
+                        <Select
+                          size='sm'
                           value={line.unitType || 'primary'}
                           onChange={(e) => {
                             const newUnitType = e.target.value;
@@ -1923,7 +1943,7 @@ export default function POS() {
                             const basePricePrimary = product?.price || getBasePrice(line);
                             let newPrice;
                             let newQty = line.qty;
-                            
+
                             // Adjust price and quantity based on unit type conversion
                             // Always calculate from the original primary unit price to avoid accumulation errors
                             if (line.secondaryPerPrimary && line.secondaryPerPrimary > 0) {
@@ -1940,7 +1960,7 @@ export default function POS() {
                               // No conversion, use primary price
                               newPrice = basePricePrimary;
                             }
-                            
+
                             setCart(prev => prev.map(x => x.id === line.id
                               ? { ...x, unitType: newUnitType, price: newPrice, basePrice: basePricePrimary, qty: newQty }
                               : x));
@@ -1951,38 +1971,38 @@ export default function POS() {
                           <option value='secondary'>{line.secondaryUnit || 'Secondary'}</option>
                         </Select>
                         <Text fontSize='xs' color='gray.500'>
-                          {line.unitType === 'secondary' && line.secondaryPerPrimary 
+                          {line.unitType === 'secondary' && line.secondaryPerPrimary
                             ? `1 ${line.secondaryUnit} = ${(1 / line.secondaryPerPrimary).toFixed(4)} ${line.primaryUnit}`
                             : line.unitType === 'primary' && line.secondaryPerPrimary
-                            ? `1 ${line.primaryUnit} = ${line.secondaryPerPrimary} ${line.secondaryUnit}`
-                            : ''}
+                              ? `1 ${line.primaryUnit} = ${line.secondaryPerPrimary} ${line.secondaryUnit}`
+                              : ''}
                         </Text>
                       </HStack>
                     )}
                     <HStack justify='space-between' mb='12px' spacing='12px'>
                       <HStack spacing='8px'>
                         <Text fontSize='xs' color='gray.600' minW='60px'>Quantity:</Text>
-                        <IconButton size='sm' icon={<FaMinus />} onClick={()=> changeQty(line.id, -1)} />
+                        <IconButton size='sm' icon={<FaMinus />} onClick={() => changeQty(line.id, -1)} />
                         <Text minW='32px' textAlign='center' fontWeight='semibold'>
                           {line.qty} {line.unitType === 'secondary' ? line.secondaryUnit : line.primaryUnit}
                         </Text>
-                        <IconButton size='sm' icon={<FaPlus />} onClick={()=> changeQty(line.id, 1)} />
+                        <IconButton size='sm' icon={<FaPlus />} onClick={() => changeQty(line.id, 1)} />
                       </HStack>
                       <VStack align='flex-end' spacing='4px' flex='1'>
                         <HStack spacing='8px' justify='flex-end' w='100%'>
                           <Text fontSize='xs' color='gray.600' whiteSpace='nowrap'>Unit Price:</Text>
-                          <Input 
-                            width='120px' 
-                            type='number' 
-                            step='0.01' 
-                            value={line.price} 
-                            onChange={(e)=> {
+                          <Input
+                            width='120px'
+                            type='number'
+                            step='0.01'
+                            value={line.price}
+                            onChange={(e) => {
                               const val = Number(e.target.value || 0);
-                              setCart(prev => prev.map(x => x.id===line.id
+                              setCart(prev => prev.map(x => x.id === line.id
                                 ? { ...x, basePrice: getBasePrice(x), price: val }
                                 : x));
-                            }} 
-                            placeholder='0.00' 
+                            }}
+                            placeholder='0.00'
                             size='sm'
                           />
                           <Text fontWeight='semibold' minW='80px' textAlign='right'>
@@ -1998,7 +2018,7 @@ export default function POS() {
                             // Convert primary unit price to secondary unit price
                             basePriceInCurrentUnit = basePricePrimary / line.secondaryPerPrimary;
                           }
-                          
+
                           // Get cost (last purchase price) and convert to current unit type
                           const cost = Number(line.cost || 0);
                           let costInCurrentUnit = cost;
@@ -2008,16 +2028,16 @@ export default function POS() {
                           const hasCogsLoss = costInCurrentUnit > 0 && line.price < costInCurrentUnit;
                           const cogsLossPerUnit = hasCogsLoss ? costInCurrentUnit - line.price : 0;
                           const totalCogsLoss = cogsLossPerUnit * line.qty;
-                          
+
                           // Calculate profit from cost
                           const profitFromCost = costInCurrentUnit > 0 ? line.price - costInCurrentUnit : 0;
                           const totalProfitFromCost = profitFromCost * line.qty;
-                          
+
                           // Check for discount (selling below base/selling price)
                           const hasDiscount = basePriceInCurrentUnit > line.price;
                           const discountPerUnit = hasDiscount ? basePriceInCurrentUnit - line.price : 0;
                           const totalDiscount = discountPerUnit * line.qty;
-                          
+
                           return (
                             <VStack align='stretch' spacing='2px' fontSize='xs' color='gray.500'>
                               {/* Always show cost price */}
@@ -2070,9 +2090,9 @@ export default function POS() {
                           type='number'
                           step='0.01'
                           value={line.hiddenCost ?? ''}
-                          onChange={(e)=> {
+                          onChange={(e) => {
                             const val = Number(e.target.value || 0);
-                            setCart(prev => prev.map(x => x.id===line.id
+                            setCart(prev => prev.map(x => x.id === line.id
                               ? { ...x, hiddenCost: val }
                               : x));
                           }}
@@ -2155,12 +2175,12 @@ export default function POS() {
                     ) : (
                       <Box>
                         <Text fontSize='xs' color='gray.600' mb='4px'>Paid Amount (optional)</Text>
-                        <Input 
-                          placeholder='0.00' 
-                          type='number' 
+                        <Input
+                          placeholder='0.00'
+                          type='number'
                           step='0.01'
-                          value={paidAmount} 
-                          onChange={(e)=> setPaidAmount(e.target.value)} 
+                          value={paidAmount}
+                          onChange={(e) => setPaidAmount(e.target.value)}
                           size='md'
                         />
                       </Box>
@@ -2171,7 +2191,7 @@ export default function POS() {
                         type='date'
                         placeholder='Due date'
                         value={dueDate}
-                        onChange={(e)=> setDueDate(e.target.value)}
+                        onChange={(e) => setDueDate(e.target.value)}
                         size='md'
                       />
                     </Box>
@@ -2200,20 +2220,22 @@ export default function POS() {
                               <Text fontSize='xs' fontWeight='medium'>PKR {existingAdvance.toFixed(2)}</Text>
                             </HStack>
                           )}
-                          {existingAdvance > 0 && !activeReservation && (
-                            <Checkbox
-                              colorScheme='green'
-                              isChecked={applyWalletAdvance}
-                              onChange={(e) => setApplyWalletAdvance(e.target.checked)}
-                              size='sm'
-                            >
-                              <Text fontSize='xs'>Apply advance from wallet</Text>
-                            </Checkbox>
-                          )}
-                          {applyFromAdvance > 0 && (
+
+                          {applyAdvanceEffective && (
                             <HStack justify='space-between'>
                               <Text fontSize='xs'>Will Apply from Advance:</Text>
-                              <Text fontSize='xs' fontWeight='medium'>PKR {applyFromAdvance.toFixed(2)}</Text>
+                              <HStack>
+                                <Input
+                                  size='xs'
+                                  width='80px'
+                                  type='number'
+                                  textAlign='right'
+                                  placeholder={maxAdvanceToApply.toFixed(2)}
+                                  value={customAdvanceAmount}
+                                  onChange={(e) => setCustomAdvanceAmount(e.target.value)}
+                                />
+                                <Text fontSize='xs' fontWeight='medium'>/ {maxAdvanceToApply.toFixed(2)}</Text>
+                              </HStack>
                             </HStack>
                           )}
                           {paymentMode === 'split' ? (
@@ -2227,12 +2249,12 @@ export default function POS() {
                             <>
                               <HStack justify='space-between'>
                                 <Text fontSize='xs'>Paid to Invoice:</Text>
-                                <Text fontSize='xs' fontWeight='medium'>PKR {Math.min(payNow, remainingAfterAdvance).toFixed(2)}</Text>
+                                <Text fontSize='xs' fontWeight='medium'>PKR {Math.min(totalPaid, total).toFixed(2)}</Text>
                               </HStack>
-                              {payNow > remainingAfterAdvance && (
+                              {excessPaid > 0 && (
                                 <HStack justify='space-between'>
                                   <Text fontSize='xs'>Excess to Advance:</Text>
-                                  <Text fontSize='xs' fontWeight='medium' color='orange.500'>PKR {Math.max(0, payNow - remainingAfterAdvance).toFixed(2)}</Text>
+                                  <Text fontSize='xs' fontWeight='medium' color='orange.500'>PKR {excessPaid.toFixed(2)}</Text>
                                 </HStack>
                               )}
                             </>
@@ -2261,12 +2283,12 @@ export default function POS() {
                       </Box>
                     )}
                     <VStack spacing='8px' align='stretch'>
-                      <Button 
-                        bg='#FF8D28' 
-                        color='white' 
-                        _hover={{ bg: '#E67E22' }} 
-                        onClick={generateInvoice} 
-                        isDisabled={cart.length===0 || checkoutLoading || (!customerId && estimatedDue > 0)}
+                      <Button
+                        bg='#FF8D28'
+                        color='white'
+                        _hover={{ bg: '#E67E22' }}
+                        onClick={generateInvoice}
+                        isDisabled={cart.length === 0 || checkoutLoading || (!customerId && estimatedDue > 0)}
                         isLoading={checkoutLoading}
                         loadingText={reservationMode === 'reserve' ? 'Saving reservation...' : 'Processing...'}
                         size='lg'
@@ -2279,7 +2301,7 @@ export default function POS() {
                         <Button
                           variant='outline'
                           colorScheme='purple'
-                          onClick={()=> triggerReservationReceiptPrint(lastReservationMeta.id)}
+                          onClick={() => triggerReservationReceiptPrint(lastReservationMeta.id)}
                           isLoading={reservationPrintLoading}
                           loadingText='Preparing receipt...'
                         >
@@ -2290,7 +2312,7 @@ export default function POS() {
                         <Button
                           variant='outline'
                           colorScheme='gray'
-                          onClick={()=> triggerInvoicePrint(lastInvoiceMeta.id)}
+                          onClick={() => triggerInvoicePrint(lastInvoiceMeta.id)}
                           isLoading={printLoading}
                           loadingText='Preparing print...'
                         >

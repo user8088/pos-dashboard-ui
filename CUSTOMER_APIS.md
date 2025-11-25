@@ -146,6 +146,234 @@ Example (truncated):
   - Writes a `customer_transactions` row.
 - 201 → transaction JSON
 
+### Manually Add Due Balance
+- POST `/api/customers/{customer}/add-due`
+- Allows manual adjustment/addition to customer's due balance
+- **Automatically creates a "Due Payment Invoice"** for the transaction
+- Body:
+```json
+{
+  "amount": 500.00,
+  "description": "Manual due adjustment - Additional charges",
+  "occurred_at": "2025-11-25T10:30:00Z"
+}
+```
+- Fields:
+  - `amount` (required): Amount to add to due balance (must be > 0)
+  - `description` (optional): Description for the adjustment
+  - `occurred_at` (optional): Date/time when the adjustment occurred (defaults to now)
+  - `payment_method` (optional): Payment method for invoice (`cash`, `card`, or `other`)
+- Behavior:
+  - Directly increases the customer's `due_balance` by the specified amount
+  - **Automatically creates a "Due Payment Invoice"** with:
+    - Invoice number (auto-generated format: `INV-YYYYMMDDHHMMSS-RRR`)
+    - Total amount = due amount
+    - `paid_amount` = 0
+    - `due_amount` = amount
+    - Notes = "Due Payment Invoice"
+    - Creates an invoice item with the description
+  - Creates a `customer_transactions` record with type `adjustment` and direction `debit`
+  - Records AR (Accounts Receivable) increase in accounting system
+  - Updates customer balance immediately
+- Response (201):
+```json
+{
+  "success": true,
+  "message": "Due balance adjusted successfully",
+  "data": {
+    "transaction": {
+      "id": 123,
+      "customer_id": 1,
+      "type": "adjustment",
+      "amount": "500.00",
+      "direction": "debit",
+      "due_balance_after": "1500.00",
+      "advance_balance_after": "0.00",
+      "description": "Manual due adjustment - Additional charges",
+      "occurred_at": "2025-11-25T10:30:00.000000Z"
+    },
+    "invoice": {
+      "id": 456,
+      "invoice_number": "INV-20251125103000-123",
+      "customer_id": 1,
+      "notes": "Due Payment Invoice",
+      "subtotal": "500.00",
+      "total": "500.00",
+      "paid_amount": "0.00",
+      "due_amount": "500.00",
+      "items": [
+        {
+          "id": 789,
+          "name": "Due Payment Invoice - Manual due adjustment - Additional charges",
+          "unit_price": "500.00",
+          "quantity": "1.000000",
+          "line_total": "500.00"
+        }
+      ]
+    },
+    "customer": {
+      "id": 1,
+      "name": "John Doe",
+      "due_balance": "1500.00",
+      "advance_balance": "0.00"
+    }
+  }
+}
+```
+
+### Manually Add Advance Balance
+- POST `/api/customers/{customer}/add-advance`
+- Allows manual adjustment/addition to customer's advance balance
+- **Automatically creates a "Cash Receiving Invoice"** for the transaction
+- Body:
+```json
+{
+  "amount": 200.00,
+  "description": "Manual advance adjustment - Prepayment",
+  "advance_start_date": "2025-12-01",
+  "advance_end_date": "2025-12-31",
+  "occurred_at": "2025-11-25T10:30:00Z"
+}
+```
+- Fields:
+  - `amount` (required): Amount to add to advance balance (must be > 0)
+  - `description` (optional): Description for the adjustment
+  - `advance_start_date` (optional): Start date for the advance period
+  - `advance_end_date` (optional): End date for the advance period (must be after or equal to start_date)
+  - `occurred_at` (optional): Date/time when the adjustment occurred (defaults to now)
+  - `payment_method` (optional): Payment method for invoice (`cash`, `card`, or `other`)
+  - `deposit_account_id` (optional): Account ID to record payment to (defaults to cash or bank based on payment_method)
+- Behavior:
+  - Directly increases the customer's `advance_balance` by the specified amount
+  - **Automatically creates a "Cash Receiving Invoice"** with:
+    - Invoice number (auto-generated format: `INV-YYYYMMDDHHMMSS-RRR`)
+    - Total amount = advance amount
+    - `paid_amount` = amount
+    - `due_amount` = 0
+    - Notes = "Cash Receiving Invoice"
+    - Creates an invoice item with the description
+  - Creates a `customer_transactions` record with type `adjustment` and direction `credit`
+  - Updates `advance_start_date` and `advance_end_date` if provided
+  - Records cash/bank account credit (money received)
+  - Records advance account increase in accounting system
+  - Updates customer balance immediately
+- Response (201):
+```json
+{
+  "success": true,
+  "message": "Advance balance adjusted successfully",
+  "data": {
+    "transaction": {
+      "id": 124,
+      "customer_id": 1,
+      "type": "adjustment",
+      "amount": "200.00",
+      "direction": "credit",
+      "due_balance_after": "1500.00",
+      "advance_balance_after": "200.00",
+      "description": "Manual advance adjustment - Prepayment",
+      "occurred_at": "2025-11-25T10:30:00.000000Z"
+    },
+    "invoice": {
+      "id": 457,
+      "invoice_number": "INV-20251125103000-124",
+      "customer_id": 1,
+      "notes": "Cash Receiving Invoice",
+      "subtotal": "200.00",
+      "total": "200.00",
+      "paid_amount": "200.00",
+      "due_amount": "0.00",
+      "items": [
+        {
+          "id": 790,
+          "name": "Cash Receiving Invoice - Manual advance adjustment - Prepayment",
+          "unit_price": "200.00",
+          "quantity": "1.000000",
+          "line_total": "200.00"
+        }
+      ]
+    },
+    "customer": {
+      "id": 1,
+      "name": "John Doe",
+      "due_balance": "1500.00",
+      "advance_balance": "200.00",
+      "advance_start_date": "2025-12-01",
+      "advance_end_date": "2025-12-31"
+    }
+  }
+}
+```
+
+**Use Cases:**
+- **Add Due**: When you need to manually add charges, fees, or outstanding amounts to a customer's account
+- **Add Advance**: When a customer makes a prepayment or you need to manually credit their advance balance
+
+**Important Notes:**
+- These endpoints **automatically create invoices**:
+  - **Due Payment Invoice**: Created when adding due balance (shows as unpaid invoice)
+  - **Cash Receiving Invoice**: Created when adding advance balance (shows as paid invoice)
+- Invoices are fully integrated with the accounting system:
+  - **Due invoices**: Record AR (Accounts Receivable) increase
+  - **Advance invoices**: Record cash/bank credit and advance account increase
+- All adjustments are logged in `customer_transactions` for audit trail
+- Invoices can be downloaded as PDF using `/api/invoices/{id}/download`
+- Invoices appear in customer profile and invoice listings
+
+**Frontend Usage Examples:**
+
+```javascript
+// Add due balance to a customer
+const addCustomerDue = async (customerId, amount, description) => {
+  const response = await fetch(`/api/customers/${customerId}/add-due`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    },
+    body: JSON.stringify({
+      amount: amount,
+      description: description || 'Manual due adjustment',
+      occurred_at: new Date().toISOString() // Optional
+    })
+  });
+
+  const data = await response.json();
+  if (data.success) {
+    console.log('Due added:', data.data.customer.due_balance);
+    return data.data;
+  }
+};
+
+// Add advance balance to a customer
+const addCustomerAdvance = async (customerId, amount, description, startDate, endDate) => {
+  const response = await fetch(`/api/customers/${customerId}/add-advance`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    },
+    body: JSON.stringify({
+      amount: amount,
+      description: description || 'Manual advance adjustment',
+      advance_start_date: startDate, // Optional: "2025-12-01"
+      advance_end_date: endDate, // Optional: "2025-12-31"
+      occurred_at: new Date().toISOString() // Optional
+    })
+  });
+
+  const data = await response.json();
+  if (data.success) {
+    console.log('Advance added:', data.data.customer.advance_balance);
+    return data.data;
+  }
+};
+
+// Usage examples
+await addCustomerDue(1, 500.00, 'Additional service charges');
+await addCustomerAdvance(1, 200.00, 'Prepayment for next month', '2025-12-01', '2025-12-31');
+```
+
 ---
 
 ## Sales (Customer Purchases)

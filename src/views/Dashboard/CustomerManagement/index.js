@@ -26,6 +26,7 @@ import {
   ModalCloseButton,
   FormControl,
   FormLabel,
+  FormHelperText,
   Input,
   Select,
   Menu,
@@ -207,6 +208,17 @@ function CustomerManagement() {
   const cardBg = useColorModeValue("white", "gray.700");
   const cardShadow = useColorModeValue("0 4px 20px rgba(0,0,0,0.06)", "0 4px 20px rgba(0,0,0,0.3)");
   const toast = useToast();
+  const nowDateTimeLocal = () => new Date().toISOString().slice(0, 16);
+  const getDefaultPaymentForm = () => ({
+    type: 'payment',
+    amount: '',
+    description: '',
+    advance_start_date: '',
+    advance_end_date: '',
+    occurred_at: nowDateTimeLocal(),
+    payment_method: 'cash',
+    deposit_account_id: ''
+  });
   
   const { isOpen: isAddOpen, onOpen: onAddOpen, onClose: onAddClose } = useDisclosure();
   const { isOpen: isEditOpen, onOpen: onEditOpen, onClose: onEditClose } = useDisclosure();
@@ -228,7 +240,8 @@ function CustomerManagement() {
     serial_id: ""
   });
   const [profileData, setProfileData] = useState(null);
-  const [paymentForm, setPaymentForm] = useState({ type: 'payment', amount: '', description: '', advance_start_date: '', advance_end_date: '' });
+  const [paymentForm, setPaymentForm] = useState(() => getDefaultPaymentForm());
+  const [savingPayment, setSavingPayment] = useState(false);
   const [saleForm, setSaleForm] = useState({ items: [], paid_amount: '', reference: '', sale_date: '' });
   const [ratingForm, setRatingForm] = useState({ stars: 5, note: '' });
 
@@ -281,6 +294,114 @@ function CustomerManagement() {
       await loadCustomers();
     } catch (e) { alert(e?.message || 'Failed to update'); }
   };
+
+  const parseDateTimeLocalToISO = (value) => {
+    if (!value) return undefined;
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return undefined;
+    return parsed.toISOString();
+  };
+
+  const handlePaymentModalClose = () => {
+    setPaymentForm(getDefaultPaymentForm());
+    onPaymentClose();
+  };
+
+  const handlePaymentSubmit = async () => {
+    if (!selectedCustomer) {
+      toast({
+        title: 'Select a customer first',
+        status: 'warning',
+        duration: 3000,
+        isClosable: true
+      });
+      return;
+    }
+    const amountValue = Number(paymentForm.amount || 0);
+    if (!Number.isFinite(amountValue) || amountValue <= 0) {
+      toast({
+        title: 'Enter a valid amount',
+        description: 'Amount must be greater than zero.',
+        status: 'error',
+        duration: 3000,
+        isClosable: true
+      });
+      return;
+    }
+
+    const description = paymentForm.description?.trim();
+    setSavingPayment(true);
+    try {
+      if (paymentForm.type === 'add_due') {
+        const payload = {
+          amount: amountValue,
+          ...(description ? { description } : {})
+        };
+        const occurredAt = parseDateTimeLocalToISO(paymentForm.occurred_at);
+        if (occurredAt) payload.occurred_at = occurredAt;
+        if (paymentForm.payment_method) payload.payment_method = paymentForm.payment_method;
+        await customerService.addDue(selectedCustomer.id, payload);
+        toast({
+          title: 'Due balance updated',
+          description: 'Manual due adjustment invoice created.',
+          status: 'success',
+          duration: 3000,
+          isClosable: true
+        });
+      } else if (paymentForm.type === 'add_advance') {
+        const payload = {
+          amount: amountValue,
+          ...(description ? { description } : {})
+        };
+        if (paymentForm.advance_start_date) payload.advance_start_date = paymentForm.advance_start_date;
+        if (paymentForm.advance_end_date) payload.advance_end_date = paymentForm.advance_end_date;
+        const occurredAt = parseDateTimeLocalToISO(paymentForm.occurred_at);
+        if (occurredAt) payload.occurred_at = occurredAt;
+        if (paymentForm.payment_method) payload.payment_method = paymentForm.payment_method;
+        if (paymentForm.deposit_account_id) payload.deposit_account_id = paymentForm.deposit_account_id;
+        await customerService.addAdvance(selectedCustomer.id, payload);
+        toast({
+          title: 'Advance balance updated',
+          description: 'Manual advance invoice created.',
+          status: 'success',
+          duration: 3000,
+          isClosable: true
+        });
+      } else {
+        const payload = {
+          type: paymentForm.type,
+          amount: amountValue,
+          ...(description ? { description } : {})
+        };
+        if (paymentForm.advance_start_date) payload.advance_start_date = paymentForm.advance_start_date;
+        if (paymentForm.advance_end_date) payload.advance_end_date = paymentForm.advance_end_date;
+        await customerService.recordPayment(selectedCustomer.id, payload);
+        toast({
+          title: paymentForm.type === 'advance' ? 'Advance recorded' : 'Payment recorded',
+          status: 'success',
+          duration: 3000,
+          isClosable: true
+        });
+      }
+      handlePaymentModalClose();
+      await loadCustomers();
+    } catch (e) {
+      toast({
+        title: 'Action failed',
+        description: e?.message || 'Unable to complete request',
+        status: 'error',
+        duration: 4000,
+        isClosable: true
+      });
+    } finally {
+      setSavingPayment(false);
+    }
+  };
+  const manualDueSelected = paymentForm.type === 'add_due';
+  const manualAdvanceSelected = paymentForm.type === 'add_advance';
+  const requiresAdvanceWindow = paymentForm.type === 'advance' || manualAdvanceSelected;
+  const showManualTimingFields = manualDueSelected || manualAdvanceSelected;
+  const showManualPaymentFields = manualDueSelected || manualAdvanceSelected;
 
   const handleAddCustomer = async () => {
     if (!newCustomer.name) return;
@@ -439,7 +560,7 @@ function CustomerManagement() {
                   onEdit={handleEditCustomer}
                   onDelete={async (row) => { if (!window.confirm('Delete customer?')) return; try { await customerService.delete(row.id); await loadCustomers(); } catch (e) { alert(e?.message || 'Delete failed'); } }}
                   onViewProfile={(row) => { window.location.href = `#/admin/customers/${row.id}`; }}
-                  onRecordPayment={(row) => { setSelectedCustomer(row); onPaymentOpen(); }}
+                  onRecordPayment={(row) => { setSelectedCustomer(row); setPaymentForm(getDefaultPaymentForm()); onPaymentOpen(); }}
                   onCreateSale={(row) => { setSelectedCustomer(row); onSaleOpen(); }}
                   onRate={(row) => { setSelectedCustomer(row); setRatingForm({ stars: 5, note: '' }); onRateOpen(); }}
                 />
@@ -507,33 +628,73 @@ function CustomerManagement() {
       </Modal>
 
       {/* Payment Modal */}
-      <Modal isOpen={isPaymentOpen} onClose={onPaymentClose}>
+      <Modal isOpen={isPaymentOpen} onClose={handlePaymentModalClose}>
         <ModalOverlay />
         <ModalContent>
-          <ModalHeader color={textColor}>Record Payment / Advance</ModalHeader>
+          <ModalHeader color={textColor}>Record Payment / Manual Adjustment</ModalHeader>
           <ModalCloseButton />
           <ModalBody>
             <VStack spacing='12px'>
               <FormControl>
                 <FormLabel>Type</FormLabel>
                 <Select value={paymentForm.type} onChange={(e)=> setPaymentForm({...paymentForm, type: e.target.value})}>
-                  <option value='payment'>payment</option>
-                  <option value='advance'>advance</option>
+                  <option value='payment'>Record payment (reduces due)</option>
+                  <option value='advance'>Record advance (uses advance balance)</option>
+                  <option value='add_due'>Add due balance manually</option>
+                  <option value='add_advance'>Add advance balance manually</option>
                 </Select>
+                <FormHelperText fontSize='xs'>
+                  Manual adjustments automatically create the accounting invoices described in CUSTOMER_APIS.md.
+                </FormHelperText>
               </FormControl>
               <FormControl>
                 <FormLabel>Amount</FormLabel>
-                <Input type='number' value={paymentForm.amount} onChange={(e)=> setPaymentForm({...paymentForm, amount: e.target.value})} />
+                <Input type='number' min='0' step='any' value={paymentForm.amount} onChange={(e)=> setPaymentForm({...paymentForm, amount: e.target.value})} />
               </FormControl>
               <FormControl>
                 <FormLabel>Description</FormLabel>
                 <Input value={paymentForm.description} onChange={(e)=> setPaymentForm({...paymentForm, description: e.target.value})} />
               </FormControl>
+              {requiresAdvanceWindow && (
+                <HStack spacing='12px' align='flex-start' w='100%'>
+                  <FormControl>
+                    <FormLabel>Advance Start Date</FormLabel>
+                    <Input type='date' value={paymentForm.advance_start_date} onChange={(e)=> setPaymentForm({...paymentForm, advance_start_date: e.target.value})} />
+                  </FormControl>
+                  <FormControl>
+                    <FormLabel>Advance End Date</FormLabel>
+                    <Input type='date' value={paymentForm.advance_end_date} onChange={(e)=> setPaymentForm({...paymentForm, advance_end_date: e.target.value})} />
+                  </FormControl>
+                </HStack>
+              )}
+              {showManualTimingFields && (
+                <FormControl>
+                  <FormLabel>Occurred At</FormLabel>
+                  <Input type='datetime-local' value={paymentForm.occurred_at} onChange={(e)=> setPaymentForm({...paymentForm, occurred_at: e.target.value})} />
+                </FormControl>
+              )}
+              {showManualPaymentFields && (
+                <FormControl>
+                  <FormLabel>Payment Method</FormLabel>
+                  <Select value={paymentForm.payment_method} onChange={(e)=> setPaymentForm({...paymentForm, payment_method: e.target.value})}>
+                    <option value='cash'>Cash</option>
+                    <option value='card'>Card</option>
+                    <option value='other'>Other</option>
+                  </Select>
+                </FormControl>
+              )}
+              {manualAdvanceSelected && (
+                <FormControl>
+                  <FormLabel>Deposit Account ID</FormLabel>
+                  <Input value={paymentForm.deposit_account_id} onChange={(e)=> setPaymentForm({...paymentForm, deposit_account_id: e.target.value})} placeholder='Optional ledger account id' />
+                  <FormHelperText fontSize='xs'>Optional: specify the cash/bank ledger receiving this advance.</FormHelperText>
+                </FormControl>
+              )}
             </VStack>
           </ModalBody>
           <ModalFooter>
-            <Button onClick={onPaymentClose} mr='3'>Cancel</Button>
-            <Button bg='#FF8D28' color='white' _hover={{bg:'#E67E22'}} onClick={async ()=> { try { await customerService.recordPayment(selectedCustomer.id, { ...paymentForm, amount: Number(paymentForm.amount||0) }); onPaymentClose(); await loadCustomers(); } catch(e){ alert(e?.message||'Failed'); } }}>Save</Button>
+            <Button onClick={handlePaymentModalClose} mr='3'>Cancel</Button>
+            <Button bg='#FF8D28' color='white' _hover={{bg:'#E67E22'}} onClick={handlePaymentSubmit} isLoading={savingPayment}>Save</Button>
           </ModalFooter>
         </ModalContent>
       </Modal>

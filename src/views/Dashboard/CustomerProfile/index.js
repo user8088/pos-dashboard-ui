@@ -45,6 +45,7 @@ import {
   DrawerFooter,
   FormControl,
   FormLabel,
+  FormHelperText,
   NumberInput,
   NumberInputField,
   Textarea,
@@ -52,8 +53,9 @@ import {
   Alert,
   AlertIcon,
   useDisclosure,
+  Stack,
 } from '@chakra-ui/react';
-import { DownloadIcon, PhoneIcon, EditIcon, ChevronDownIcon, SearchIcon, CheckIcon, WarningIcon, RepeatIcon } from '@chakra-ui/icons';
+import { DownloadIcon, PhoneIcon, EditIcon, ChevronDownIcon, SearchIcon, CheckIcon, WarningIcon, RepeatIcon, ArrowUpIcon, ArrowDownIcon } from '@chakra-ui/icons';
 import Card from 'components/Card/Card';
 import CardBody from 'components/Card/CardBody';
 import CardHeader from 'components/Card/CardHeader';
@@ -61,10 +63,12 @@ import { useParams, useHistory } from 'react-router-dom';
 import { customerService } from 'services/customerService';
 import { invoiceService } from 'services/invoiceService';
 
+const getNowDateTimeLocal = () => new Date().toISOString().slice(0, 16);
+
 export default function CustomerProfile() {
   const { id } = useParams();
   const history = useHistory();
-  const textColor = useColorModeValue('gray.700','white');
+  const textColor = useColorModeValue('gray.700', 'white');
   const sectionBg = useColorModeValue('gray.50', 'gray.700');
   const itemBg = useColorModeValue('white', 'gray.800');
   const itemBorder = useColorModeValue('gray.200', 'gray.600');
@@ -97,6 +101,64 @@ export default function CustomerProfile() {
   const [submittingRefund, setSubmittingRefund] = React.useState(false);
   const [refundError, setRefundError] = React.useState(null);
   const [refundLoadingInvoiceId, setRefundLoadingInvoiceId] = React.useState(null);
+  const [manualDueForm, setManualDueForm] = React.useState({
+    amount: '',
+    description: '',
+    occurred_at: getNowDateTimeLocal(),
+    payment_method: 'cash',
+  });
+  const [manualAdvanceForm, setManualAdvanceForm] = React.useState({
+    amount: '',
+    description: '',
+    advance_start_date: '',
+    advance_end_date: '',
+    occurred_at: getNowDateTimeLocal(),
+    payment_method: 'cash',
+    deposit_account_id: '',
+  });
+  const [savingManualDue, setSavingManualDue] = React.useState(false);
+  const [savingManualAdvance, setSavingManualAdvance] = React.useState(false);
+  const [manualPaymentForm, setManualPaymentForm] = React.useState({
+    amount: '',
+    description: '',
+    payment_method: 'cash',
+  });
+  const [savingManualPayment, setSavingManualPayment] = React.useState(false);
+  const resetManualDueForm = React.useCallback(() => {
+    setManualDueForm({
+      amount: '',
+      description: '',
+      occurred_at: getNowDateTimeLocal(),
+      payment_method: 'cash',
+    });
+  }, []);
+  const resetManualAdvanceForm = React.useCallback(() => {
+    setManualAdvanceForm({
+      amount: '',
+      description: '',
+      advance_start_date: '',
+      advance_end_date: '',
+      occurred_at: getNowDateTimeLocal(),
+      payment_method: 'cash',
+      deposit_account_id: '',
+    });
+  }, []);
+  const resetManualPaymentForm = React.useCallback(() => {
+    setManualPaymentForm({
+      amount: '',
+      description: '',
+      payment_method: 'cash',
+    });
+  }, []);
+  const parseDateTimeLocalToISO = React.useCallback((value) => {
+    if (!value) return undefined;
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return undefined;
+    return parsed.toISOString();
+  }, []);
+  const due = Number(data?.due_balance || 0);
+  const adv = Number(data?.advance_balance || 0);
+  const customerName = data?.name || `#${id}`;
 
   const refreshProfile = React.useCallback(async ({ silent = false } = {}) => {
     if (!silent) setLoading(true);
@@ -127,6 +189,15 @@ export default function CustomerProfile() {
       mountedRef.current = false;
     };
   }, [refreshProfile]);
+
+  React.useEffect(() => {
+    if (!data) return;
+    setManualAdvanceForm((prev) => ({
+      ...prev,
+      advance_start_date: prev.advance_start_date || data.advance_start_date || '',
+      advance_end_date: prev.advance_end_date || data.advance_end_date || '',
+    }));
+  }, [data?.advance_start_date, data?.advance_end_date]);
 
   // Calculate total spent from all invoices
   const totalSpent = React.useMemo(() => {
@@ -169,23 +240,23 @@ export default function CustomerProfile() {
   const filteredInvoicesWithBreakdown = React.useMemo(() => {
     const invoiceList = data?.invoices || invoices;
     if (!invoiceList || invoiceList.length === 0) return [];
-    
+
     const period = parseInt(paymentPeriod);
     const cutoffDate = new Date();
     cutoffDate.setMonth(cutoffDate.getMonth() - period);
-    
+
     const filtered = invoiceList
       .filter(inv => {
         if (!inv.created_at) return false;
         const invDate = new Date(inv.created_at);
         return invDate >= cutoffDate;
       });
-    
+
     // Sort based on FIFO/LIFO selection
     const sorted = paymentOrder === 'FIFO'
       ? [...filtered].sort((a, b) => new Date(a.created_at || 0) - new Date(b.created_at || 0)) // Oldest first
       : [...filtered].sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0)); // Newest first
-    
+
     return sorted
       .map(inv => {
         const total = Number(inv.total || inv.total_amount || 0);
@@ -195,11 +266,11 @@ export default function CustomerProfile() {
         if (advanceApplied === 0 && inv.payment_as === 'advance' && paid > 0) {
           advanceApplied = paid;
         }
-        
+
         // Determine payment method
         const paymentMethod = inv.payment_method || inv.payment_mode || 'N/A';
         const paymentBreakdown = inv.payment_breakdown || [];
-        
+
         return {
           ...inv,
           total,
@@ -213,9 +284,125 @@ export default function CustomerProfile() {
       });
   }, [data, invoices, paymentPeriod, paymentOrder]);
 
+  // Unified Transactions List (Invoices + Payments) for History
+  const unifiedTransactions = React.useMemo(() => {
+    const list = [];
+    const invoiceList = data?.invoices || invoices || [];
+
+    invoiceList.forEach(inv => {
+      const invoiceNote = (inv.notes || inv.note || '').toLowerCase();
+      const isManualDueInvoice = invoiceNote.includes('due payment invoice');
+      const isManualAdvanceInvoice = invoiceNote.includes('cash receiving invoice');
+      const invoiceTitle = inv.invoice_number || `Invoice #${inv.id}`;
+      const invoiceDescription = isManualDueInvoice
+        ? 'Manual due adjustment'
+        : isManualAdvanceInvoice
+          ? 'Manual advance adjustment'
+          : 'Credit sale';
+      const invoiceBadgeLabel = isManualDueInvoice
+        ? 'Due Adj.'
+        : isManualAdvanceInvoice
+          ? 'Advance Adj.'
+          : 'Credit';
+      const invoiceIsPositive = !isManualDueInvoice;
+
+      // Add Invoice (Sale / Adjustment)
+      list.push({
+        id: `inv-${inv.id}`,
+        type: 'invoice',
+        title: invoiceTitle,
+        description: invoiceDescription,
+        date: inv.created_at,
+        amount: Number(inv.total || inv.total_amount || 0),
+        isPositive: invoiceIsPositive,
+        badgeLabel: invoiceBadgeLabel,
+        raw: inv
+      });
+
+      // Add Payments - Red/Debit in this specific UI design
+      const payments = inv.payment_breakdown || [];
+      const paidAmount = Number(inv.paid_amount || 0);
+      const advance = Number(inv.advance_amount || inv.advance_applied || 0);
+
+      // If we have detailed breakdown
+      if (payments.length > 0) {
+        payments.forEach((pay, idx) => {
+          list.push({
+            id: `pay-${inv.id}-${idx}`,
+            type: 'payment',
+            title: `Payment for #${inv.id}`,
+            description: pay.payment_method || 'Payment',
+            date: pay.date || inv.created_at,
+            amount: Number(pay.amount || 0),
+            isPositive: false, // Red/Down
+            badgeLabel: 'Debit',
+            raw: pay
+          });
+        });
+      }
+      // Fallback if no breakdown but paid amount exists
+      else if (paidAmount > 0) {
+        list.push({
+          id: `pay-${inv.id}-main`,
+          type: 'payment',
+          title: `Payment for #${inv.id}`,
+          description: inv.payment_method || 'Payment',
+          date: inv.created_at,
+          amount: paidAmount,
+          isPositive: false,
+          badgeLabel: 'Debit',
+          raw: inv
+        });
+      }
+
+      // Add Advance usage
+      if (advance > 0) {
+        list.push({
+          id: `adv-${inv.id}`,
+          type: 'payment',
+          title: `Advance applied to #${inv.id}`,
+          description: 'Advance Adjustment',
+          date: inv.created_at,
+          amount: advance,
+          isPositive: false,
+          badgeLabel: 'Debit',
+          raw: inv
+        });
+      }
+    });
+
+    // Sort Newest First (LIFO)
+    list.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+    // Calculate Running Balance (Backwards from Current Due)
+    // Assuming Current Due = Balance
+    let currentBalance = Number(data?.due_balance || 0);
+
+    const withBalance = list.map(item => {
+      const snapshotBalance = currentBalance;
+      // Update for next item (previous in time)
+      if (item.isPositive) {
+        // Invoice (Added to balance), so previous was Balance - Amount
+        currentBalance -= item.amount;
+      } else {
+        // Payment (Subtracted from balance), so previous was Balance + Amount
+        currentBalance += item.amount;
+      }
+      return { ...item, balance: snapshotBalance };
+    });
+
+    // Apply Date Filter
+    const period = parseInt(paymentPeriod);
+    const cutoffDate = new Date();
+    cutoffDate.setMonth(cutoffDate.getMonth() - period);
+
+    return withBalance.filter(item => new Date(item.date) >= cutoffDate);
+
+  }, [data, invoices, paymentPeriod]);
+
   const handleDownload = async (invoiceId) => {
     if (downloadingIds.has(invoiceId)) return;
-    
+
     try {
       setDownloadingIds(prev => new Set(prev).add(invoiceId));
       await invoiceService.downloadInvoice(invoiceId);
@@ -379,6 +566,30 @@ export default function CustomerProfile() {
     }, 0);
   }, [selectedRefundItems]);
 
+  const manualPaymentPreview = React.useMemo(() => {
+    const amountValue = Number(manualPaymentForm.amount || 0);
+    if (!Number.isFinite(amountValue) || amountValue <= 0) {
+      return {
+        amountValue: 0,
+        dueReduction: 0,
+        excessAdvance: 0,
+        newDue: due,
+        newAdvance: adv,
+      };
+    }
+    const dueReduction = Math.min(due, amountValue);
+    const newDue = Math.max(0, due - dueReduction);
+    const excessAdvance = Math.max(0, amountValue - dueReduction);
+    const newAdvance = adv + excessAdvance;
+    return {
+      amountValue,
+      dueReduction,
+      excessAdvance,
+      newDue,
+      newAdvance,
+    };
+  }, [manualPaymentForm.amount, due, adv]);
+
   const handleSubmitRefund = React.useCallback(async () => {
     if (!refundContext) return;
     if (selectedRefundItems.length === 0) {
@@ -443,6 +654,180 @@ export default function CustomerProfile() {
     refreshProfile,
   ]);
 
+  const handleManualDueSubmit = React.useCallback(async () => {
+    const amountValue = Number(manualDueForm.amount || 0);
+    if (!Number.isFinite(amountValue) || amountValue <= 0) {
+      toast({
+        title: 'Enter a valid due amount',
+        status: 'error',
+        duration: 3000,
+        isClosable: true,
+      });
+      return;
+    }
+    setSavingManualDue(true);
+    try {
+      const payload = {
+        amount: amountValue,
+      };
+      if (manualDueForm.description?.trim()) payload.description = manualDueForm.description.trim();
+      const occurredAt = parseDateTimeLocalToISO(manualDueForm.occurred_at);
+      if (occurredAt) payload.occurred_at = occurredAt;
+      if (manualDueForm.payment_method) payload.payment_method = manualDueForm.payment_method;
+      const resp = await customerService.addDue(id, payload);
+      toast({
+        title: 'Due balance increased',
+        description: resp?.message || 'Due Payment Invoice created automatically.',
+        status: 'success',
+        duration: 3000,
+        isClosable: true,
+      });
+      resetManualDueForm();
+      await refreshProfile({ silent: true });
+    } catch (error) {
+      toast({
+        title: 'Failed to add due',
+        description: error?.message || 'An error occurred while adjusting due balance.',
+        status: 'error',
+        duration: 4000,
+        isClosable: true,
+      });
+    } finally {
+      setSavingManualDue(false);
+    }
+  }, [
+    id,
+    manualDueForm,
+    parseDateTimeLocalToISO,
+    refreshProfile,
+    resetManualDueForm,
+    toast,
+  ]);
+
+  const handleManualAdvanceSubmit = React.useCallback(async () => {
+    const amountValue = Number(manualAdvanceForm.amount || 0);
+    if (!Number.isFinite(amountValue) || amountValue <= 0) {
+      toast({
+        title: 'Enter a valid advance amount',
+        status: 'error',
+        duration: 3000,
+        isClosable: true,
+      });
+      return;
+    }
+    if (
+      manualAdvanceForm.advance_start_date &&
+      manualAdvanceForm.advance_end_date &&
+      manualAdvanceForm.advance_end_date < manualAdvanceForm.advance_start_date
+    ) {
+      toast({
+        title: 'Invalid advance window',
+        description: 'End date must be after or equal to start date.',
+        status: 'error',
+        duration: 4000,
+        isClosable: true,
+      });
+      return;
+    }
+    setSavingManualAdvance(true);
+    try {
+      const payload = {
+        amount: amountValue,
+      };
+      if (manualAdvanceForm.description?.trim()) payload.description = manualAdvanceForm.description.trim();
+      if (manualAdvanceForm.advance_start_date) payload.advance_start_date = manualAdvanceForm.advance_start_date;
+      if (manualAdvanceForm.advance_end_date) payload.advance_end_date = manualAdvanceForm.advance_end_date;
+      const occurredAt = parseDateTimeLocalToISO(manualAdvanceForm.occurred_at);
+      if (occurredAt) payload.occurred_at = occurredAt;
+      if (manualAdvanceForm.payment_method) payload.payment_method = manualAdvanceForm.payment_method;
+      if (manualAdvanceForm.deposit_account_id?.trim()) payload.deposit_account_id = manualAdvanceForm.deposit_account_id.trim();
+      const resp = await customerService.addAdvance(id, payload);
+      toast({
+        title: 'Advance balance increased',
+        description: resp?.message || 'Cash Receiving Invoice created automatically.',
+        status: 'success',
+        duration: 3000,
+        isClosable: true,
+      });
+      resetManualAdvanceForm();
+      await refreshProfile({ silent: true });
+    } catch (error) {
+      toast({
+        title: 'Failed to add advance',
+        description: error?.message || 'An error occurred while adjusting advance balance.',
+        status: 'error',
+        duration: 4000,
+        isClosable: true,
+      });
+    } finally {
+      setSavingManualAdvance(false);
+    }
+  }, [
+    id,
+    manualAdvanceForm,
+    parseDateTimeLocalToISO,
+    refreshProfile,
+    resetManualAdvanceForm,
+    toast,
+  ]);
+
+  const handleManualPaymentSubmit = React.useCallback(async () => {
+    const amountValue = Number(manualPaymentForm.amount || 0);
+    if (!Number.isFinite(amountValue) || amountValue <= 0) {
+      toast({
+        title: 'Enter a valid payment amount',
+        status: 'error',
+        duration: 3000,
+        isClosable: true,
+      });
+      return;
+    }
+    setSavingManualPayment(true);
+    try {
+      const trimmedDescription = manualPaymentForm.description?.trim();
+      const payload = {
+        type: 'payment',
+        amount: amountValue,
+        ...(trimmedDescription ? { description: trimmedDescription } : {}),
+        payment_method: manualPaymentForm.payment_method,
+      };
+      const resp = await customerService.recordPayment(id, payload);
+      toast({
+        title: 'Payment recorded',
+        description:
+          manualPaymentPreview.dueReduction > 0
+            ? `Due reduced by PKR ${manualPaymentPreview.dueReduction.toLocaleString()}`
+            : 'Payment stored as advance',
+        status: 'success',
+        duration: 3000,
+        isClosable: true,
+      });
+      resetManualPaymentForm();
+      await refreshProfile({ silent: true });
+      return resp;
+    } catch (error) {
+      toast({
+        title: 'Payment failed',
+        description: error?.message || 'Unable to record payment',
+        status: 'error',
+        duration: 4000,
+        isClosable: true,
+      });
+    } finally {
+      setSavingManualPayment(false);
+    }
+  }, [
+    manualPaymentForm.amount,
+    manualPaymentForm.description,
+    manualPaymentForm.payment_method,
+    manualPaymentPreview.dueReduction,
+    customerService,
+    id,
+    toast,
+    resetManualPaymentForm,
+    refreshProfile,
+  ]);
+
   // Filter invoices based on search query
   const filteredInvoices = React.useMemo(() => {
     if (!invoiceSearch.trim()) return invoiceList;
@@ -451,9 +836,9 @@ export default function CustomerProfile() {
       const invNumber = (inv.invoice_number || `#${inv.id}`).toLowerCase();
       const total = String(inv.total || inv.total_amount || 0);
       const date = inv.created_at ? new Date(inv.created_at).toLocaleDateString().toLowerCase() : '';
-      return invNumber.includes(searchLower) || 
-             total.includes(searchLower) || 
-             date.includes(searchLower);
+      return invNumber.includes(searchLower) ||
+        total.includes(searchLower) ||
+        date.includes(searchLower);
     });
   }, [invoiceList, invoiceSearch]);
 
@@ -467,11 +852,11 @@ export default function CustomerProfile() {
       const paid = String(inv.paid_amount || 0);
       const due = String(inv.due_amount || 0);
       const date = inv.created_at ? new Date(inv.created_at).toLocaleDateString().toLowerCase() : '';
-      return invNumber.includes(searchLower) || 
-             total.includes(searchLower) || 
-             paid.includes(searchLower) ||
-             due.includes(searchLower) ||
-             date.includes(searchLower);
+      return invNumber.includes(searchLower) ||
+        total.includes(searchLower) ||
+        paid.includes(searchLower) ||
+        due.includes(searchLower) ||
+        date.includes(searchLower);
     });
   }, [invoiceList, paymentSearch]);
 
@@ -479,7 +864,7 @@ export default function CustomerProfile() {
     setStatementLoading(true);
     try {
       let filteredInvoices = invoiceList;
-      
+
       if (month) {
         filteredInvoices = invoiceList.filter(inv => {
           if (!inv.created_at) return false;
@@ -537,11 +922,11 @@ export default function CustomerProfile() {
             </thead>
             <tbody>
               ${filteredInvoices.map(inv => {
-                const total = Number(inv.total || inv.total_amount || 0);
-                const paid = Number(inv.paid_amount || 0);
-                const due = Number(inv.due_amount || 0);
-                const status = due > 0 ? 'Due' : 'Paid';
-                return `
+        const total = Number(inv.total || inv.total_amount || 0);
+        const paid = Number(inv.paid_amount || 0);
+        const due = Number(inv.due_amount || 0);
+        const status = due > 0 ? 'Due' : 'Paid';
+        return `
                   <tr>
                     <td>${inv.invoice_number || `#${inv.id}`}</td>
                     <td>${inv.created_at ? new Date(inv.created_at).toLocaleDateString() : 'N/A'}</td>
@@ -551,7 +936,7 @@ export default function CustomerProfile() {
                     <td>${status}</td>
                   </tr>
                 `;
-              }).join('')}
+      }).join('')}
             </tbody>
           </table>
         </body>
@@ -590,529 +975,892 @@ export default function CustomerProfile() {
   };
 
   if (loading) return (<Flex align='center' justify='center' minH='240px'><Spinner /></Flex>);
-  if (!data) return (<Box pt={{ base: '120px', md: '75px' }}><Button onClick={()=> history.push('/admin/customer-management')}>Back</Button><Text color={textColor} mt='4'>Customer not found.</Text></Box>);
+  if (!data) return (<Box pt={{ base: '120px', md: '75px' }}><Button onClick={() => history.push('/admin/customer-management')}>Back</Button><Text color={textColor} mt='4'>Customer not found.</Text></Box>);
 
-  const due = Number(data.due_balance || 0);
-  const adv = Number(data.advance_balance || 0);
-  const name = data.name || `#${id}`;
+  const name = customerName;
 
   return (
     <>
-    <Box pt={{ base: '120px', md: '75px' }}>
-      {/* Header Section */}
-      <Card mb='24px' bg={cardBg}>
-        <CardBody p='24px'>
-          <Flex direction={{ base: 'column', md: 'row' }} align={{ base: 'start', md: 'center' }} justify='space-between' mb='20px'>
-            <Flex align='center' gap='20px'>
-              <Avatar size='xl' name={name} bg='#FF8D28' />
-              <Box>
-                <HStack align='center' mb='8px'>
-                  <Text fontSize='2xl' fontWeight='bold' color={textColor}>{name}</Text>
-                  <Badge colorScheme={due > 0 ? 'orange' : 'green'} fontSize='sm' px='12px' py='4px' borderRadius='full'>
-                    {due > 0 ? 'Has Dues' : 'In Good Standing'}
-                  </Badge>
-                </HStack>
-                {data.serial_id && (
-                  <Text fontSize='sm' color='gray.500' mb='4px'>Customer ID: {data.serial_id}</Text>
-                )}
-                {data.phone && (
-                  <HStack fontSize='sm' color='gray.600' mb='4px'>
-                    <PhoneIcon />
-                    <Text>{data.phone}</Text>
+      <Box pt={{ base: '120px', md: '75px' }}>
+        {/* Header Section */}
+        <Card mb='24px' bg={cardBg}>
+          <CardBody p='24px'>
+            <Flex direction={{ base: 'column', md: 'row' }} align={{ base: 'start', md: 'center' }} justify='space-between' mb='20px'>
+              <Flex align='center' gap='20px'>
+                <Avatar size='xl' name={name} bg='#FF8D28' />
+                <Box>
+                  <HStack align='center' mb='8px'>
+                    <Text fontSize='2xl' fontWeight='bold' color={textColor}>{name}</Text>
+                    <Badge colorScheme={due > 0 ? 'orange' : 'green'} fontSize='sm' px='12px' py='4px' borderRadius='full'>
+                      {due > 0 ? 'Has Dues' : 'In Good Standing'}
+                    </Badge>
                   </HStack>
-                )}
-                {data.address && (
-                  <Text fontSize='sm' color='gray.600'>{data.address}</Text>
-                )}
-              </Box>
-            </Flex>
-            <HStack spacing='12px' mt={{ base: '16px', md: '0' }}>
-              <Button
-                leftIcon={<EditIcon />}
-                variant='outline'
-                onClick={() => history.push(`/admin/customer-management?edit=${id}`)}
-              >
-                Edit
-              </Button>
-              <Menu>
-                <MenuButton
-                  as={Button}
-                  rightIcon={<ChevronDownIcon />}
-                  colorScheme='blue'
-                  isLoading={statementLoading}
-                  loadingText='Generating...'
+                  {data.serial_id && (
+                    <Text fontSize='sm' color='gray.500' mb='4px'>Customer ID: {data.serial_id}</Text>
+                  )}
+                  {data.phone && (
+                    <HStack fontSize='sm' color='gray.600' mb='4px'>
+                      <PhoneIcon />
+                      <Text>{data.phone}</Text>
+                    </HStack>
+                  )}
+                  {data.address && (
+                    <Text fontSize='sm' color='gray.600'>{data.address}</Text>
+                  )}
+                </Box>
+              </Flex>
+              <HStack spacing='12px' mt={{ base: '16px', md: '0' }}>
+                <Button
+                  leftIcon={<EditIcon />}
+                  variant='outline'
+                  onClick={() => history.push(`/admin/customer-management?edit=${id}`)}
                 >
-                  Download E-Statement
-                </MenuButton>
-                <MenuList>
-                  <MenuItem onClick={() => generateEStatement(null)}>All Time</MenuItem>
-                  <MenuItem onClick={() => generateEStatement(filteredPaymentHistory[0]?.month)}>
-                    This Month ({filteredPaymentHistory[0]?.month || 'N/A'})
-                  </MenuItem>
-                  {filteredPaymentHistory.slice(0, 6).map(({ month }) => (
-                    <MenuItem key={month} onClick={() => generateEStatement(month)}>
-                      {new Date(month + '-01').toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                  Edit
+                </Button>
+                <Menu>
+                  <MenuButton
+                    as={Button}
+                    rightIcon={<ChevronDownIcon />}
+                    colorScheme='blue'
+                    isLoading={statementLoading}
+                    loadingText='Generating...'
+                  >
+                    Download E-Statement
+                  </MenuButton>
+                  <MenuList>
+                    <MenuItem onClick={() => generateEStatement(null)}>All Time</MenuItem>
+                    <MenuItem onClick={() => generateEStatement(filteredPaymentHistory[0]?.month)}>
+                      This Month ({filteredPaymentHistory[0]?.month || 'N/A'})
                     </MenuItem>
-                  ))}
-                </MenuList>
-              </Menu>
-              <Button variant='outline' onClick={()=> history.goBack()}>Back</Button>
-            </HStack>
-          </Flex>
-        </CardBody>
-      </Card>
-
-      {/* Stats Cards */}
-      <SimpleGrid columns={{ base: 1, md: 4 }} spacing='16px' mb='24px'>
-        <Card bg={cardBg}>
-          <CardBody p='20px'>
-            <Stat>
-              <StatLabel color='gray.600'>Total Spent</StatLabel>
-              <StatNumber fontSize='xl' color={textColor}>PKR {totalSpent.toFixed(2)}</StatNumber>
-            </Stat>
+                    {filteredPaymentHistory.slice(0, 6).map(({ month }) => (
+                      <MenuItem key={month} onClick={() => generateEStatement(month)}>
+                        {new Date(month + '-01').toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                      </MenuItem>
+                    ))}
+                  </MenuList>
+                </Menu>
+                <Button variant='outline' onClick={() => history.goBack()}>Back</Button>
+              </HStack>
+            </Flex>
           </CardBody>
         </Card>
-        <Card bg={cardBg}>
-          <CardBody p='20px'>
-            <Stat>
-              <StatLabel color='gray.600'>Due Balance</StatLabel>
-              <StatNumber fontSize='xl' color={due > 0 ? 'red.500' : 'green.500'}>PKR {due.toFixed(2)}</StatNumber>
-            </Stat>
-          </CardBody>
-        </Card>
-        <Card bg={cardBg}>
-          <CardBody p='20px'>
-            <Stat>
-              <StatLabel color='gray.600'>Advance Balance</StatLabel>
-              <StatNumber fontSize='xl' color='teal.500'>PKR {adv.toFixed(2)}</StatNumber>
-            </Stat>
-          </CardBody>
-        </Card>
-        <Card bg={cardBg}>
-          <CardBody p='20px'>
-            <Stat>
-              <StatLabel color='gray.600'>Total Invoices</StatLabel>
-              <StatNumber fontSize='xl' color={textColor}>{invoiceList.length}</StatNumber>
-            </Stat>
-          </CardBody>
-        </Card>
-      </SimpleGrid>
 
-      {/* Tabs */}
-      <Tabs colorScheme='blue' variant='enclosed'>
-        <TabList>
-          <Tab>Summary</Tab>
-          <Tab>Details</Tab>
-          <Tab>Payments</Tab>
-          <Tab>Invoices</Tab>
-        </TabList>
+        {/* Stats Cards */}
+        <SimpleGrid columns={{ base: 1, md: 4 }} spacing='16px' mb='24px'>
+          <Card bg={cardBg}>
+            <CardBody p='20px'>
+              <Stat>
+                <StatLabel color='gray.600'>Total Spent</StatLabel>
+                <StatNumber fontSize='xl' color={textColor}>PKR {totalSpent.toFixed(2)}</StatNumber>
+              </Stat>
+            </CardBody>
+          </Card>
+          <Card bg={cardBg}>
+            <CardBody p='20px'>
+              <Stat>
+                <StatLabel color='gray.600'>Due Balance</StatLabel>
+                <StatNumber fontSize='xl' color={due > 0 ? 'red.500' : 'green.500'}>PKR {due.toFixed(2)}</StatNumber>
+              </Stat>
+            </CardBody>
+          </Card>
+          <Card bg={cardBg}>
+            <CardBody p='20px'>
+              <Stat>
+                <StatLabel color='gray.600'>Advance Balance</StatLabel>
+                <StatNumber fontSize='xl' color='teal.500'>PKR {adv.toFixed(2)}</StatNumber>
+              </Stat>
+            </CardBody>
+          </Card>
+          <Card bg={cardBg}>
+            <CardBody p='20px'>
+              <Stat>
+                <StatLabel color='gray.600'>Total Invoices</StatLabel>
+                <StatNumber fontSize='xl' color={textColor}>{invoiceList.length}</StatNumber>
+              </Stat>
+            </CardBody>
+          </Card>
+        </SimpleGrid>
 
-        <TabPanels>
-          {/* Summary Tab */}
-          <TabPanel px={0} pt={6}>
-            <SimpleGrid columns={{ base: 1, lg: 2 }} spacing='24px'>
-              {/* Payment History Card */}
-              <Card bg={cardBg} w='100%' h='100%'>
-                <CardHeader pb='20px'>
-                  <Flex justify='space-between' align='center' w='100%' flexWrap='wrap' gap='12px'>
-                    <Text fontWeight='bold' color={textColor} fontSize='lg'>Payment History</Text>
-                    <HStack spacing='12px'>
-                      <Select
-                        size='sm'
-                        value={paymentOrder}
-                        onChange={(e) => setPaymentOrder(e.target.value)}
-                        w='120px'
-                      >
-                        <option value='LIFO'>LIFO (Newest)</option>
-                        <option value='FIFO'>FIFO (Oldest)</option>
-                      </Select>
-                      <Select
-                        size='sm'
-                        value={paymentPeriod}
-                        onChange={(e) => setPaymentPeriod(e.target.value)}
-                        w='180px'
-                      >
-                        <option value='3'>Last 3 months</option>
-                        <option value='6'>Last 6 months</option>
-                        <option value='12'>Last 12 months</option>
-                        <option value='24'>Last 24 months</option>
-                      </Select>
-                    </HStack>
-                  </Flex>
-                </CardHeader>
-                <CardBody pt={0} px='24px' pb='24px' w='100%'>
-                  <VStack align='stretch' spacing='16px' w='100%' maxH='600px' overflowY='auto'>
-                    {filteredInvoicesWithBreakdown.length > 0 ? (
-                      <>
-                        {filteredInvoicesWithBreakdown.map((inv) => {
-                          const invDate = new Date(inv.date || inv.created_at);
-                          const monthKey = `${invDate.getFullYear()}-${String(invDate.getMonth() + 1).padStart(2, '0')}`;
-                          const monthLabel = invDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-                          
-                          return (
-                            <Box 
-                              key={inv.id} 
-                              p='20px' 
-                              bg={sectionBg} 
-                              borderRadius='12px' 
-                              w='100%'
-                              minW='0'
-                              borderLeftWidth='4px'
-                              borderLeftColor={inv.due > 0 ? 'orange.400' : 'green.400'}
-                            >
-                              {/* Header */}
-                              <HStack justify='space-between' mb='16px' w='100%' spacing='16px' flexWrap='wrap'>
-                                <Box flex='1' minW='200px'>
-                                  <Text fontWeight='bold' fontSize='md' color={textColor} mb='4px'>
-                                    {inv.invoice_number || `Invoice #${inv.id}`}
-                                  </Text>
-                                  <Text fontSize='sm' color='gray.500'>
-                                    {invDate.toLocaleDateString('en-US', { 
-                                      month: 'long', 
-                                      day: 'numeric', 
-                                      year: 'numeric',
-                                      hour: '2-digit',
-                                      minute: '2-digit'
-                                    })}
-                                  </Text>
-                                </Box>
-                                <HStack spacing='8px'>
-                                  <IconButton
-                                    icon={<DownloadIcon />}
-                                    size='sm'
-                                    variant='outline'
-                                    colorScheme='orange'
-                                    onClick={() => handleDownload(inv.id)}
-                                    isLoading={downloadingIds.has(inv.id)}
-                                    aria-label='Download invoice'
-                                  />
-                                  <Badge 
-                                    colorScheme={inv.due > 0 ? 'orange' : 'green'} 
-                                    fontSize='sm' 
-                                    px='12px' 
-                                    py='4px'
-                                    borderRadius='full'
-                                  >
-                                    {inv.due > 0 ? 'Due' : 'Paid'}
-                                  </Badge>
-                                </HStack>
-                              </HStack>
+        {/* Tabs */}
+        <Tabs colorScheme='blue' variant='enclosed'>
+          <TabList>
+            <Tab>Summary</Tab>
+            <Tab>Details</Tab>
+            <Tab>Payments</Tab>
+            <Tab>Invoices</Tab>
+          </TabList>
 
-                              {/* Payment Breakdown */}
-                              <VStack align='stretch' spacing='12px' w='100%'>
-                                <SimpleGrid columns={{ base: 2, md: 4 }} spacing='12px' w='100%'>
-                                  <Box>
-                                    <Text fontSize='xs' color='gray.500' mb='4px' fontWeight='medium'>Total Amount</Text>
-                                    <Text fontWeight='bold' fontSize='md' color={textColor}>
-                                      PKR {inv.total.toFixed(2)}
-                                    </Text>
-                                    {inv.hidden_costs > 0 && (
-                                      <Text fontSize='xs' color='orange.500' fontWeight='medium' mt='2px'>
-                                        + PKR {Number(inv.hidden_costs || 0).toFixed(2)} hidden
-                                      </Text>
-                                    )}
-                                  </Box>
-                                  <Box>
-                                    <Text fontSize='xs' color='gray.500' mb='4px' fontWeight='medium'>Paid Amount</Text>
-                                    <Text fontWeight='semibold' fontSize='md' color='green.500'>
-                                      PKR {inv.paid.toFixed(2)}
-                                    </Text>
-                                  </Box>
-                                  {inv.advanceApplied > 0 && (
-                                    <Box>
-                                      <Text fontSize='xs' color='gray.500' mb='4px' fontWeight='medium'>Advance Applied</Text>
-                                      <Text fontWeight='semibold' fontSize='md' color='teal.500'>
-                                        PKR {inv.advanceApplied.toFixed(2)}
-                                      </Text>
-                                    </Box>
-                                  )}
-                                  <Box>
-                                    <Text fontSize='xs' color='gray.500' mb='4px' fontWeight='medium'>Due Amount</Text>
-                                    <Text fontWeight='semibold' fontSize='md' color={inv.due > 0 ? 'orange.500' : 'green.500'}>
-                                      PKR {inv.due.toFixed(2)}
-                                    </Text>
-                                  </Box>
-                                </SimpleGrid>
-
-                                {/* Payment Method Details */}
-                                <Box pt='12px' borderTopWidth='1px' borderColor={itemBorder}>
-                                  <Text fontSize='xs' color='gray.500' mb='8px' fontWeight='medium'>Payment Method</Text>
-                                  {inv.paymentBreakdown && inv.paymentBreakdown.length > 0 ? (
-                                    <VStack align='stretch' spacing='6px'>
-                                      {inv.paymentBreakdown.map((payment, idx) => (
-                                        <HStack key={idx} justify='space-between' fontSize='sm'>
-                                          <Text color={textColor} fontWeight='medium' textTransform='capitalize'>
-                                            {payment.payment_method || 'N/A'}
-                                          </Text>
-                                          <Text color={textColor} fontWeight='semibold'>
-                                            PKR {Number(payment.amount || 0).toFixed(2)}
-                                          </Text>
-                                        </HStack>
-                                      ))}
-                                    </VStack>
-                                  ) : (
-                                    <Text fontSize='sm' color={textColor} fontWeight='medium' textTransform='capitalize'>
-                                      {inv.paymentMethod || 'N/A'}
-                                    </Text>
-                                  )}
-                                </Box>
-
-                                {/* Progress Bar */}
-                                {inv.total > 0 && (
-                                  <Box mt='8px'>
-                                    <HStack justify='space-between' fontSize='xs' color='gray.600' mb='4px'>
-                                      <Text>Payment Progress</Text>
-                                      <Text>
-                                        {(() => {
-                                          const totalPaid = inv.paid + inv.advanceApplied;
-                                          return ((totalPaid / inv.total) * 100).toFixed(1);
-                                        })()}%
-                                      </Text>
-                                    </HStack>
-                                    <Box h='8px' bg='gray.200' borderRadius='4px' overflow='hidden' w='100%'>
-                                      <Box
-                                        h='100%'
-                                        bg={inv.due > 0 ? 'orange.400' : 'green.400'}
-                                        w={`${Math.min(100, ((inv.paid + inv.advanceApplied) / inv.total) * 100)}%`}
-                                        transition='width 0.3s'
-                                        borderRadius='4px'
-                                      />
-                                    </Box>
-                                  </Box>
-                                )}
-                              </VStack>
-                            </Box>
-                          );
-                        })}
-                      </>
-                    ) : (
-                      <Text color='gray.500' textAlign='center' py='40px' w='100%'>No payment history available</Text>
-                    )}
-                  </VStack>
-                </CardBody>
-              </Card>
-
-              {/* Quick Stats Cards */}
-              <VStack spacing='16px' align='stretch' w='100%'>
-                {/* In Good Standing Card */}
-                <Card bg={cardBg} w='100%'>
-                  <CardBody p='24px' w='100%'>
-                    <HStack mb='16px' align='start'>
-                      <Box
-                        w='48px'
-                        h='48px'
-                        borderRadius='full'
-                        bg={due > 0 ? 'orange.100' : 'green.100'}
-                        display='flex'
-                        alignItems='center'
-                        justifyContent='center'
-                        flexShrink={0}
-                      >
-                        {due > 0 ? (
-                          <WarningIcon color='orange.500' boxSize='24px' />
-                        ) : (
-                          <CheckIcon color='green.500' boxSize='24px' />
-                        )}
-                      </Box>
-                      <Box flex='1' minW='0'>
-                        <Text fontWeight='bold' fontSize='lg' color={textColor} mb='4px'>
-                          {due > 0 ? 'Has Outstanding Dues' : 'In Good Standing'}
-                        </Text>
-                        <Text fontSize='sm' color='gray.500'>
-                          Last payment: {(() => {
-                            if (!invoiceList || invoiceList.length === 0) return 'N/A';
-                            const lastPaid = invoiceList
-                              .filter(inv => {
-                                const paid = Number(inv.paid_amount || 0);
-                                const advance = Number(inv.advance_amount || inv.advance_applied || 0);
-                                return paid > 0 || advance > 0;
-                              })
-                              .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))[0];
-                            return lastPaid?.created_at
-                              ? new Date(lastPaid.created_at).toLocaleDateString('en-US', { 
-                                  month: 'short', 
-                                  day: 'numeric', 
-                                  year: 'numeric' 
-                                })
-                              : 'N/A';
-                          })()}
-                        </Text>
-                      </Box>
-                    </HStack>
-                    {due > 0 && (
-                      <Text fontSize='md' color='orange.600' fontWeight='semibold'>
-                        Amount Due: PKR {due.toFixed(2)}
-                      </Text>
-                    )}
-                  </CardBody>
-                </Card>
-
-                {/* Customer Details Card */}
-                <Card bg={cardBg} w='100%'>
-                  <CardHeader pb='16px'>
-                    <Text fontWeight='bold' color={textColor} fontSize='lg'>Customer Information</Text>
+          <TabPanels>
+            {/* Summary Tab */}
+            <TabPanel px={0} pt={6}>
+              <SimpleGrid columns={{ base: 1, lg: 2 }} spacing='24px'>
+                {/* Payment History Card */}
+                <Card bg={cardBg} w='100%' h='100%'>
+                  <CardHeader pb='20px'>
+                    <Flex justify='space-between' align='center' w='100%' flexWrap='wrap' gap='12px'>
+                      <Text fontWeight='bold' color={textColor} fontSize='lg'>Payment History</Text>
+                      <HStack spacing='12px'>
+                        <Select
+                          size='sm'
+                          value={paymentOrder}
+                          onChange={(e) => setPaymentOrder(e.target.value)}
+                          w='120px'
+                        >
+                          <option value='LIFO'>LIFO (Newest)</option>
+                          <option value='FIFO'>FIFO (Oldest)</option>
+                        </Select>
+                        <Select
+                          size='sm'
+                          value={paymentPeriod}
+                          onChange={(e) => setPaymentPeriod(e.target.value)}
+                          w='180px'
+                        >
+                          <option value='3'>Last 3 months</option>
+                          <option value='6'>Last 6 months</option>
+                          <option value='12'>Last 12 months</option>
+                          <option value='24'>Last 24 months</option>
+                        </Select>
+                      </HStack>
+                    </Flex>
                   </CardHeader>
                   <CardBody pt={0} px='24px' pb='24px' w='100%'>
-                    <VStack align='stretch' spacing='16px' w='100%'>
-                      {data.serial_id && (
-                        <Box w='100%'>
-                          <Text fontSize='sm' color='gray.500' mb='6px' fontWeight='medium'>Customer ID</Text>
-                          <Text fontWeight='semibold' fontSize='md' color={textColor}>{data.serial_id}</Text>
-                        </Box>
-                      )}
-                      {data.phone && (
-                        <>
-                          <Divider />
-                          <Box w='100%'>
-                            <Text fontSize='sm' color='gray.500' mb='6px' fontWeight='medium'>Phone Number</Text>
-                            <Text fontWeight='semibold' fontSize='md' color={textColor}>{data.phone}</Text>
+                    <VStack align='stretch' spacing='16px' w='100%' maxH='600px' overflowY='auto'>
+                      {unifiedTransactions.length > 0 ? (
+                        unifiedTransactions.map((txn) => (
+                          <Box
+                            key={txn.id}
+                            p='16px'
+                            bg='white'
+                            _dark={{ bg: 'gray.700' }}
+                            borderRadius='12px'
+                            w='100%'
+                            boxShadow='sm'
+                            borderLeftWidth='4px'
+                            borderLeftColor={txn.isPositive ? 'green.400' : 'red.400'}
+                          >
+                            <Flex justify='space-between' align='flex-start' mb='8px'>
+                              <HStack spacing='8px'>
+                                <Badge
+                                  colorScheme={txn.isPositive ? 'green' : 'red'}
+                                  borderRadius='full'
+                                  px='8px'
+                                  py='2px'
+                                  display='flex'
+                                  alignItems='center'
+                                  gap='4px'
+                                >
+                                  {txn.badgeLabel}
+                                  {txn.isPositive ? <ArrowUpIcon /> : <ArrowDownIcon />}
+                                </Badge>
+                              </HStack>
+                              <VStack align='flex-end' spacing='0'>
+                                <Text
+                                  fontWeight='bold'
+                                  fontSize='lg'
+                                  color={txn.isPositive ? 'green.500' : 'red.500'}
+                                >
+                                  {txn.isPositive ? '+' : '-'}PKR {txn.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </Text>
+                                <Text fontSize='xs' color='gray.400'>
+                                  Balance: PKR {txn.balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </Text>
+                              </VStack>
+                            </Flex>
+
+                            <Box>
+                              <Text fontWeight='bold' fontSize='md' color={textColor}>
+                                {txn.title}
+                              </Text>
+                              {txn.description && (
+                                <Text fontSize='sm' color='gray.500' fontWeight='medium'>
+                                  {txn.description}
+                                </Text>
+                              )}
+                              <Text fontSize='xs' color='gray.400' mt='4px'>
+                                {new Date(txn.date).toLocaleDateString('en-US', {
+                                  month: 'short',
+                                  day: 'numeric',
+                                  year: 'numeric'
+                                })} • {new Date(txn.date).toLocaleTimeString('en-US', {
+                                  hour: '2-digit',
+                                  minute: '2-digit'
+                                })}
+                              </Text>
+                            </Box>
                           </Box>
-                        </>
-                      )}
-                      {data.address && (
-                        <>
-                          <Divider />
-                          <Box w='100%'>
-                            <Text fontSize='sm' color='gray.500' mb='6px' fontWeight='medium'>Address</Text>
-                            <Text fontWeight='semibold' fontSize='md' color={textColor}>{data.address}</Text>
-                          </Box>
-                        </>
-                      )}
-                      {(data.rating_average || data.rating_count) && (
-                        <>
-                          <Divider />
-                          <Box w='100%'>
-                            <Text fontSize='sm' color='gray.500' mb='6px' fontWeight='medium'>Rating</Text>
-                            <Text fontWeight='semibold' fontSize='md' color={textColor}>
-                              {(data.rating_average || 0).toFixed(1)} ⭐ ({data.rating_count || 0} reviews)
-                            </Text>
-                          </Box>
-                        </>
+                        ))
+                      ) : (
+                        <Text color='gray.500' textAlign='center' py='40px' w='100%'>No transaction history available</Text>
                       )}
                     </VStack>
                   </CardBody>
                 </Card>
-              </VStack>
-            </SimpleGrid>
-          </TabPanel>
 
-          {/* Details Tab */}
-          <TabPanel px={0} pt={6}>
-            <Card bg={cardBg}>
-              <CardHeader>
-                <Text fontWeight='bold' color={textColor} fontSize='lg'>Customer Details</Text>
-              </CardHeader>
-              <CardBody>
-                <SimpleGrid columns={{ base: 1, md: 2 }} spacing='24px'>
-                  <VStack align='stretch' spacing='16px'>
-                    <Box>
-                      <Text fontSize='xs' color='gray.500' mb='4px'>Customer Name</Text>
-                      <Text fontWeight='semibold' fontSize='md' color={textColor}>{name}</Text>
-                    </Box>
-                    {data.serial_id && (
-                      <Box>
-                        <Text fontSize='xs' color='gray.500' mb='4px'>Customer ID</Text>
-                        <Text fontWeight='medium' color={textColor}>{data.serial_id}</Text>
-                      </Box>
-                    )}
-                    {data.phone && (
-                      <Box>
-                        <Text fontSize='xs' color='gray.500' mb='4px'>Phone Number</Text>
-                        <Text fontWeight='medium' color={textColor}>{data.phone}</Text>
-                      </Box>
-                    )}
-                  </VStack>
-                  <VStack align='stretch' spacing='16px'>
-                    {data.address && (
-                      <Box>
-                        <Text fontSize='xs' color='gray.500' mb='4px'>Address</Text>
-                        <Text fontWeight='medium' color={textColor}>{data.address}</Text>
-                      </Box>
-                    )}
-                    <Box>
-                      <Text fontSize='xs' color='gray.500' mb='4px'>Total Spent</Text>
-                      <Text fontWeight='bold' fontSize='lg' color={textColor}>PKR {totalSpent.toFixed(2)}</Text>
-                    </Box>
-                    <Box>
-                      <Text fontSize='xs' color='gray.500' mb='4px'>Total Invoices</Text>
-                      <Text fontWeight='medium' color={textColor}>{invoiceList.length}</Text>
-                    </Box>
-                  </VStack>
-                </SimpleGrid>
-              </CardBody>
-            </Card>
-          </TabPanel>
+                {/* Quick Stats Cards */}
+                <VStack spacing='16px' align='stretch' w='100%'>
+                  <Card bg={cardBg} w='100%'>
+                    <CardHeader pb='12px'>
+                      <VStack align='stretch' spacing='2px'>
+                        <Text fontWeight='bold' color={textColor} fontSize='lg'>Manual Balance Adjustments</Text>
+                        <Text fontSize='sm' color='gray.500'>
+                          Use these controls to add outstanding dues or record advance payments in seconds.
+                        </Text>
+                      </VStack>
+                    </CardHeader>
+                    <CardBody pt={0} px='24px' pb='24px'>
+                      <Flex direction={{ base: 'column', lg: 'row' }} gap='24px' align='stretch'>
+                        <Box
+                          flexBasis={{ base: '100%', lg: '280px' }}
+                          maxW={{ base: '100%', lg: '340px' }}
+                          bg={sectionBg}
+                          borderRadius='16px'
+                          p='18px'
+                        >
+                          <VStack align='stretch' spacing='8px'>
+                        <Text fontWeight='bold' color={textColor}>What happens?</Text>
+                        <Text fontSize='sm' color='gray.600'>
+                          • Add Due: increases the customer&apos;s outstanding balance.
+                        </Text>
+                        <Text fontSize='sm' color='gray.600'>
+                          • Add Advance: records money received in advance.
+                        </Text>
+                            <Divider />
+                            <Text fontSize='sm' color='gray.600'>
+                          Each action creates an invoice automatically and updates the balance right away.
+                            </Text>
+                          </VStack>
+                        </Box>
+                        <Box
+                          flex='1'
+                          minW={{ base: '100%', lg: '520px' }}
+                          borderWidth='1px'
+                          borderRadius='16px'
+                          p='0'
+                          bg={itemBg}
+                        >
+                          <Tabs variant='soft-rounded' colorScheme='orange' isFitted>
+                            <TabList px='18px' pt='18px' pb='6px'>
+                              <Tab fontWeight='semibold'>Add Due</Tab>
+                              <Tab fontWeight='semibold'>Add Advance</Tab>
+                            </TabList>
+                            <TabPanels px='18px' pb='18px'>
+                              <TabPanel px={0} pt='12px'>
+                                <VStack align='stretch' spacing='12px'>
+                                  <FormControl isRequired>
+                                    <FormLabel>Amount (PKR)</FormLabel>
+                                    <NumberInput min={0.01} precision={2} value={manualDueForm.amount} onChange={(valueString) => setManualDueForm((prev) => ({ ...prev, amount: valueString }))}>
+                                      <NumberInputField />
+                                    </NumberInput>
+                                  </FormControl>
+                                  <FormControl>
+                                    <FormLabel>Description</FormLabel>
+                                    <Textarea
+                                      placeholder='Manual due adjustment - Additional charges'
+                                      value={manualDueForm.description}
+                                      onChange={(e) => {
+                                        const { value } = e.target;
+                                        setManualDueForm((prev) => ({ ...prev, description: value }));
+                                      }}
+                                      rows={2}
+                                    />
+                                    <FormHelperText fontSize='xs'>Appears on the generated invoice + ledger.</FormHelperText>
+                                  </FormControl>
+                                  <FormControl>
+                                    <FormLabel>Occurred At</FormLabel>
+                                    <Input
+                                      type='datetime-local'
+                                      value={manualDueForm.occurred_at}
+                                      onChange={(e) => {
+                                        const { value } = e.target;
+                                        setManualDueForm((prev) => ({ ...prev, occurred_at: value }));
+                                      }}
+                                    />
+                                    <FormHelperText fontSize='xs'>Defaults to now if left blank.</FormHelperText>
+                                  </FormControl>
+                                  <FormControl>
+                                    <FormLabel>Payment Method</FormLabel>
+                                    <Select
+                                      value={manualDueForm.payment_method}
+                                      onChange={(e) => {
+                                        const { value } = e.target;
+                                        setManualDueForm((prev) => ({ ...prev, payment_method: value }));
+                                      }}
+                                    >
+                                      <option value='cash'>Cash</option>
+                                      <option value='card'>Card</option>
+                                      <option value='other'>Other</option>
+                                    </Select>
+                                  </FormControl>
+                                  <Button
+                                    colorScheme='orange'
+                                    bg='#FF8D28'
+                                    _hover={{ bg: '#E67E22' }}
+                                    onClick={handleManualDueSubmit}
+                                    isLoading={savingManualDue}
+                                    alignSelf='flex-start'
+                                  >
+                                    Add Due Balance
+                                  </Button>
+                                </VStack>
+                              </TabPanel>
+                              <TabPanel px={0} pt='12px'>
+                                <VStack align='stretch' spacing='12px'>
+                                  <FormControl isRequired>
+                                    <FormLabel>Amount (PKR)</FormLabel>
+                                    <NumberInput min={0.01} precision={2} value={manualAdvanceForm.amount} onChange={(valueString) => setManualAdvanceForm((prev) => ({ ...prev, amount: valueString }))}>
+                                      <NumberInputField />
+                                    </NumberInput>
+                                  </FormControl>
+                                  <FormControl>
+                                    <FormLabel>Description</FormLabel>
+                                    <Textarea
+                                      placeholder='Manual advance adjustment - Prepayment'
+                                      value={manualAdvanceForm.description}
+                                      onChange={(e) => {
+                                        const { value } = e.target;
+                                        setManualAdvanceForm((prev) => ({ ...prev, description: value }));
+                                      }}
+                                      rows={2}
+                                    />
+                                    <FormHelperText fontSize='xs'>Listed on the Cash Receiving Invoice line item.</FormHelperText>
+                                  </FormControl>
+                                  <HStack spacing='12px' align='flex-start' flexWrap='wrap'>
+                                    <FormControl minW='150px'>
+                                      <FormLabel>Advance Start Date</FormLabel>
+                                      <Input
+                                        type='date'
+                                        value={manualAdvanceForm.advance_start_date}
+                                        onChange={(e) => {
+                                          const { value } = e.target;
+                                          setManualAdvanceForm((prev) => ({ ...prev, advance_start_date: value }));
+                                        }}
+                                      />
+                                    </FormControl>
+                                    <FormControl minW='150px'>
+                                      <FormLabel>Advance End Date</FormLabel>
+                                      <Input
+                                        type='date'
+                                        value={manualAdvanceForm.advance_end_date}
+                                        onChange={(e) => {
+                                          const { value } = e.target;
+                                          setManualAdvanceForm((prev) => ({ ...prev, advance_end_date: value }));
+                                        }}
+                                      />
+                                    </FormControl>
+                                  </HStack>
+                                  <FormControl>
+                                    <FormLabel>Occurred At</FormLabel>
+                                    <Input
+                                      type='datetime-local'
+                                      value={manualAdvanceForm.occurred_at}
+                                      onChange={(e) => {
+                                        const { value } = e.target;
+                                        setManualAdvanceForm((prev) => ({ ...prev, occurred_at: value }));
+                                      }}
+                                    />
+                                  </FormControl>
+                                  <FormControl>
+                                    <FormLabel>Payment Method</FormLabel>
+                                    <Select
+                                      value={manualAdvanceForm.payment_method}
+                                      onChange={(e) => {
+                                        const { value } = e.target;
+                                        setManualAdvanceForm((prev) => ({ ...prev, payment_method: value }));
+                                      }}
+                                    >
+                                      <option value='cash'>Cash</option>
+                                      <option value='card'>Card</option>
+                                      <option value='other'>Other</option>
+                                    </Select>
+                                  </FormControl>
+                                  <FormControl>
+                                    <FormLabel>Deposit Account ID</FormLabel>
+                                    <Input
+                                      placeholder='Optional receiving account id'
+                                      value={manualAdvanceForm.deposit_account_id}
+                                      onChange={(e) => {
+                                        const { value } = e.target;
+                                        setManualAdvanceForm((prev) => ({ ...prev, deposit_account_id: value }));
+                                      }}
+                                    />
+                                    <FormHelperText fontSize='xs'>Blank = system default cash/bank mapping.</FormHelperText>
+                                  </FormControl>
+                                  <Button
+                                    colorScheme='orange'
+                                    bg='#FF8D28'
+                                    _hover={{ bg: '#E67E22' }}
+                                    onClick={handleManualAdvanceSubmit}
+                                    isLoading={savingManualAdvance}
+                                    alignSelf='flex-start'
+                                  >
+                                    Add Advance Balance
+                                  </Button>
+                                </VStack>
+                              </TabPanel>
+                            </TabPanels>
+                          </Tabs>
+                        </Box>
+                      </Flex>
+                    </CardBody>
+                  </Card>
+                <Card bg={cardBg} w='100%'>
+                  <CardHeader pb='12px'>
+                    <VStack align='stretch' spacing='2px'>
+                      <Text fontWeight='bold' color={textColor} fontSize='lg'>Clear Due (Manual Payment)</Text>
+                      <Text fontSize='sm' color='gray.500'>
+                        Record a payment to reduce outstanding dues. If the amount is higher than the due, the rest becomes advance automatically.
+                      </Text>
+                    </VStack>
+                  </CardHeader>
+                  <CardBody pt={0} px='24px' pb='24px'>
+                    <VStack align='stretch' spacing='16px'>
+                      <HStack spacing='24px' flexWrap='wrap'>
+                        <Stat minW='150px'>
+                          <StatLabel color='gray.500'>Current Due</StatLabel>
+                          <StatNumber fontSize='xl' color={due > 0 ? 'red.500' : 'green.500'}>
+                            PKR {due.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </StatNumber>
+                        </Stat>
+                        <Stat minW='150px'>
+                          <StatLabel color='gray.500'>Current Advance</StatLabel>
+                          <StatNumber fontSize='xl' color='teal.500'>
+                            PKR {adv.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </StatNumber>
+                        </Stat>
+                      </HStack>
+                      <FormControl isRequired>
+                        <FormLabel>Payment Amount (PKR)</FormLabel>
+                        <NumberInput
+                          min={0.01}
+                          precision={2}
+                          value={manualPaymentForm.amount}
+                          onChange={(valueString) => setManualPaymentForm((prev) => ({ ...prev, amount: valueString }))}
+                        >
+                          <NumberInputField />
+                        </NumberInput>
+                      </FormControl>
+                      <FormControl>
+                        <FormLabel>Description</FormLabel>
+                        <Textarea
+                          placeholder='e.g., Cash collected from customer'
+                          value={manualPaymentForm.description}
+                          onChange={(e) => {
+                            const { value } = e.target;
+                            setManualPaymentForm((prev) => ({ ...prev, description: value }));
+                          }}
+                          rows={2}
+                        />
+                      </FormControl>
+                      <FormControl maxW={{ base: '100%', md: '260px' }}>
+                        <FormLabel>Payment Method</FormLabel>
+                        <Select
+                          value={manualPaymentForm.payment_method}
+                          onChange={(e) => {
+                            const { value } = e.target;
+                            setManualPaymentForm((prev) => ({ ...prev, payment_method: value }));
+                          }}
+                        >
+                          <option value='cash'>Cash</option>
+                          <option value='card'>Card</option>
+                          <option value='bank'>Bank</option>
+                          <option value='other'>Other</option>
+                        </Select>
+                      </FormControl>
+                      <Alert
+                        status={manualPaymentPreview.amountValue > 0 ? 'info' : 'warning'}
+                        borderRadius='12px'
+                        alignItems='flex-start'
+                      >
+                        <AlertIcon mt='2px' />
+                        <Box>
+                          {manualPaymentPreview.amountValue > 0 ? (
+                            <>
+                              <Text fontWeight='semibold'>
+                                Due after payment: PKR {manualPaymentPreview.newDue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </Text>
+                              {manualPaymentPreview.dueReduction > 0 && (
+                                <Text fontSize='sm' color='gray.600'>
+                                  Due reduces by PKR {manualPaymentPreview.dueReduction.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}.
+                                </Text>
+                              )}
+                              {manualPaymentPreview.excessAdvance > 0 ? (
+                                <Text fontSize='sm' color='gray.600'>
+                                  Extra PKR {manualPaymentPreview.excessAdvance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} moves to advance (new advance: PKR {manualPaymentPreview.newAdvance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}).
+                                </Text>
+                              ) : (
+                                <Text fontSize='sm' color='gray.600'>
+                                  No excess amount remains after clearing due.
+                                </Text>
+                              )}
+                            </>
+                          ) : (
+                            <Text fontSize='sm' color='gray.600'>
+                              Enter an amount to preview how the balance will update.
+                            </Text>
+                          )}
+                        </Box>
+                      </Alert>
+                      <Button
+                        alignSelf='flex-start'
+                        colorScheme='orange'
+                        bg='#FF8D28'
+                        _hover={{ bg: '#E67E22' }}
+                        onClick={handleManualPaymentSubmit}
+                        isLoading={savingManualPayment}
+                      >
+                        Apply Payment
+                      </Button>
+                    </VStack>
+                  </CardBody>
+                </Card>
+                  {/* In Good Standing Card */}
+                  <Card bg={cardBg} w='100%'>
+                    <CardBody p='24px' w='100%'>
+                      <HStack mb='16px' align='start'>
+                        <Box
+                          w='48px'
+                          h='48px'
+                          borderRadius='full'
+                          bg={due > 0 ? 'orange.100' : 'green.100'}
+                          display='flex'
+                          alignItems='center'
+                          justifyContent='center'
+                          flexShrink={0}
+                        >
+                          {due > 0 ? (
+                            <WarningIcon color='orange.500' boxSize='24px' />
+                          ) : (
+                            <CheckIcon color='green.500' boxSize='24px' />
+                          )}
+                        </Box>
+                        <Box flex='1' minW='0'>
+                          <Text fontWeight='bold' fontSize='lg' color={textColor} mb='4px'>
+                            {due > 0 ? 'Has Outstanding Dues' : 'In Good Standing'}
+                          </Text>
+                          <Text fontSize='sm' color='gray.500'>
+                            Last payment: {(() => {
+                              if (!invoiceList || invoiceList.length === 0) return 'N/A';
+                              const lastPaid = invoiceList
+                                .filter(inv => {
+                                  const paid = Number(inv.paid_amount || 0);
+                                  const advance = Number(inv.advance_amount || inv.advance_applied || 0);
+                                  return paid > 0 || advance > 0;
+                                })
+                                .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))[0];
+                              return lastPaid?.created_at
+                                ? new Date(lastPaid.created_at).toLocaleDateString('en-US', {
+                                  month: 'short',
+                                  day: 'numeric',
+                                  year: 'numeric'
+                                })
+                                : 'N/A';
+                            })()}
+                          </Text>
+                        </Box>
+                      </HStack>
+                      {due > 0 && (
+                        <Text fontSize='md' color='orange.600' fontWeight='semibold'>
+                          Amount Due: PKR {due.toFixed(2)}
+                        </Text>
+                      )}
+                    </CardBody>
+                  </Card>
 
-          {/* Payments Tab */}
-          <TabPanel px={0} pt={6}>
-            <Box mb='16px'>
-              <InputGroup maxW='400px'>
-                <InputLeftElement pointerEvents='none'>
-                  <SearchIcon color='gray.400' />
-                </InputLeftElement>
-                <Input
-                  placeholder='Search invoices...'
-                  value={paymentSearch}
-                  onChange={(e) => setPaymentSearch(e.target.value)}
-                  size='md'
-                />
-              </InputGroup>
-            </Box>
-            <Card bg={cardBg}>
-              <CardHeader>
-                <Text fontWeight='bold' color={textColor} fontSize='lg'>Payment Breakdown</Text>
-              </CardHeader>
-              <CardBody>
-                <Table variant='simple'>
-                  <Thead>
-                    <Tr>
-                      <Th>Invoice #</Th>
-                      <Th>Date</Th>
-                      <Th>Total Amount</Th>
-                      <Th>Paid Amount</Th>
-                      <Th>Advance Applied</Th>
-                      <Th>Due Amount</Th>
-                      <Th>Status</Th>
-                      <Th>Actions</Th>
-                    </Tr>
-                  </Thead>
-                  <Tbody>
-                    {filteredPayments.length > 0 ? (
-                      filteredPayments.map((inv) => {
-                        const total = Number(inv.total || inv.total_amount || 0);
-                        const paid = Number(inv.paid_amount || 0);
-                        const due = Number(inv.due_amount || 0);
-                        const hiddenCosts = Number(inv.hidden_costs || 0);
-                        const status = due > 0 ? 'Due' : 'Paid';
-                        let advanceApplied = Number(inv.advance_amount || inv.advance_applied || 0);
-                        if (advanceApplied === 0 && inv.payment_as === 'advance' && paid > 0) {
-                          advanceApplied = paid;
-                        }
-                        return (
-                          <Tr key={inv.id}>
-                            <Td fontWeight='medium'>{inv.invoice_number || `#${inv.id}`}</Td>
-                            <Td>{inv.created_at ? new Date(inv.created_at).toLocaleDateString() : 'N/A'}</Td>
-                            <Td>
+                  {/* Customer Details Card */}
+                  <Card bg={cardBg} w='100%'>
+                    <CardHeader pb='16px'>
+                      <Text fontWeight='bold' color={textColor} fontSize='lg'>Customer Information</Text>
+                    </CardHeader>
+                    <CardBody pt={0} px='24px' pb='24px' w='100%'>
+                      <VStack align='stretch' spacing='16px' w='100%'>
+                        {data.serial_id && (
+                          <Box w='100%'>
+                            <Text fontSize='sm' color='gray.500' mb='6px' fontWeight='medium'>Customer ID</Text>
+                            <Text fontWeight='semibold' fontSize='md' color={textColor}>{data.serial_id}</Text>
+                          </Box>
+                        )}
+                        {data.phone && (
+                          <>
+                            <Divider />
+                            <Box w='100%'>
+                              <Text fontSize='sm' color='gray.500' mb='6px' fontWeight='medium'>Phone Number</Text>
+                              <Text fontWeight='semibold' fontSize='md' color={textColor}>{data.phone}</Text>
+                            </Box>
+                          </>
+                        )}
+                        {data.address && (
+                          <>
+                            <Divider />
+                            <Box w='100%'>
+                              <Text fontSize='sm' color='gray.500' mb='6px' fontWeight='medium'>Address</Text>
+                              <Text fontWeight='semibold' fontSize='md' color={textColor}>{data.address}</Text>
+                            </Box>
+                          </>
+                        )}
+                        {(data.rating_average || data.rating_count) && (
+                          <>
+                            <Divider />
+                            <Box w='100%'>
+                              <Text fontSize='sm' color='gray.500' mb='6px' fontWeight='medium'>Rating</Text>
+                              <Text fontWeight='semibold' fontSize='md' color={textColor}>
+                                {(data.rating_average || 0).toFixed(1)} ⭐ ({data.rating_count || 0} reviews)
+                              </Text>
+                            </Box>
+                          </>
+                        )}
+                      </VStack>
+                    </CardBody>
+                  </Card>
+                </VStack>
+              </SimpleGrid>
+            </TabPanel>
+
+            {/* Details Tab */}
+            <TabPanel px={0} pt={6}>
+              <Card bg={cardBg}>
+                <CardHeader>
+                  <Text fontWeight='bold' color={textColor} fontSize='lg'>Customer Details</Text>
+                </CardHeader>
+                <CardBody>
+                  <SimpleGrid columns={{ base: 1, md: 2 }} spacing='24px'>
+                    <VStack align='stretch' spacing='16px'>
+                      <Box>
+                        <Text fontSize='xs' color='gray.500' mb='4px'>Customer Name</Text>
+                        <Text fontWeight='semibold' fontSize='md' color={textColor}>{name}</Text>
+                      </Box>
+                      {data.serial_id && (
+                        <Box>
+                          <Text fontSize='xs' color='gray.500' mb='4px'>Customer ID</Text>
+                          <Text fontWeight='medium' color={textColor}>{data.serial_id}</Text>
+                        </Box>
+                      )}
+                      {data.phone && (
+                        <Box>
+                          <Text fontSize='xs' color='gray.500' mb='4px'>Phone Number</Text>
+                          <Text fontWeight='medium' color={textColor}>{data.phone}</Text>
+                        </Box>
+                      )}
+                    </VStack>
+                    <VStack align='stretch' spacing='16px'>
+                      {data.address && (
+                        <Box>
+                          <Text fontSize='xs' color='gray.500' mb='4px'>Address</Text>
+                          <Text fontWeight='medium' color={textColor}>{data.address}</Text>
+                        </Box>
+                      )}
+                      <Box>
+                        <Text fontSize='xs' color='gray.500' mb='4px'>Total Spent</Text>
+                        <Text fontWeight='bold' fontSize='lg' color={textColor}>PKR {totalSpent.toFixed(2)}</Text>
+                      </Box>
+                      <Box>
+                        <Text fontSize='xs' color='gray.500' mb='4px'>Total Invoices</Text>
+                        <Text fontWeight='medium' color={textColor}>{invoiceList.length}</Text>
+                      </Box>
+                    </VStack>
+                  </SimpleGrid>
+                </CardBody>
+              </Card>
+            </TabPanel>
+
+            {/* Payments Tab */}
+            <TabPanel px={0} pt={6}>
+              <Box mb='16px'>
+                <InputGroup maxW='400px'>
+                  <InputLeftElement pointerEvents='none'>
+                    <SearchIcon color='gray.400' />
+                  </InputLeftElement>
+                  <Input
+                    placeholder='Search invoices...'
+                    value={paymentSearch}
+                    onChange={(e) => setPaymentSearch(e.target.value)}
+                    size='md'
+                  />
+                </InputGroup>
+              </Box>
+              <Card bg={cardBg}>
+                <CardHeader>
+                  <Text fontWeight='bold' color={textColor} fontSize='lg'>Payment Breakdown</Text>
+                </CardHeader>
+                <CardBody>
+                  <Table variant='simple'>
+                    <Thead>
+                      <Tr>
+                        <Th>Invoice #</Th>
+                        <Th>Date</Th>
+                        <Th>Total Amount</Th>
+                        <Th>Paid Amount</Th>
+                        <Th>Advance Applied</Th>
+                        <Th>Due Amount</Th>
+                        <Th>Status</Th>
+                        <Th>Actions</Th>
+                      </Tr>
+                    </Thead>
+                    <Tbody>
+                      {filteredPayments.length > 0 ? (
+                        filteredPayments.map((inv) => {
+                          const total = Number(inv.total || inv.total_amount || 0);
+                          const paid = Number(inv.paid_amount || 0);
+                          const due = Number(inv.due_amount || 0);
+                          const hiddenCosts = Number(inv.hidden_costs || 0);
+                          const status = due > 0 ? 'Due' : 'Paid';
+                          let advanceApplied = Number(inv.advance_amount || inv.advance_applied || 0);
+                          if (advanceApplied === 0 && inv.payment_as === 'advance' && paid > 0) {
+                            advanceApplied = paid;
+                          }
+                          return (
+                            <Tr key={inv.id}>
+                              <Td fontWeight='medium'>{inv.invoice_number || `#${inv.id}`}</Td>
+                              <Td>{inv.created_at ? new Date(inv.created_at).toLocaleDateString() : 'N/A'}</Td>
+                              <Td>
+                                <VStack align='flex-start' spacing='2px'>
+                                  <Text>PKR {total.toFixed(2)}</Text>
+                                  {hiddenCosts > 0 && (
+                                    <Text fontSize='xs' color='orange.500' fontWeight='medium'>
+                                      + PKR {hiddenCosts.toFixed(2)} hidden
+                                    </Text>
+                                  )}
+                                </VStack>
+                              </Td>
+                              <Td>PKR {paid.toFixed(2)}</Td>
+                              <Td>{advanceApplied > 0 ? `PKR ${advanceApplied.toFixed(2)}` : '-'}</Td>
+                              <Td color={due > 0 ? 'orange.500' : 'green.500'} fontWeight={due > 0 ? 'semibold' : 'normal'}>
+                                PKR {due.toFixed(2)}
+                              </Td>
+                              <Td>
+                                <Badge colorScheme={status === 'Paid' ? 'green' : 'orange'}>
+                                  {status}
+                                </Badge>
+                              </Td>
+                              <Td>
+                                <IconButton
+                                  icon={<DownloadIcon />}
+                                  size='sm'
+                                  variant='outline'
+                                  colorScheme='orange'
+                                  onClick={() => handleDownload(inv.id)}
+                                  isLoading={downloadingIds.has(inv.id)}
+                                  aria-label='Download invoice'
+                                />
+                              </Td>
+                            </Tr>
+                          );
+                        })
+                      ) : (
+                        <Tr>
+                          <Td colSpan={8} textAlign='center' color='gray.500' py='40px'>
+                            {paymentSearch ? 'No invoices match your search' : 'No invoices found'}
+                          </Td>
+                        </Tr>
+                      )}
+                    </Tbody>
+                  </Table>
+                </CardBody>
+              </Card>
+            </TabPanel>
+
+            {/* Invoices Tab */}
+            <TabPanel px={0} pt={6}>
+              <Box mb='16px'>
+                <InputGroup maxW='400px'>
+                  <InputLeftElement pointerEvents='none'>
+                    <SearchIcon color='gray.400' />
+                  </InputLeftElement>
+                  <Input
+                    placeholder='Search by invoice number, date, or amount...'
+                    value={invoiceSearch}
+                    onChange={(e) => setInvoiceSearch(e.target.value)}
+                    size='md'
+                  />
+                </InputGroup>
+              </Box>
+              <VStack align='stretch' spacing='12px'>
+                {filteredInvoices.length > 0 ? (
+                  filteredInvoices.map((inv) => {
+                    const total = Number(inv.total || inv.total_amount || 0);
+                    const due = Number(inv.due_amount || 0);
+                    const hiddenCosts = Number(inv.hidden_costs || 0);
+                    const status = due > 0 ? 'Due' : 'Paid';
+                    const invDate = inv.created_at ? new Date(inv.created_at) : null;
+
+                    return (
+                      <Card
+                        key={inv.id}
+                        bg={cardBg}
+                        boxShadow='0 1px 3px rgba(0,0,0,0.1)'
+                        w='100%'
+                        borderRadius='8px'
+                      >
+                        <CardBody p='16px' w='100%'>
+                          <Flex justify='space-between' align='center' w='100%' gap='12px' flexWrap='wrap'>
+                            <Box flex='1' minW='200px'>
+                              <Text fontWeight='600' fontSize='sm' color={textColor} mb='4px'>
+                                {inv.invoice_number || `Invoice #${inv.id}`}
+                              </Text>
                               <VStack align='flex-start' spacing='2px'>
-                                <Text>PKR {total.toFixed(2)}</Text>
+                                <HStack spacing='12px' fontSize='xs' color='gray.500'>
+                                  {invDate && (
+                                    <Text>
+                                      {invDate.toLocaleDateString('en-US', {
+                                        month: 'short',
+                                        day: 'numeric',
+                                        year: 'numeric'
+                                      })}
+                                    </Text>
+                                  )}
+                                  <Text>•</Text>
+                                  <Text fontWeight='500' color={textColor}>PKR {total.toFixed(2)}</Text>
+                                  <Text>•</Text>
+                                  <Badge
+                                    colorScheme={status === 'Paid' ? 'green' : 'orange'}
+                                    fontSize='10px'
+                                    px='6px'
+                                    py='1px'
+                                    borderRadius='full'
+                                  >
+                                    {status}
+                                  </Badge>
+                                </HStack>
                                 {hiddenCosts > 0 && (
-                                  <Text fontSize='xs' color='orange.500' fontWeight='medium'>
-                                    + PKR {hiddenCosts.toFixed(2)} hidden
+                                  <Text fontSize='xs' color='orange.500' fontWeight='medium' ml='0'>
+                                    + PKR {hiddenCosts.toFixed(2)} hidden charges
                                   </Text>
                                 )}
                               </VStack>
-                            </Td>
-                            <Td>PKR {paid.toFixed(2)}</Td>
-                            <Td>{advanceApplied > 0 ? `PKR ${advanceApplied.toFixed(2)}` : '-'}</Td>
-                            <Td color={due > 0 ? 'orange.500' : 'green.500'} fontWeight={due > 0 ? 'semibold' : 'normal'}>
-                              PKR {due.toFixed(2)}
-                            </Td>
-                            <Td>
-                              <Badge colorScheme={status === 'Paid' ? 'green' : 'orange'}>
-                                {status}
-                              </Badge>
-                            </Td>
-                            <Td>
+                            </Box>
+                            <HStack spacing='8px'>
+                              {(() => {
+                                const key = inv?.id ? String(inv.id) : null;
+                                const invoiceItems = key ? invoiceItemsByInvoiceId[key] : null;
+                                const hasRemaining = invoiceItems ? invoiceItems.some((item) => item.remaining > 0) : null;
+                                const disabled = invoiceItems ? !hasRemaining : false;
+                                const tooltipLabel = invoiceItems
+                                  ? (hasRemaining ? null : 'All items already refunded')
+                                  : 'Click to load invoice items for refund';
+                                const button = (
+                                  <Button
+                                    size='sm'
+                                    leftIcon={<RepeatIcon />}
+                                    bg={brandColor}
+                                    color='white'
+                                    _hover={{ bg: '#e67815' }}
+                                    _active={{ bg: '#cf6910' }}
+                                    onClick={() => handleStartRefund(inv)}
+                                    isLoading={refundLoadingInvoiceId === inv.id}
+                                    isDisabled={disabled || refundLoadingInvoiceId === inv.id}
+                                  >
+                                    Refund
+                                  </Button>
+                                );
+                                return tooltipLabel ? (
+                                  <Tooltip label={tooltipLabel}>
+                                    <span style={{ display: 'inline-block' }}>
+                                      {button}
+                                    </span>
+                                  </Tooltip>
+                                ) : (
+                                  button
+                                );
+                              })()}
                               <IconButton
                                 icon={<DownloadIcon />}
                                 size='sm'
@@ -1122,155 +1870,26 @@ export default function CustomerProfile() {
                                 isLoading={downloadingIds.has(inv.id)}
                                 aria-label='Download invoice'
                               />
-                            </Td>
-                          </Tr>
-                        );
-                      })
-                    ) : (
-                      <Tr>
-                        <Td colSpan={8} textAlign='center' color='gray.500' py='40px'>
-                          {paymentSearch ? 'No invoices match your search' : 'No invoices found'}
-                        </Td>
-                      </Tr>
-                    )}
-                  </Tbody>
-                </Table>
-              </CardBody>
-            </Card>
-          </TabPanel>
-
-          {/* Invoices Tab */}
-          <TabPanel px={0} pt={6}>
-            <Box mb='16px'>
-              <InputGroup maxW='400px'>
-                <InputLeftElement pointerEvents='none'>
-                  <SearchIcon color='gray.400' />
-                </InputLeftElement>
-                <Input
-                  placeholder='Search by invoice number, date, or amount...'
-                  value={invoiceSearch}
-                  onChange={(e) => setInvoiceSearch(e.target.value)}
-                  size='md'
-                />
-              </InputGroup>
-            </Box>
-            <VStack align='stretch' spacing='12px'>
-              {filteredInvoices.length > 0 ? (
-                filteredInvoices.map((inv) => {
-                  const total = Number(inv.total || inv.total_amount || 0);
-                  const due = Number(inv.due_amount || 0);
-                  const hiddenCosts = Number(inv.hidden_costs || 0);
-                  const status = due > 0 ? 'Due' : 'Paid';
-                  const invDate = inv.created_at ? new Date(inv.created_at) : null;
-                  
-                  return (
-                    <Card 
-                      key={inv.id} 
-                      bg={cardBg}
-                      boxShadow='0 1px 3px rgba(0,0,0,0.1)'
-                      w='100%'
-                      borderRadius='8px'
-                    >
-                      <CardBody p='16px' w='100%'>
-                        <Flex justify='space-between' align='center' w='100%' gap='12px' flexWrap='wrap'>
-                          <Box flex='1' minW='200px'>
-                            <Text fontWeight='600' fontSize='sm' color={textColor} mb='4px'>
-                              {inv.invoice_number || `Invoice #${inv.id}`}
-                            </Text>
-                            <VStack align='flex-start' spacing='2px'>
-                              <HStack spacing='12px' fontSize='xs' color='gray.500'>
-                                {invDate && (
-                                  <Text>
-                                    {invDate.toLocaleDateString('en-US', {
-                                      month: 'short',
-                                      day: 'numeric',
-                                      year: 'numeric'
-                                    })}
-                                  </Text>
-                                )}
-                                <Text>•</Text>
-                                <Text fontWeight='500' color={textColor}>PKR {total.toFixed(2)}</Text>
-                                <Text>•</Text>
-                                <Badge 
-                                  colorScheme={status === 'Paid' ? 'green' : 'orange'} 
-                                  fontSize='10px' 
-                                  px='6px' 
-                                  py='1px'
-                                  borderRadius='full'
-                                >
-                                  {status}
-                                </Badge>
-                              </HStack>
-                              {hiddenCosts > 0 && (
-                                <Text fontSize='xs' color='orange.500' fontWeight='medium' ml='0'>
-                                  + PKR {hiddenCosts.toFixed(2)} hidden charges
-                                </Text>
-                              )}
-                            </VStack>
-                          </Box>
-                          <HStack spacing='8px'>
-                            {(() => {
-                              const key = inv?.id ? String(inv.id) : null;
-                              const invoiceItems = key ? invoiceItemsByInvoiceId[key] : null;
-                              const hasRemaining = invoiceItems ? invoiceItems.some((item) => item.remaining > 0) : null;
-                              const disabled = invoiceItems ? !hasRemaining : false;
-                              const tooltipLabel = invoiceItems
-                                ? (hasRemaining ? null : 'All items already refunded')
-                                : 'Click to load invoice items for refund';
-                              const button = (
-                                <Button
-                                  size='sm'
-                                  leftIcon={<RepeatIcon />}
-                                  bg={brandColor}
-                                  color='white'
-                                  _hover={{ bg: '#e67815' }}
-                                  _active={{ bg: '#cf6910' }}
-                                  onClick={() => handleStartRefund(inv)}
-                                  isLoading={refundLoadingInvoiceId === inv.id}
-                                  isDisabled={disabled || refundLoadingInvoiceId === inv.id}
-                                >
-                                  Refund
-                                </Button>
-                              );
-                              return tooltipLabel ? (
-                                <Tooltip label={tooltipLabel}>
-                                  <span style={{ display: 'inline-block' }}>
-                                    {button}
-                                  </span>
-                                </Tooltip>
-                              ) : (
-                                button
-                              );
-                            })()}
-                            <IconButton
-                              icon={<DownloadIcon />}
-                              size='sm'
-                              variant='outline'
-                              colorScheme='orange'
-                              onClick={() => handleDownload(inv.id)}
-                              isLoading={downloadingIds.has(inv.id)}
-                              aria-label='Download invoice'
-                            />
-                          </HStack>
-                        </Flex>
-                      </CardBody>
-                    </Card>
-                  );
-                })
-              ) : (
-                <Card bg={cardBg}>
-                  <CardBody>
-                    <Text color='gray.500' textAlign='center' py='40px'>
-                      {invoiceSearch ? 'No invoices match your search' : 'No invoices found'}
-                    </Text>
-                  </CardBody>
-                </Card>
-              )}
-            </VStack>
-          </TabPanel>
-        </TabPanels>
-      </Tabs>
-    </Box>
+                            </HStack>
+                          </Flex>
+                        </CardBody>
+                      </Card>
+                    );
+                  })
+                ) : (
+                  <Card bg={cardBg}>
+                    <CardBody>
+                      <Text color='gray.500' textAlign='center' py='40px'>
+                        {invoiceSearch ? 'No invoices match your search' : 'No invoices found'}
+                      </Text>
+                    </CardBody>
+                  </Card>
+                )}
+              </VStack>
+            </TabPanel>
+          </TabPanels>
+        </Tabs>
+      </Box>
       <Drawer
         isOpen={refundDrawerOpen}
         placement='right'

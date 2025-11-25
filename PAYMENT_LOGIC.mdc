@@ -1,0 +1,260 @@
+# Payment & Balance Logic Explanation
+
+## What the System Rules Mean
+
+The system automatically handles customer payments and balances using these rules:
+
+### 1. **Old due + new bill = updated due**
+When a new invoice/bill is created for a customer:
+- The customer's existing due balance is increased by the new bill amount
+- Example: Customer has PKR 500 due → New bill of PKR 300 → Updated due = PKR 800
+
+### 2. **Payment - due = updated remaining**
+When a customer makes a payment:
+- The payment amount is subtracted from the current due balance
+- Example: Customer has PKR 800 due → Pays PKR 200 → Updated due = PKR 600
+
+### 3. **Agar payment zyada ho → advance show karega** (If payment is more → it will show advance)
+**Translation:** If the payment amount exceeds the due amount, the excess becomes advance balance.
+
+- Payment is applied to due balance first
+- Any excess amount automatically becomes advance (credit/prepayment)
+- Example: Customer has PKR 500 due → Pays PKR 800 → Due becomes PKR 0, Advance becomes PKR 300
+
+### 4. **Agar kam ho → due show karega** (If it is less → it will show due)
+**Translation:** If the payment amount is less than the due amount, remaining due is shown.
+
+- Payment reduces due balance but doesn't clear it completely
+- Remaining amount stays as due balance
+- Example: Customer has PKR 800 due → Pays PKR 500 → Due remains PKR 300, Advance = PKR 0
+
+### 5. **Both auto-adjust**
+Both due balance and advance balance automatically adjust based on transactions:
+- Due balance increases with new invoices/bills
+- Due balance decreases with payments
+- Advance balance increases when payment exceeds due amount
+- Advance balance decreases when applied to new invoices
+
+---
+
+## How This Works in Practice
+
+### Scenario 1: Customer Has Due Balance
+```
+Initial State:
+- Due: PKR 1,000
+- Advance: PKR 0
+
+New Invoice Created (PKR 500):
+- Due: PKR 1,500 (1,000 + 500)
+- Advance: PKR 0
+
+Customer Pays PKR 300:
+- Due: PKR 1,200 (1,500 - 300)
+- Advance: PKR 0
+
+Customer Pays PKR 1,800 (More than due):
+- Due: PKR 0 (1,200 - 1,200)
+- Advance: PKR 600 (excess: 1,800 - 1,200)
+```
+
+### Scenario 2: Customer Has Advance Balance
+```
+Initial State:
+- Due: PKR 500
+- Advance: PKR 200
+
+New Invoice Created (PKR 400):
+- Due: PKR 900 (500 + 400)
+- Advance: PKR 200 (unchanged)
+
+If Advance Applied Automatically:
+- Due: PKR 700 (900 - 200)
+- Advance: PKR 0 (200 used)
+```
+
+### Scenario 3: Payment Covers Due Exactly
+```
+Initial State:
+- Due: PKR 500
+- Advance: PKR 0
+
+Customer Pays PKR 500:
+- Due: PKR 0 (500 - 500)
+- Advance: PKR 0 (no excess)
+```
+
+### Scenario 4: Customer Has Due and Pays Advance Payment
+**Important:** Even when payment type is marked as "advance", the system still applies it to due balance first!
+
+```
+Initial State:
+- Due: PKR 1,000
+- Advance: PKR 0
+
+Customer Pays "Advance" of PKR 800:
+- Due: PKR 200 (1,000 - 800, paid off due first)
+- Advance: PKR 0 (no excess because payment < due)
+
+Customer Pays "Advance" of PKR 1,500:
+- Due: PKR 0 (1,000 paid off completely)
+- Advance: PKR 500 (excess: 1,500 - 1,000 becomes advance)
+```
+
+**Key Point:** The payment type (`payment` or `advance`) doesn't change the logic - **all payments always apply to due balance first**, then excess becomes advance. This is called "netting logic" - it ensures customers don't have both due and advance balances when they could be netted together.
+
+---
+
+## Current System Implementation
+
+✅ **The system already implements all these rules automatically!**
+
+The payment endpoint (`POST /api/customers/{customer}/payments`) automatically:
+
+1. **Applies payment to due balance first:**
+   ```php
+   $applyToDue = min($due, (float) $data['amount']);
+   $due -= $applyToDue;
+   ```
+
+2. **Converts excess to advance:**
+   ```php
+   $remaining = (float) $data['amount'] - $applyToDue;
+   $adv += $remaining;
+   ```
+
+3. **Automatically adjusts both balances:**
+   ```php
+   $customer->update([
+       'due_balance' => $due,
+       'advance_balance' => $adv,
+   ]);
+   ```
+
+### Key Features:
+
+- ✅ Payments always apply to due balance first
+- ✅ Excess payment automatically becomes advance
+- ✅ Both balances update automatically
+- ✅ All transactions are logged in `customer_transactions`
+- ✅ Accounting integration works correctly
+
+---
+
+## Example API Calls
+
+### Example 1: Payment Exceeds Due
+```javascript
+// Customer has PKR 1,000 due, pays PKR 1,500
+POST /api/customers/1/payments
+{
+  "type": "payment",
+  "amount": 1500.00,
+  "description": "Payment received"
+}
+
+// Result:
+// - Due: PKR 0 (1,000 paid off)
+// - Advance: PKR 500 (excess becomes advance)
+```
+
+### Example 2: Customer Has Due, Pays "Advance" Type Payment
+```javascript
+// Customer has PKR 1,000 due, pays PKR 800 as "advance"
+POST /api/customers/1/payments
+{
+  "type": "advance",
+  "amount": 800.00,
+  "description": "Advance payment"
+}
+
+// Result:
+// - Due: PKR 200 (1,000 - 800, due paid first)
+// - Advance: PKR 0 (no excess because 800 < 1,000)
+```
+
+### Example 3: Customer Has Due, Pays Large "Advance" Payment
+```javascript
+// Customer has PKR 1,000 due, pays PKR 1,500 as "advance"
+POST /api/customers/1/payments
+{
+  "type": "advance",
+  "amount": 1500.00,
+  "description": "Advance payment"
+}
+
+// Result:
+// - Due: PKR 0 (1,000 paid off completely)
+// - Advance: PKR 500 (excess: 1,500 - 1,000 becomes advance)
+```
+
+**Note:** Even though the payment type is "advance", it still pays off due balance first!
+
+---
+
+---
+
+## Important: Purchase Behavior vs Payment Behavior
+
+### Key Distinction
+
+**Purchases DO NOT deduct from existing due balance. Only manual payments reduce existing due.**
+
+### Purchase Behavior (Invoice Creation)
+
+When a customer makes a purchase (creates invoice):
+- **Purchase amount creates NEW invoice due** - does NOT reduce existing due
+- Cash payment during purchase is applied to NEW invoice only
+- Excess payment becomes advance
+- Existing due balance remains **unchanged**
+
+**Example:**
+```
+Initial State:
+- Due: PKR 1,000
+- Advance: PKR 0
+
+Customer buys items worth PKR 500:
+- Purchase creates new invoice: PKR 500
+- Due: PKR 1,500 (1,000 existing + 500 new invoice)
+- Advance: PKR 0
+
+✅ Existing due (PKR 1,000) is NOT reduced by purchase
+```
+
+### Payment Behavior (Manual Payment from Customer Profile)
+
+When a payment is made manually from customer profile:
+- **Payment reduces existing due balance first**
+- Excess payment becomes advance
+- This is the ONLY way to reduce existing due balance
+
+**Example:**
+```
+Initial State:
+- Due: PKR 1,000
+- Advance: PKR 0
+
+Manual payment: PKR 300
+- Payment applied to due: PKR 300
+- Due: PKR 700 (1,000 - 300)
+- Advance: PKR 0
+
+✅ Payment reduces existing due
+```
+
+**Key Point:** Purchases create new invoice dues. Only manual payments (via customer profile endpoint) reduce existing due balances.
+
+---
+
+## Summary
+
+The system automatically handles customer payments and balances using these rules:
+
+1. **Payment during invoice creation:** Payment is applied to existing due balance first, then to new invoice
+2. **Payment via payment endpoint:** Payment is applied to due balance first
+3. **Excess payment:** Automatically becomes advance balance
+4. **Both balances auto-adjust** with every transaction
+
+✅ **The system implements all these rules automatically!** 🎉
+

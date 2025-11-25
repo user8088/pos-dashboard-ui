@@ -1,0 +1,386 @@
+# Customer Purchase & Payment Logic - Frontend Integration Guide
+
+## Overview
+
+This document explains how customer purchases and payments interact with due and advance balances. **This is critical for frontend implementation.**
+
+---
+
+## Key Principle
+
+**Purchases DO NOT deduct from existing due balance. Only manual payments reduce due balance.**
+
+---
+
+## 1. Purchase Behavior (Invoice Creation)
+
+### What Happens During Purchase
+
+When a customer makes a purchase (creates an invoice):
+
+1. **Purchase amount creates NEW invoice due**
+   - Purchase amount is NOT deducted from existing due balance
+   - If customer has existing due, it remains unchanged
+   - New invoice creates its own due amount
+
+2. **Cash payment during purchase**
+   - Cash is applied to the NEW invoice only
+   - Excess cash becomes advance balance
+   - Existing due balance is NOT affected
+
+3. **Advance application**
+   - If customer has advance balance, it can be applied to the new invoice
+   - Advance reduces the new invoice due amount
+   - Existing due balance remains unchanged
+
+### Examples
+
+#### Example 1: Customer with Existing Due Makes Purchase
+```
+Initial State:
+- Due: PKR 100,000
+- Advance: PKR 0
+
+Customer buys items worth PKR 5,000:
+- Purchase creates new invoice: PKR 5,000
+- Due: PKR 105,000 (100,000 existing + 5,000 new invoice)
+- Advance: PKR 0
+
+✅ Purchase does NOT reduce existing due
+```
+
+#### Example 2: Customer Pays During Purchase
+```
+Initial State:
+- Due: PKR 100,000
+- Advance: PKR 0
+
+Customer buys items worth PKR 5,000 and pays PKR 3,000:
+- Purchase creates new invoice: PKR 5,000
+- Cash payment: PKR 3,000 applied to new invoice
+- New invoice due: PKR 2,000
+- Due: PKR 102,000 (100,000 existing + 2,000 new invoice)
+- Advance: PKR 0
+
+✅ Existing due remains PKR 100,000 (not reduced)
+```
+
+#### Example 3: Excess Payment Becomes Advance
+```
+Initial State:
+- Due: PKR 100,000
+- Advance: PKR 0
+
+Customer buys items worth PKR 5,000 and pays PKR 10,000:
+- Purchase creates new invoice: PKR 5,000
+- Cash payment: PKR 5,000 applied to new invoice (fully paid)
+- Excess payment: PKR 5,000 becomes advance
+- Due: PKR 100,000 (existing due unchanged)
+- Advance: PKR 5,000
+
+✅ Excess payment becomes advance, existing due unchanged
+```
+
+#### Example 4: Advance Applied to New Purchase
+```
+Initial State:
+- Due: PKR 100,000
+- Advance: PKR 20,000
+
+Customer buys items worth PKR 5,000:
+- Purchase creates new invoice: PKR 5,000
+- Advance applied: PKR 5,000 to new invoice
+- New invoice fully paid
+- Due: PKR 100,000 (existing due unchanged)
+- Advance: PKR 15,000 (20,000 - 5,000 used)
+
+✅ Advance reduces new invoice due, existing due unchanged
+```
+
+---
+
+## 2. Manual Payment Behavior (Customer Profile)
+
+### What Happens with Manual Payments
+
+When a payment is made manually from the customer profile:
+
+1. **Payment reduces existing due balance first**
+   - Payment is applied to existing due balance
+   - Existing due balance decreases
+
+2. **Excess payment becomes advance**
+   - If payment exceeds existing due, excess becomes advance
+   - Netting logic ensures no simultaneous due and advance when possible
+
+3. **Creates customer transaction record**
+   - Transaction is logged in `customer_transactions`
+   - Accounting entries are recorded
+
+### Endpoint
+
+**POST `/api/customers/{customer}/payments`**
+
+See `CUSTOMER_API.md` for full documentation.
+
+### Examples
+
+#### Example 1: Payment Reduces Due
+```
+Initial State:
+- Due: PKR 100,000
+- Advance: PKR 0
+
+Manual payment: PKR 30,000
+- Payment applied to due: PKR 30,000
+- Due: PKR 70,000 (100,000 - 30,000)
+- Advance: PKR 0
+
+✅ Payment reduces existing due
+```
+
+#### Example 2: Payment Exceeds Due
+```
+Initial State:
+- Due: PKR 100,000
+- Advance: PKR 0
+
+Manual payment: PKR 150,000
+- Payment applied to due: PKR 100,000 (fully clears due)
+- Excess becomes advance: PKR 50,000
+- Due: PKR 0
+- Advance: PKR 50,000
+
+✅ Payment reduces due, excess becomes advance
+```
+
+---
+
+## 3. How Advance Works with Purchases
+
+### Advance Application to New Invoices
+
+When a customer has advance balance and makes a purchase:
+
+1. **Advance is applied to new invoice automatically** (if `apply_advance=true`)
+2. Advance reduces the new invoice due amount
+3. Existing due balance remains unchanged
+4. Only new invoice due is affected
+
+### Example: Advance Applied to Purchase
+```
+Initial State:
+- Due: PKR 100,000 (from old invoices)
+- Advance: PKR 50,000
+
+Customer buys items worth PKR 30,000:
+- Purchase creates new invoice: PKR 30,000
+- Advance applied: PKR 30,000
+- New invoice fully paid
+- Due: PKR 100,000 (existing due unchanged)
+- Advance: PKR 20,000 (50,000 - 30,000 used)
+
+✅ Advance reduces new invoice, existing due unchanged
+```
+
+---
+
+## 4. Summary: Purchase vs Payment
+
+| Action | Effect on Existing Due | Effect on Advance | Creates New Invoice Due |
+|--------|------------------------|-------------------|------------------------|
+| **Purchase** | ❌ NO CHANGE | ✅ Increases if excess payment | ✅ YES |
+| **Manual Payment** | ✅ REDUCES | ✅ Increases if excess | ❌ NO |
+
+---
+
+## 5. Frontend Implementation Guidelines
+
+### When Creating an Invoice (Purchase)
+
+1. **Calculate Invoice Total**
+   ```javascript
+   const invoiceTotal = items.reduce((sum, item) => 
+     sum + (item.quantity * item.unit_price), 0
+   );
+   ```
+
+2. **Show Customer Balance Before Purchase**
+   ```javascript
+   // Display to user:
+   // Existing Due: PKR {customer.due_balance}
+   // Existing Advance: PKR {customer.advance_balance}
+   // New Invoice Total: PKR {invoiceTotal}
+   // New Due After Purchase: PKR {customer.due_balance + invoiceTotal}
+   ```
+
+3. **Handle Payment During Purchase**
+   ```javascript
+   // If customer pays cash:
+   // - Apply to new invoice only
+   // - Excess becomes advance
+   // - Existing due unchanged
+   
+   const newInvoiceDue = invoiceTotal - paidAmount;
+   const excessPayment = Math.max(0, paidAmount - invoiceTotal);
+   
+   // Update display:
+   // Existing Due: PKR {customer.due_balance} (unchanged)
+   // New Invoice Due: PKR {newInvoiceDue}
+   // New Advance: PKR {customer.advance_balance + excessPayment}
+   ```
+
+4. **Handle Advance Application**
+   ```javascript
+   // If advance is applied (apply_advance=true):
+   // - Advance reduces new invoice due
+   // - Existing due unchanged
+   
+   const advanceApplied = Math.min(customer.advance_balance, invoiceTotal);
+   const newInvoiceDue = invoiceTotal - advanceApplied;
+   const remainingAdvance = customer.advance_balance - advanceApplied;
+   
+   // Update display:
+   // Existing Due: PKR {customer.due_balance} (unchanged)
+   // Advance Applied: PKR {advanceApplied}
+   // New Invoice Due: PKR {newInvoiceDue}
+   // Remaining Advance: PKR {remainingAdvance}
+   ```
+
+### When Making Manual Payment (Customer Profile)
+
+1. **Calculate New Balances**
+   ```javascript
+   // Payment reduces existing due first
+   const dueReduction = Math.min(customer.due_balance, paymentAmount);
+   const newDue = customer.due_balance - dueReduction;
+   const excess = Math.max(0, paymentAmount - dueReduction);
+   const newAdvance = customer.advance_balance + excess;
+   
+   // Update display:
+   // New Due: PKR {newDue}
+   // New Advance: PKR {newAdvance}
+   ```
+
+2. **Show Clear Message**
+   ```javascript
+   // Display to user:
+   // "Payment of PKR {paymentAmount} applied to due balance"
+   // "Due reduced from PKR {customer.due_balance} to PKR {newDue}"
+   // if (excess > 0) {
+   //   "Excess of PKR {excess} added to advance balance"
+   // }
+   ```
+
+---
+
+## 6. API Endpoints Reference
+
+### Create Invoice (Purchase)
+- **POST** `/api/invoices`
+- See `POS_INVOICE_API.md` for full documentation
+- **Important**: Purchase does NOT reduce existing due
+
+### Manual Payment
+- **POST** `/api/customers/{customer}/payments`
+- See `CUSTOMER_API.md` for full documentation
+- **Important**: Payment reduces existing due balance
+
+### Add Due Manually
+- **POST** `/api/customers/{customer}/add-due`
+- Adds to due balance manually
+- Creates a "Due Payment Invoice"
+
+### Add Advance Manually
+- **POST** `/api/customers/{customer}/add-advance`
+- Adds to advance balance manually (applies to due first if due exists)
+- Creates a "Cash Receiving Invoice"
+
+---
+
+## 7. Common Scenarios for Frontend
+
+### Scenario 1: Customer with Due Makes Purchase
+
+**Frontend Flow:**
+1. Show current balance: "Due: PKR 100,000, Advance: PKR 0"
+2. Customer selects items: Total = PKR 5,000
+3. Show preview: "After purchase: Due will be PKR 105,000 (existing 100,000 + new 5,000)"
+4. Customer pays PKR 3,000
+5. Show final: "Due: PKR 102,000 (existing 100,000 + new invoice due 2,000)"
+
+**Key Point:** Existing due is NOT reduced by purchase amount.
+
+### Scenario 2: Customer Pays from Profile
+
+**Frontend Flow:**
+1. Show current balance: "Due: PKR 100,000, Advance: PKR 0"
+2. Customer enters payment: PKR 30,000
+3. Show preview: "Payment will reduce due from PKR 100,000 to PKR 70,000"
+4. Submit payment
+5. Show updated: "Due: PKR 70,000, Advance: PKR 0"
+
+**Key Point:** Payment reduces existing due.
+
+### Scenario 3: Customer Has Advance, Makes Purchase
+
+**Frontend Flow:**
+1. Show current balance: "Due: PKR 100,000, Advance: PKR 50,000"
+2. Customer selects items: Total = PKR 30,000
+3. Show preview: "Advance (PKR 50,000) will be applied to new invoice"
+4. Show: "New invoice will be fully paid, advance remaining: PKR 20,000"
+5. Show: "Due remains: PKR 100,000 (existing due unchanged)"
+
+**Key Point:** Advance reduces new invoice, existing due unchanged.
+
+---
+
+## 8. Important Notes for Frontend Developers
+
+1. **Always show both existing due and new invoice due separately**
+   - Don't combine them in calculations
+   - Display: "Existing Due: PKR X" and "New Invoice Due: PKR Y"
+
+2. **Purchases never reduce existing due**
+   - Purchase amount always creates new invoice due
+   - Existing due balance is independent of purchases
+
+3. **Only manual payments reduce existing due**
+   - Use `/api/customers/{customer}/payments` endpoint
+   - This is the only way to reduce existing due balance
+
+4. **Advance can be applied to new purchases**
+   - Set `apply_advance=true` when creating invoice
+   - Advance reduces new invoice due, not existing due
+
+5. **Excess payments become advance**
+   - During purchase: excess payment → advance
+   - During manual payment: excess payment → advance
+
+6. **Display balances clearly**
+   - Show existing due, advance, and new invoice due separately
+   - Update display after each action
+   - Use clear labels to avoid confusion
+
+---
+
+## 9. Testing Checklist for Frontend
+
+- [ ] Customer with due makes purchase → existing due unchanged
+- [ ] Customer with due makes purchase with payment → existing due unchanged
+- [ ] Customer makes manual payment → existing due reduced
+- [ ] Customer with advance makes purchase → advance applied to new invoice
+- [ ] Excess payment during purchase → becomes advance
+- [ ] Excess payment during manual payment → becomes advance
+- [ ] Display shows existing due and new invoice due separately
+- [ ] Balance updates correctly after each action
+
+---
+
+## Questions?
+
+Refer to:
+- `CUSTOMER_API.md` - Customer management API
+- `POS_INVOICE_API.md` - Invoice creation API
+- `PAYMENT_BALANCE_LOGIC.md` - Detailed payment logic explanation
+

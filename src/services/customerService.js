@@ -52,6 +52,12 @@ class CustomerService {
   recordPayment(id, payload) {
     return this.request(`/api/customers/${id}/payments`, { method: 'POST', body: JSON.stringify(payload) });
   }
+  addDue(id, payload) {
+    return this.request(`/api/customers/${id}/add-due`, { method: 'POST', body: JSON.stringify(payload) });
+  }
+  addAdvance(id, payload) {
+    return this.request(`/api/customers/${id}/add-advance`, { method: 'POST', body: JSON.stringify(payload) });
+  }
   createSale(id, payload) {
     return this.request(`/api/customers/${id}/sales`, { method: 'POST', body: JSON.stringify(payload) });
   }
