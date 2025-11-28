@@ -147,6 +147,19 @@ export default function CustomerProfile() {
   });
   const [chequeEntries, setChequeEntries] = React.useState([]);
   const [processingChequeId, setProcessingChequeId] = React.useState(null);
+  const handleChequeFieldChange = React.useCallback(
+    (field) => (eventOrValue) => {
+      const nextValue =
+        typeof eventOrValue === 'string'
+          ? eventOrValue
+          : eventOrValue?.target?.value ?? '';
+      setChequeForm((prev) => ({
+        ...prev,
+        [field]: nextValue,
+      }));
+    },
+    []
+  );
   const resetManualDueForm = React.useCallback(() => {
     setManualDueForm({
       amount: '',
@@ -1479,7 +1492,7 @@ export default function CustomerProfile() {
                                     <Input
                                       placeholder='e.g., CHQ-001'
                                       value={chequeForm.chequeNumber}
-                                      onChange={(e) => setChequeForm((prev) => ({ ...prev, chequeNumber: e.target.value }))}
+                                      onChange={handleChequeFieldChange('chequeNumber')}
                                     />
                                   </FormControl>
                                   <FormControl>
@@ -1487,7 +1500,7 @@ export default function CustomerProfile() {
                                     <Input
                                       placeholder='e.g., HBL - Main Branch'
                                       value={chequeForm.bankName}
-                                      onChange={(e) => setChequeForm((prev) => ({ ...prev, bankName: e.target.value }))}
+                                      onChange={handleChequeFieldChange('bankName')}
                                     />
                                   </FormControl>
                                   <FormControl isRequired>
@@ -1506,7 +1519,7 @@ export default function CustomerProfile() {
                                     <Input
                                         type='datetime-local'
                                         value={chequeForm.cashDate}
-                                        onChange={(e) => setChequeForm((prev) => ({ ...prev, cashDate: e.target.value }))}
+                                        onChange={handleChequeFieldChange('cashDate')}
                                     />
                                     <FormHelperText fontSize='xs'>Set the date you expect to cash this cheque.</FormHelperText>
                                   </FormControl>
@@ -1515,7 +1528,7 @@ export default function CustomerProfile() {
                                     <Textarea
                                       placeholder='Optional remarks'
                                       value={chequeForm.note}
-                                      onChange={(e) => setChequeForm((prev) => ({ ...prev, note: e.target.value }))}
+                                      onChange={handleChequeFieldChange('note')}
                                       rows={2}
                                     />
                                   </FormControl>
