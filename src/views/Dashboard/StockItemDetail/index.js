@@ -310,8 +310,8 @@ export default function StockItemDetail() {
 
   const cost = Number(item.last_purchase_price || 0);
   const price = Number(item.selling_price || 0);
-  const profit = Math.max(0, price - cost);
-  const profitPct = price > 0 ? Math.round((profit / price) * 100) : 0;
+  const profit = price - cost;
+  const profitPct = cost > 0 ? Math.round((profit / cost) * 100) : 0;
   const status = item.status || 'In Stock';
   const primaryUnit = item.primaryUnit?.symbol || item.primaryUnit?.name || item.primary_unit?.symbol || item.primary_unit?.name || '';
   const secondaryUnit = item.secondaryUnit?.symbol || item.secondaryUnit?.name || item.secondary_unit?.symbol || item.secondary_unit?.name || '';

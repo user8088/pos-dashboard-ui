@@ -63,7 +63,30 @@ import { useParams, useHistory } from 'react-router-dom';
 import { customerService } from 'services/customerService';
 import { invoiceService } from 'services/invoiceService';
 
-const getNowDateTimeLocal = () => new Date().toISOString().slice(0, 16);
+const getPakistanNowDateTimeLocal = () => {
+  const formatter = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Karachi',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+  const parts = formatter.formatToParts(new Date());
+  const map = parts.reduce((acc, part) => {
+    if (part.type !== 'literal') {
+      acc[part.type] = part.value;
+    }
+    return acc;
+  }, {});
+  const year = map.year || '0000';
+  const month = map.month || '01';
+  const day = map.day || '01';
+  const hour = map.hour || '00';
+  const minute = map.minute || '00';
+  return `${year}-${month}-${day}T${hour}:${minute}`;
+};
 
 export default function CustomerProfile() {
   const { id } = useParams();
@@ -104,43 +127,32 @@ export default function CustomerProfile() {
   const [manualDueForm, setManualDueForm] = React.useState({
     amount: '',
     description: '',
-    occurred_at: getNowDateTimeLocal(),
+    occurred_at: getPakistanNowDateTimeLocal(),
     payment_method: 'cash',
-  });
-  const [manualAdvanceForm, setManualAdvanceForm] = React.useState({
-    amount: '',
-    description: '',
-    advance_start_date: '',
-    advance_end_date: '',
-    occurred_at: getNowDateTimeLocal(),
-    payment_method: 'cash',
-    deposit_account_id: '',
   });
   const [savingManualDue, setSavingManualDue] = React.useState(false);
-  const [savingManualAdvance, setSavingManualAdvance] = React.useState(false);
   const [manualPaymentForm, setManualPaymentForm] = React.useState({
     amount: '',
     description: '',
     payment_method: 'cash',
+    occurred_at: getPakistanNowDateTimeLocal(),
   });
   const [savingManualPayment, setSavingManualPayment] = React.useState(false);
+  const [chequeForm, setChequeForm] = React.useState({
+    chequeNumber: '',
+    bankName: '',
+    amount: '',
+    cashDate: getPakistanNowDateTimeLocal(),
+    note: '',
+  });
+  const [chequeEntries, setChequeEntries] = React.useState([]);
+  const [processingChequeId, setProcessingChequeId] = React.useState(null);
   const resetManualDueForm = React.useCallback(() => {
     setManualDueForm({
       amount: '',
       description: '',
-      occurred_at: getNowDateTimeLocal(),
+      occurred_at: getPakistanNowDateTimeLocal(),
       payment_method: 'cash',
-    });
-  }, []);
-  const resetManualAdvanceForm = React.useCallback(() => {
-    setManualAdvanceForm({
-      amount: '',
-      description: '',
-      advance_start_date: '',
-      advance_end_date: '',
-      occurred_at: getNowDateTimeLocal(),
-      payment_method: 'cash',
-      deposit_account_id: '',
     });
   }, []);
   const resetManualPaymentForm = React.useCallback(() => {
@@ -148,6 +160,7 @@ export default function CustomerProfile() {
       amount: '',
       description: '',
       payment_method: 'cash',
+      occurred_at: getPakistanNowDateTimeLocal(),
     });
   }, []);
   const parseDateTimeLocalToISO = React.useCallback((value) => {
@@ -190,23 +203,43 @@ export default function CustomerProfile() {
     };
   }, [refreshProfile]);
 
-  React.useEffect(() => {
-    if (!data) return;
-    setManualAdvanceForm((prev) => ({
-      ...prev,
-      advance_start_date: prev.advance_start_date || data.advance_start_date || '',
-      advance_end_date: prev.advance_end_date || data.advance_end_date || '',
-    }));
-  }, [data?.advance_start_date, data?.advance_end_date]);
-
   // Calculate total spent from all invoices
-  const totalSpent = React.useMemo(() => {
-    if (!data?.invoices && invoices.length === 0) return 0;
-    const invoiceList = data?.invoices || invoices;
-    return invoiceList.reduce((sum, inv) => {
-      return sum + Number(inv.total || inv.total_amount || 0);
+  const totalPayments = React.useMemo(() => {
+    const transactions = data?.transactions || [];
+    return transactions.reduce((sum, txn) => {
+      if ((txn.type === 'payment' || txn.type === 'adjustment') && String(txn.direction || '').toLowerCase() === 'credit') {
+        return sum + Number(txn.amount || 0);
+      }
+      return sum;
     }, 0);
-  }, [data, invoices]);
+  }, [data?.transactions]);
+
+  const transactionDueSnapshots = React.useMemo(() => {
+    const dueMap = {};
+    const advanceMap = {};
+    (data?.transactions || []).forEach((txn) => {
+      if (!txn) return;
+      const invoiceId = txn.invoice_id || txn.reference_invoice_id;
+      if (!invoiceId && !txn.invoice_number) return;
+      const key = invoiceId ? String(invoiceId) : String(txn.invoice_number);
+      const dueSnapshot =
+        txn.due_balance_after ??
+        txn.balance_after ??
+        txn.balance ??
+        undefined;
+      if (dueSnapshot !== undefined && dueSnapshot !== null && !Number.isNaN(Number(dueSnapshot))) {
+        dueMap[key] = Number(dueSnapshot);
+      }
+      if (
+        txn.advance_balance_after !== undefined &&
+        txn.advance_balance_after !== null &&
+        !Number.isNaN(Number(txn.advance_balance_after))
+      ) {
+        advanceMap[key] = Number(txn.advance_balance_after);
+      }
+    });
+    return { dueMap, advanceMap };
+  }, [data?.transactions]);
 
   // Calculate payment breakdown by month
   const paymentHistory = React.useMemo(() => {
@@ -286,119 +319,68 @@ export default function CustomerProfile() {
 
   // Unified Transactions List (Invoices + Payments) for History
   const unifiedTransactions = React.useMemo(() => {
-    const list = [];
-    const invoiceList = data?.invoices || invoices || [];
+    const txnList = data?.transactions || [];
+    if (!txnList.length) return [];
 
-    invoiceList.forEach(inv => {
-      const invoiceNote = (inv.notes || inv.note || '').toLowerCase();
-      const isManualDueInvoice = invoiceNote.includes('due payment invoice');
-      const isManualAdvanceInvoice = invoiceNote.includes('cash receiving invoice');
-      const invoiceTitle = inv.invoice_number || `Invoice #${inv.id}`;
-      const invoiceDescription = isManualDueInvoice
-        ? 'Manual due adjustment'
-        : isManualAdvanceInvoice
-          ? 'Manual advance adjustment'
-          : 'Credit sale';
-      const invoiceBadgeLabel = isManualDueInvoice
-        ? 'Due Adj.'
-        : isManualAdvanceInvoice
-          ? 'Advance Adj.'
-          : 'Credit';
-      const invoiceIsPositive = !isManualDueInvoice;
+    const normalized = txnList
+      .map((txn, originalIndex) => {
+        const amount = Number(txn.amount || 0);
+        if (!Number.isFinite(amount) || amount === 0) return null;
+        const direction = (txn.direction || '').toLowerCase();
+        const isPositive = direction === 'credit';
+        const date = txn.occurred_at || txn.created_at || txn.updated_at || new Date().toISOString();
+        const badgeLabel = (() => {
+          if (txn.type === 'payment') return 'Payment';
+          if (txn.type === 'adjustment' && direction === 'debit') return 'Due Adj.';
+          if (txn.type === 'adjustment' && direction === 'credit') return 'Adj. Credit';
+          if (txn.type === 'refund') return 'Refund';
+          if (txn.type === 'advance') return 'Advance';
+          if (txn.type === 'sale') return 'Sale';
+          return (txn.type || 'Txn').replace(/^\w/, (c) => c.toUpperCase());
+        })();
+        const title = txn.invoice_number
+          ? txn.invoice_number
+          : txn.reference || txn.invoice?.invoice_number || `Transaction #${txn.id || ''}`;
+        return {
+          id: `txn-${txn.id || `${date}-${badgeLabel}`}`,
+          type: txn.type,
+          title,
+          description: txn.description || badgeLabel,
+          date,
+          amount,
+          isPositive,
+          badgeLabel,
+          balance: Number(
+            txn.due_balance_after ??
+            txn.balance_after ??
+            txn.balance ??
+            txn.due_balance ??
+            data?.due_balance ??
+            0
+          ),
+          originalIndex,
+        };
+      })
+      .filter(Boolean);
 
-      // Add Invoice (Sale / Adjustment)
-      list.push({
-        id: `inv-${inv.id}`,
-        type: 'invoice',
-        title: invoiceTitle,
-        description: invoiceDescription,
-        date: inv.created_at,
-        amount: Number(inv.total || inv.total_amount || 0),
-        isPositive: invoiceIsPositive,
-        badgeLabel: invoiceBadgeLabel,
-        raw: inv
-      });
-
-      // Add Payments - Red/Debit in this specific UI design
-      const payments = inv.payment_breakdown || [];
-      const paidAmount = Number(inv.paid_amount || 0);
-      const advance = Number(inv.advance_amount || inv.advance_applied || 0);
-
-      // If we have detailed breakdown
-      if (payments.length > 0) {
-        payments.forEach((pay, idx) => {
-          list.push({
-            id: `pay-${inv.id}-${idx}`,
-            type: 'payment',
-            title: `Payment for #${inv.id}`,
-            description: pay.payment_method || 'Payment',
-            date: pay.date || inv.created_at,
-            amount: Number(pay.amount || 0),
-            isPositive: false, // Red/Down
-            badgeLabel: 'Debit',
-            raw: pay
-          });
-        });
-      }
-      // Fallback if no breakdown but paid amount exists
-      else if (paidAmount > 0) {
-        list.push({
-          id: `pay-${inv.id}-main`,
-          type: 'payment',
-          title: `Payment for #${inv.id}`,
-          description: inv.payment_method || 'Payment',
-          date: inv.created_at,
-          amount: paidAmount,
-          isPositive: false,
-          badgeLabel: 'Debit',
-          raw: inv
-        });
-      }
-
-      // Add Advance usage
-      if (advance > 0) {
-        list.push({
-          id: `adv-${inv.id}`,
-          type: 'payment',
-          title: `Advance applied to #${inv.id}`,
-          description: 'Advance Adjustment',
-          date: inv.created_at,
-          amount: advance,
-          isPositive: false,
-          badgeLabel: 'Debit',
-          raw: inv
-        });
-      }
-    });
-
-    // Sort Newest First (LIFO)
-    list.sort((a, b) => new Date(b.date) - new Date(a.date));
-
-    // Calculate Running Balance (Backwards from Current Due)
-    // Assuming Current Due = Balance
-    let currentBalance = Number(data?.due_balance || 0);
-
-    const withBalance = list.map(item => {
-      const snapshotBalance = currentBalance;
-      // Update for next item (previous in time)
-      if (item.isPositive) {
-        // Invoice (Added to balance), so previous was Balance - Amount
-        currentBalance -= item.amount;
-      } else {
-        // Payment (Subtracted from balance), so previous was Balance + Amount
-        currentBalance += item.amount;
-      }
-      return { ...item, balance: snapshotBalance };
-    });
-
-    // Apply Date Filter
     const period = parseInt(paymentPeriod);
     const cutoffDate = new Date();
     cutoffDate.setMonth(cutoffDate.getMonth() - period);
+    const filtered = normalized.filter((item) => new Date(item.date) >= cutoffDate);
 
-    return withBalance.filter(item => new Date(item.date) >= cutoffDate);
+    filtered.sort((a, b) => {
+      const aDate = new Date(a.date).getTime();
+      const bDate = new Date(b.date).getTime();
+      if (paymentOrder === 'FIFO') {
+        if (aDate !== bDate) return aDate - bDate;
+        return (a.originalIndex ?? 0) - (b.originalIndex ?? 0);
+      }
+      if (aDate !== bDate) return bDate - aDate;
+      return (b.originalIndex ?? 0) - (a.originalIndex ?? 0);
+    });
 
-  }, [data, invoices, paymentPeriod]);
+    return filtered;
+  }, [data?.transactions, paymentPeriod, paymentOrder]);
 
   const handleDownload = async (invoiceId) => {
     if (downloadingIds.has(invoiceId)) return;
@@ -590,6 +572,109 @@ export default function CustomerProfile() {
     };
   }, [manualPaymentForm.amount, due, adv]);
 
+  const handleAddChequeEntry = React.useCallback(() => {
+    const numericAmount = Number(chequeForm.amount);
+    if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
+      toast({
+        title: 'Enter a valid cheque amount',
+        status: 'error',
+        duration: 3000,
+        isClosable: true,
+      });
+      return;
+    }
+
+    const entry = {
+      id: `cheque-${Date.now()}`,
+      chequeNumber: chequeForm.chequeNumber || `CHQ-${chequeEntries.length + 1}`,
+      bankName: chequeForm.bankName || 'N/A',
+      amount: numericAmount,
+      cashDate: chequeForm.cashDate,
+      note: chequeForm.note,
+      status: 'pending',
+      createdAt: new Date().toISOString(),
+    };
+
+    setChequeEntries((prev) => [entry, ...prev]);
+    setChequeForm({
+      chequeNumber: '',
+      bankName: '',
+      amount: '',
+      cashDate: getPakistanNowDateTimeLocal(),
+      note: '',
+    });
+
+    toast({
+      title: 'Cheque added',
+      description: 'Cheque saved. Cash it when the payment clears.',
+      status: 'success',
+      duration: 3000,
+      isClosable: true,
+    });
+  }, [chequeForm, chequeEntries.length, toast]);
+
+  const handleMarkChequeAsCashed = React.useCallback(
+    (chequeId) => {
+      setProcessingChequeId(chequeId);
+      setChequeEntries((prev) =>
+        prev.map((entry) =>
+          entry.id === chequeId ? { ...entry, status: 'ready' } : entry
+        )
+      );
+      toast({
+        title: 'Cheque marked to cash',
+        description: 'This cheque will be converted to a payment (UI preview).',
+        status: 'info',
+        duration: 3000,
+        isClosable: true,
+      });
+      setTimeout(() => setProcessingChequeId(null), 600);
+    },
+    [toast]
+  );
+  const normalizeDateInput = React.useCallback((value) => {
+    if (!value) return null;
+    if (value instanceof Date && !Number.isNaN(value.getTime())) return value;
+    let normalized = value;
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      const mysqlPattern = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}(:\d{2}(\.\d+)?)?$/;
+      const mysqlShortPattern = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/;
+      if (mysqlPattern.test(trimmed) || mysqlShortPattern.test(trimmed)) {
+        normalized = trimmed.replace(' ', 'T') + 'Z';
+      } else if (
+        /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(trimmed) &&
+        !/[zZ]$/.test(trimmed)
+      ) {
+        normalized = trimmed + 'Z';
+      } else {
+        normalized = trimmed;
+      }
+    }
+    const parsed = new Date(normalized);
+    if (Number.isNaN(parsed.getTime())) return null;
+    return parsed;
+  }, []);
+
+  const formatDateTimeForDisplay = React.useCallback((value) => {
+    const parsed = normalizeDateInput(value);
+    if (!parsed || Number.isNaN(parsed.getTime())) return { date: 'N/A', time: '' };
+    return {
+      date: parsed.toLocaleDateString('en-PK', {
+        timeZone: 'Asia/Karachi',
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+      }),
+      time: parsed.toLocaleTimeString('en-PK', {
+        timeZone: 'Asia/Karachi',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true,
+      }),
+    };
+  }, [normalizeDateInput]);
+
   const handleSubmitRefund = React.useCallback(async () => {
     if (!refundContext) return;
     if (selectedRefundItems.length === 0) {
@@ -704,72 +789,6 @@ export default function CustomerProfile() {
     toast,
   ]);
 
-  const handleManualAdvanceSubmit = React.useCallback(async () => {
-    const amountValue = Number(manualAdvanceForm.amount || 0);
-    if (!Number.isFinite(amountValue) || amountValue <= 0) {
-      toast({
-        title: 'Enter a valid advance amount',
-        status: 'error',
-        duration: 3000,
-        isClosable: true,
-      });
-      return;
-    }
-    if (
-      manualAdvanceForm.advance_start_date &&
-      manualAdvanceForm.advance_end_date &&
-      manualAdvanceForm.advance_end_date < manualAdvanceForm.advance_start_date
-    ) {
-      toast({
-        title: 'Invalid advance window',
-        description: 'End date must be after or equal to start date.',
-        status: 'error',
-        duration: 4000,
-        isClosable: true,
-      });
-      return;
-    }
-    setSavingManualAdvance(true);
-    try {
-      const payload = {
-        amount: amountValue,
-      };
-      if (manualAdvanceForm.description?.trim()) payload.description = manualAdvanceForm.description.trim();
-      if (manualAdvanceForm.advance_start_date) payload.advance_start_date = manualAdvanceForm.advance_start_date;
-      if (manualAdvanceForm.advance_end_date) payload.advance_end_date = manualAdvanceForm.advance_end_date;
-      const occurredAt = parseDateTimeLocalToISO(manualAdvanceForm.occurred_at);
-      if (occurredAt) payload.occurred_at = occurredAt;
-      if (manualAdvanceForm.payment_method) payload.payment_method = manualAdvanceForm.payment_method;
-      if (manualAdvanceForm.deposit_account_id?.trim()) payload.deposit_account_id = manualAdvanceForm.deposit_account_id.trim();
-      const resp = await customerService.addAdvance(id, payload);
-      toast({
-        title: 'Advance balance increased',
-        description: resp?.message || 'Cash Receiving Invoice created automatically.',
-        status: 'success',
-        duration: 3000,
-        isClosable: true,
-      });
-      resetManualAdvanceForm();
-      await refreshProfile({ silent: true });
-    } catch (error) {
-      toast({
-        title: 'Failed to add advance',
-        description: error?.message || 'An error occurred while adjusting advance balance.',
-        status: 'error',
-        duration: 4000,
-        isClosable: true,
-      });
-    } finally {
-      setSavingManualAdvance(false);
-    }
-  }, [
-    id,
-    manualAdvanceForm,
-    parseDateTimeLocalToISO,
-    refreshProfile,
-    resetManualAdvanceForm,
-    toast,
-  ]);
 
   const handleManualPaymentSubmit = React.useCallback(async () => {
     const amountValue = Number(manualPaymentForm.amount || 0);
@@ -791,6 +810,8 @@ export default function CustomerProfile() {
         ...(trimmedDescription ? { description: trimmedDescription } : {}),
         payment_method: manualPaymentForm.payment_method,
       };
+      const occurredAt = parseDateTimeLocalToISO(manualPaymentForm.occurred_at);
+      if (occurredAt) payload.occurred_at = occurredAt;
       const resp = await customerService.recordPayment(id, payload);
       toast({
         title: 'Payment recorded',
@@ -820,6 +841,7 @@ export default function CustomerProfile() {
     manualPaymentForm.amount,
     manualPaymentForm.description,
     manualPaymentForm.payment_method,
+    manualPaymentForm.occurred_at,
     manualPaymentPreview.dueReduction,
     customerService,
     id,
@@ -874,6 +896,72 @@ export default function CustomerProfile() {
         });
       }
 
+      const sortedInvoices = [...filteredInvoices].sort((a, b) => {
+        const dateA = new Date(a.created_at || a.updated_at || 0).getTime();
+        const dateB = new Date(b.created_at || b.updated_at || 0).getTime();
+        if (dateA === dateB) {
+          return Number(a.id || 0) - Number(b.id || 0);
+        }
+        return dateA - dateB;
+      });
+
+      const formatCurrency = (value = 0) =>
+        Number(value).toLocaleString('en-PK', {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        });
+
+      let runningDuePreview = 0;
+      let runningAdvancePreview = 0;
+      const invoiceRowsHtml = sortedInvoices.map(inv => {
+        let total = Number(inv.total || inv.total_amount || 0);
+        const paid = Number(inv.paid_amount || 0);
+        const dueField =
+          inv.due_amount !== undefined && inv.due_amount !== null
+            ? Number(inv.due_amount)
+            : undefined;
+        const dueAmount = Number.isFinite(dueField) ? dueField : Math.max(0, total - paid);
+        const noteLower = (inv.notes || '').toLowerCase();
+        const isPaymentInvoice = noteLower.includes('cash receiving invoice');
+        if (isPaymentInvoice && paid > 0 && total <= paid) {
+          total = paid;
+        }
+        const isAdvanceIncrease = isPaymentInvoice;
+        if (isPaymentInvoice) {
+          runningDuePreview = Math.max(0, runningDuePreview - paid);
+          runningAdvancePreview = Math.max(0, runningAdvancePreview + paid);
+        } else {
+          runningDuePreview = Math.max(0, runningDuePreview + dueAmount);
+        }
+        const snapshotKey = inv.id ? String(inv.id) : inv.invoice_number;
+        const snapshotDue = snapshotKey ? transactionDueSnapshots.dueMap[snapshotKey] : undefined;
+        const snapshotAdvance = snapshotKey ? transactionDueSnapshots.advanceMap[snapshotKey] : undefined;
+        const displayDue = snapshotDue !== undefined
+          ? Math.max(0, Number(snapshotDue))
+          : (isPaymentInvoice ? Math.max(0, runningDuePreview) : dueAmount);
+        const displayAdvance = snapshotAdvance !== undefined
+          ? Math.max(0, Number(snapshotAdvance))
+          : runningAdvancePreview;
+        const status = paid > 0 || displayDue === 0 ? 'Paid' : 'Due';
+        return `
+                  <tr>
+                    <td>${inv.invoice_number || `#${inv.id}`}</td>
+                    <td>${inv.created_at ? new Date(inv.created_at).toLocaleDateString() : 'N/A'}</td>
+                    <td>PKR ${formatCurrency(total)}</td>
+                    <td>PKR ${formatCurrency(paid)}</td>
+                    <td>PKR ${formatCurrency(displayDue)}</td>
+                    <td>PKR ${formatCurrency(displayAdvance)}</td>
+                    <td>${status}</td>
+                  </tr>
+                `;
+      }).join('');
+
+      const creditsInRange = sortedInvoices.reduce((sum, inv) => {
+        const paid = Number(inv.paid_amount || 0);
+        if (!Number.isFinite(paid) || paid <= 0) return sum;
+        return sum + paid;
+      }, 0);
+
       // Create HTML content for statement
       const statementHTML = `
         <!DOCTYPE html>
@@ -905,9 +993,9 @@ export default function CustomerProfile() {
           </div>
           <div class="summary">
             <div><strong>Total Invoices:</strong> ${filteredInvoices.length}</div>
-            <div><strong>Total Spent:</strong> PKR ${filteredInvoices.reduce((sum, inv) => sum + Number(inv.total || inv.total_amount || 0), 0).toFixed(2)}</div>
-            <div><strong>Total Paid:</strong> PKR ${filteredInvoices.reduce((sum, inv) => sum + Number(inv.paid_amount || 0), 0).toFixed(2)}</div>
-            <div><strong>Total Due:</strong> PKR ${filteredInvoices.reduce((sum, inv) => sum + Number(inv.due_amount || 0), 0).toFixed(2)}</div>
+            <div><strong>Credits (Payments):</strong> PKR ${formatCurrency(creditsInRange)}</div>
+            <div><strong>Outstanding Due:</strong> PKR ${formatCurrency(due)}</div>
+            <div><strong>Advance Balance:</strong> PKR ${formatCurrency(adv)}</div>
           </div>
           <table>
             <thead>
@@ -917,26 +1005,12 @@ export default function CustomerProfile() {
                 <th>Total</th>
                 <th>Paid</th>
                 <th>Due</th>
+                <th>Advance</th>
                 <th>Status</th>
               </tr>
             </thead>
             <tbody>
-              ${filteredInvoices.map(inv => {
-        const total = Number(inv.total || inv.total_amount || 0);
-        const paid = Number(inv.paid_amount || 0);
-        const due = Number(inv.due_amount || 0);
-        const status = due > 0 ? 'Due' : 'Paid';
-        return `
-                  <tr>
-                    <td>${inv.invoice_number || `#${inv.id}`}</td>
-                    <td>${inv.created_at ? new Date(inv.created_at).toLocaleDateString() : 'N/A'}</td>
-                    <td>PKR ${total.toFixed(2)}</td>
-                    <td>PKR ${paid.toFixed(2)}</td>
-                    <td>PKR ${due.toFixed(2)}</td>
-                    <td>${status}</td>
-                  </tr>
-                `;
-      }).join('')}
+              ${invoiceRowsHtml}
             </tbody>
           </table>
         </body>
@@ -1050,8 +1124,10 @@ export default function CustomerProfile() {
           <Card bg={cardBg}>
             <CardBody p='20px'>
               <Stat>
-                <StatLabel color='gray.600'>Total Spent</StatLabel>
-                <StatNumber fontSize='xl' color={textColor}>PKR {totalSpent.toFixed(2)}</StatNumber>
+                <StatLabel color='gray.600'>Total Paid</StatLabel>
+                <StatNumber fontSize='xl' color='teal.500'>
+                  PKR {totalPayments.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </StatNumber>
               </Stat>
             </CardBody>
           </Card>
@@ -1176,16 +1252,14 @@ export default function CustomerProfile() {
                                   {txn.description}
                                 </Text>
                               )}
-                              <Text fontSize='xs' color='gray.400' mt='4px'>
-                                {new Date(txn.date).toLocaleDateString('en-US', {
-                                  month: 'short',
-                                  day: 'numeric',
-                                  year: 'numeric'
-                                })} • {new Date(txn.date).toLocaleTimeString('en-US', {
-                                  hour: '2-digit',
-                                  minute: '2-digit'
-                                })}
-                              </Text>
+                              {(() => {
+                                const localized = formatDateTimeForDisplay(txn.date);
+                                return (
+                                  <Text fontSize='xs' color='gray.400' mt='4px'>
+                                    {localized.date} • {localized.time}
+                                  </Text>
+                                );
+                              })()}
                             </Box>
                           </Box>
                         ))
@@ -1203,7 +1277,7 @@ export default function CustomerProfile() {
                       <VStack align='stretch' spacing='2px'>
                         <Text fontWeight='bold' color={textColor} fontSize='lg'>Manual Balance Adjustments</Text>
                         <Text fontSize='sm' color='gray.500'>
-                          Use these controls to add outstanding dues or record advance payments in seconds.
+                          Use these controls to add outstanding dues or record payments in seconds.
                         </Text>
                       </VStack>
                     </CardHeader>
@@ -1215,6 +1289,7 @@ export default function CustomerProfile() {
                           bg={sectionBg}
                           borderRadius='16px'
                           p='18px'
+                          display='none'
                         >
                           <VStack align='stretch' spacing='8px'>
                         <Text fontWeight='bold' color={textColor}>What happens?</Text>
@@ -1222,7 +1297,7 @@ export default function CustomerProfile() {
                           • Add Due: increases the customer&apos;s outstanding balance.
                         </Text>
                         <Text fontSize='sm' color='gray.600'>
-                          • Add Advance: records money received in advance.
+                          • Add Payment: reduces due first and any extra becomes advance.
                         </Text>
                             <Divider />
                             <Text fontSize='sm' color='gray.600'>
@@ -1241,7 +1316,8 @@ export default function CustomerProfile() {
                           <Tabs variant='soft-rounded' colorScheme='orange' isFitted>
                             <TabList px='18px' pt='18px' pb='6px'>
                               <Tab fontWeight='semibold'>Add Due</Tab>
-                              <Tab fontWeight='semibold'>Add Advance</Tab>
+                              <Tab fontWeight='semibold'>Add Payment</Tab>
+                              <Tab fontWeight='semibold'>Add Cheque</Tab>
                             </TabList>
                             <TabPanels px='18px' pb='18px'>
                               <TabPanel px={0} pt='12px'>
@@ -1306,213 +1382,212 @@ export default function CustomerProfile() {
                               <TabPanel px={0} pt='12px'>
                                 <VStack align='stretch' spacing='12px'>
                                   <FormControl isRequired>
-                                    <FormLabel>Amount (PKR)</FormLabel>
-                                    <NumberInput min={0.01} precision={2} value={manualAdvanceForm.amount} onChange={(valueString) => setManualAdvanceForm((prev) => ({ ...prev, amount: valueString }))}>
+                                    <FormLabel>Payment Amount (PKR)</FormLabel>
+                                    <NumberInput min={0.01} precision={2} value={manualPaymentForm.amount} onChange={(valueString) => setManualPaymentForm((prev) => ({ ...prev, amount: valueString }))}>
                                       <NumberInputField />
                                     </NumberInput>
                                   </FormControl>
                                   <FormControl>
                                     <FormLabel>Description</FormLabel>
                                     <Textarea
-                                      placeholder='Manual advance adjustment - Prepayment'
-                                      value={manualAdvanceForm.description}
+                                      placeholder='e.g., Customer payment received'
+                                      value={manualPaymentForm.description}
                                       onChange={(e) => {
                                         const { value } = e.target;
-                                        setManualAdvanceForm((prev) => ({ ...prev, description: value }));
+                                        setManualPaymentForm((prev) => ({ ...prev, description: value }));
                                       }}
                                       rows={2}
                                     />
-                                    <FormHelperText fontSize='xs'>Listed on the Cash Receiving Invoice line item.</FormHelperText>
+                                    <FormHelperText fontSize='xs'>Shown on the payment receipt.</FormHelperText>
                                   </FormControl>
-                                  <HStack spacing='12px' align='flex-start' flexWrap='wrap'>
-                                    <FormControl minW='150px'>
-                                      <FormLabel>Advance Start Date</FormLabel>
-                                      <Input
-                                        type='date'
-                                        value={manualAdvanceForm.advance_start_date}
-                                        onChange={(e) => {
-                                          const { value } = e.target;
-                                          setManualAdvanceForm((prev) => ({ ...prev, advance_start_date: value }));
-                                        }}
-                                      />
-                                    </FormControl>
-                                    <FormControl minW='150px'>
-                                      <FormLabel>Advance End Date</FormLabel>
-                                      <Input
-                                        type='date'
-                                        value={manualAdvanceForm.advance_end_date}
-                                        onChange={(e) => {
-                                          const { value } = e.target;
-                                          setManualAdvanceForm((prev) => ({ ...prev, advance_end_date: value }));
-                                        }}
-                                      />
-                                    </FormControl>
-                                  </HStack>
                                   <FormControl>
                                     <FormLabel>Occurred At</FormLabel>
                                     <Input
                                       type='datetime-local'
-                                      value={manualAdvanceForm.occurred_at}
+                                      value={manualPaymentForm.occurred_at}
                                       onChange={(e) => {
                                         const { value } = e.target;
-                                        setManualAdvanceForm((prev) => ({ ...prev, occurred_at: value }));
+                                        setManualPaymentForm((prev) => ({ ...prev, occurred_at: value }));
                                       }}
                                     />
                                   </FormControl>
-                                  <FormControl>
+                                  <FormControl maxW={{ base: '100%', md: '260px' }}>
                                     <FormLabel>Payment Method</FormLabel>
                                     <Select
-                                      value={manualAdvanceForm.payment_method}
+                                      value={manualPaymentForm.payment_method}
                                       onChange={(e) => {
                                         const { value } = e.target;
-                                        setManualAdvanceForm((prev) => ({ ...prev, payment_method: value }));
+                                        setManualPaymentForm((prev) => ({ ...prev, payment_method: value }));
                                       }}
                                     >
                                       <option value='cash'>Cash</option>
                                       <option value='card'>Card</option>
+                                      <option value='bank'>Bank</option>
                                       <option value='other'>Other</option>
                                     </Select>
                                   </FormControl>
+                                  <Alert
+                                    status={manualPaymentPreview.amountValue > 0 ? 'info' : 'warning'}
+                                    borderRadius='12px'
+                                    alignItems='flex-start'
+                                  >
+                                    <AlertIcon mt='2px' />
+                                    <Box>
+                                      {manualPaymentPreview.amountValue > 0 ? (
+                                        <>
+                                          <Text fontWeight='semibold'>
+                                            Due after payment: PKR {manualPaymentPreview.newDue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                          </Text>
+                                          {manualPaymentPreview.dueReduction > 0 && (
+                                            <Text fontSize='sm' color='gray.600'>
+                                              Due reduces by PKR {manualPaymentPreview.dueReduction.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}.
+                                            </Text>
+                                          )}
+                                          {manualPaymentPreview.excessAdvance > 0 ? (
+                                            <Text fontSize='sm' color='gray.600'>
+                                              Extra PKR {manualPaymentPreview.excessAdvance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} moves to advance (new advance: PKR {manualPaymentPreview.newAdvance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}).
+                                            </Text>
+                                          ) : (
+                                            <Text fontSize='sm' color='gray.600'>
+                                              No excess amount remains after clearing due.
+                                            </Text>
+                                          )}
+                                        </>
+                                      ) : (
+                                        <Text fontSize='sm' color='gray.600'>
+                                          Enter an amount to preview how the balance will update.
+                                        </Text>
+                                      )}
+                                    </Box>
+                                  </Alert>
+                                  <Button
+                                    colorScheme='orange'
+                                    bg='#FF8D28'
+                                    _hover={{ bg: '#E67E22' }}
+                                    onClick={handleManualPaymentSubmit}
+                                    isLoading={savingManualPayment}
+                                    alignSelf='flex-start'
+                                  >
+                                    Add Payment
+                                  </Button>
+                                </VStack>
+                              </TabPanel>
+                              <TabPanel px={0} pt='12px'>
+                                <VStack align='stretch' spacing='12px'>
                                   <FormControl>
-                                    <FormLabel>Deposit Account ID</FormLabel>
+                                    <FormLabel>Cheque Number</FormLabel>
                                     <Input
-                                      placeholder='Optional receiving account id'
-                                      value={manualAdvanceForm.deposit_account_id}
-                                      onChange={(e) => {
-                                        const { value } = e.target;
-                                        setManualAdvanceForm((prev) => ({ ...prev, deposit_account_id: value }));
-                                      }}
+                                      placeholder='e.g., CHQ-001'
+                                      value={chequeForm.chequeNumber}
+                                      onChange={(e) => setChequeForm((prev) => ({ ...prev, chequeNumber: e.target.value }))}
                                     />
-                                    <FormHelperText fontSize='xs'>Blank = system default cash/bank mapping.</FormHelperText>
+                                  </FormControl>
+                                  <FormControl>
+                                    <FormLabel>Bank / Branch</FormLabel>
+                                    <Input
+                                      placeholder='e.g., HBL - Main Branch'
+                                      value={chequeForm.bankName}
+                                      onChange={(e) => setChequeForm((prev) => ({ ...prev, bankName: e.target.value }))}
+                                    />
+                                  </FormControl>
+                                  <FormControl isRequired>
+                                    <FormLabel>Cheque Amount (PKR)</FormLabel>
+                                    <NumberInput
+                                      min={0.01}
+                                      precision={2}
+                                      value={chequeForm.amount}
+                                      onChange={(valueString) => setChequeForm((prev) => ({ ...prev, amount: valueString }))}
+                                    >
+                                      <NumberInputField />
+                                    </NumberInput>
+                                  </FormControl>
+                                  <FormControl>
+                                    <FormLabel>Cash On</FormLabel>
+                                    <Input
+                                        type='datetime-local'
+                                        value={chequeForm.cashDate}
+                                        onChange={(e) => setChequeForm((prev) => ({ ...prev, cashDate: e.target.value }))}
+                                    />
+                                    <FormHelperText fontSize='xs'>Set the date you expect to cash this cheque.</FormHelperText>
+                                  </FormControl>
+                                  <FormControl>
+                                    <FormLabel>Notes</FormLabel>
+                                    <Textarea
+                                      placeholder='Optional remarks'
+                                      value={chequeForm.note}
+                                      onChange={(e) => setChequeForm((prev) => ({ ...prev, note: e.target.value }))}
+                                      rows={2}
+                                    />
                                   </FormControl>
                                   <Button
                                     colorScheme='orange'
                                     bg='#FF8D28'
                                     _hover={{ bg: '#E67E22' }}
-                                    onClick={handleManualAdvanceSubmit}
-                                    isLoading={savingManualAdvance}
                                     alignSelf='flex-start'
+                                    onClick={handleAddChequeEntry}
                                   >
-                                    Add Advance Balance
+                                    Save Cheque
                                   </Button>
+                                </VStack>
+                                <Divider my='6' />
+                                <VStack align='stretch' spacing='6'>
+                                  <Text fontWeight='semibold' color={textColor}>Saved Cheques</Text>
+                                  {chequeEntries.length === 0 ? (
+                                    <Text color='gray.500'>No cheques have been recorded yet.</Text>
+                                  ) : (
+                                    <Table variant='simple' size='sm'>
+                                      <Thead bg={sectionBg}>
+                                        <Tr>
+                                          <Th>Cheque #</Th>
+                                          <Th>Bank</Th>
+                                          <Th isNumeric>Amount (PKR)</Th>
+                                          <Th>Cash On</Th>
+                                          <Th>Status</Th>
+                                          <Th></Th>
+                                        </Tr>
+                                      </Thead>
+                                      <Tbody>
+                                        {chequeEntries.map((cheque) => (
+                                          <Tr key={cheque.id}>
+                                            <Td>
+                                              <Text fontWeight='medium'>{cheque.chequeNumber}</Text>
+                                              {cheque.note && (
+                                                <Text fontSize='xs' color='gray.500'>{cheque.note}</Text>
+                                              )}
+                                            </Td>
+                                            <Td>{cheque.bankName || 'N/A'}</Td>
+                                            <Td isNumeric>PKR {cheque.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Td>
+                                            <Td>{cheque.cashDate ? formatDateTimeForDisplay(cheque.cashDate).date : 'N/A'}</Td>
+                                            <Td>
+                                              <Badge colorScheme={cheque.status === 'ready' ? 'green' : 'orange'}>
+                                                {cheque.status === 'ready' ? 'Ready to cash' : 'Pending'}
+                                              </Badge>
+                                            </Td>
+                                            <Td>
+                                              <Button
+                                                size='sm'
+                                                variant='outline'
+                                                colorScheme='green'
+                                                onClick={() => handleMarkChequeAsCashed(cheque.id)}
+                                                isDisabled={cheque.status === 'ready'}
+                                                isLoading={processingChequeId === cheque.id}
+                                              >
+                                                Cash Cheque
+                                              </Button>
+                                            </Td>
+                                          </Tr>
+                                        ))}
+                                      </Tbody>
+                                    </Table>
+                                  )}
                                 </VStack>
                               </TabPanel>
                             </TabPanels>
                           </Tabs>
-                        </Box>
-                      </Flex>
+                          </Box>
+                          </Flex>
                     </CardBody>
                   </Card>
-                <Card bg={cardBg} w='100%'>
-                  <CardHeader pb='12px'>
-                    <VStack align='stretch' spacing='2px'>
-                      <Text fontWeight='bold' color={textColor} fontSize='lg'>Clear Due (Manual Payment)</Text>
-                      <Text fontSize='sm' color='gray.500'>
-                        Record a payment to reduce outstanding dues. If the amount is higher than the due, the rest becomes advance automatically.
-                      </Text>
-                    </VStack>
-                  </CardHeader>
-                  <CardBody pt={0} px='24px' pb='24px'>
-                    <VStack align='stretch' spacing='16px'>
-                      <HStack spacing='24px' flexWrap='wrap'>
-                        <Stat minW='150px'>
-                          <StatLabel color='gray.500'>Current Due</StatLabel>
-                          <StatNumber fontSize='xl' color={due > 0 ? 'red.500' : 'green.500'}>
-                            PKR {due.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                          </StatNumber>
-                        </Stat>
-                        <Stat minW='150px'>
-                          <StatLabel color='gray.500'>Current Advance</StatLabel>
-                          <StatNumber fontSize='xl' color='teal.500'>
-                            PKR {adv.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                          </StatNumber>
-                        </Stat>
-                      </HStack>
-                      <FormControl isRequired>
-                        <FormLabel>Payment Amount (PKR)</FormLabel>
-                        <NumberInput
-                          min={0.01}
-                          precision={2}
-                          value={manualPaymentForm.amount}
-                          onChange={(valueString) => setManualPaymentForm((prev) => ({ ...prev, amount: valueString }))}
-                        >
-                          <NumberInputField />
-                        </NumberInput>
-                      </FormControl>
-                      <FormControl>
-                        <FormLabel>Description</FormLabel>
-                        <Textarea
-                          placeholder='e.g., Cash collected from customer'
-                          value={manualPaymentForm.description}
-                          onChange={(e) => {
-                            const { value } = e.target;
-                            setManualPaymentForm((prev) => ({ ...prev, description: value }));
-                          }}
-                          rows={2}
-                        />
-                      </FormControl>
-                      <FormControl maxW={{ base: '100%', md: '260px' }}>
-                        <FormLabel>Payment Method</FormLabel>
-                        <Select
-                          value={manualPaymentForm.payment_method}
-                          onChange={(e) => {
-                            const { value } = e.target;
-                            setManualPaymentForm((prev) => ({ ...prev, payment_method: value }));
-                          }}
-                        >
-                          <option value='cash'>Cash</option>
-                          <option value='card'>Card</option>
-                          <option value='bank'>Bank</option>
-                          <option value='other'>Other</option>
-                        </Select>
-                      </FormControl>
-                      <Alert
-                        status={manualPaymentPreview.amountValue > 0 ? 'info' : 'warning'}
-                        borderRadius='12px'
-                        alignItems='flex-start'
-                      >
-                        <AlertIcon mt='2px' />
-                        <Box>
-                          {manualPaymentPreview.amountValue > 0 ? (
-                            <>
-                              <Text fontWeight='semibold'>
-                                Due after payment: PKR {manualPaymentPreview.newDue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                              </Text>
-                              {manualPaymentPreview.dueReduction > 0 && (
-                                <Text fontSize='sm' color='gray.600'>
-                                  Due reduces by PKR {manualPaymentPreview.dueReduction.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}.
-                                </Text>
-                              )}
-                              {manualPaymentPreview.excessAdvance > 0 ? (
-                                <Text fontSize='sm' color='gray.600'>
-                                  Extra PKR {manualPaymentPreview.excessAdvance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} moves to advance (new advance: PKR {manualPaymentPreview.newAdvance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}).
-                                </Text>
-                              ) : (
-                                <Text fontSize='sm' color='gray.600'>
-                                  No excess amount remains after clearing due.
-                                </Text>
-                              )}
-                            </>
-                          ) : (
-                            <Text fontSize='sm' color='gray.600'>
-                              Enter an amount to preview how the balance will update.
-                            </Text>
-                          )}
-                        </Box>
-                      </Alert>
-                      <Button
-                        alignSelf='flex-start'
-                        colorScheme='orange'
-                        bg='#FF8D28'
-                        _hover={{ bg: '#E67E22' }}
-                        onClick={handleManualPaymentSubmit}
-                        isLoading={savingManualPayment}
-                      >
-                        Apply Payment
-                      </Button>
-                    </VStack>
-                  </CardBody>
-                </Card>
                   {/* In Good Standing Card */}
                   <Card bg={cardBg} w='100%'>
                     <CardBody p='24px' w='100%'>
@@ -1650,7 +1725,7 @@ export default function CustomerProfile() {
                       )}
                       <Box>
                         <Text fontSize='xs' color='gray.500' mb='4px'>Total Spent</Text>
-                        <Text fontWeight='bold' fontSize='lg' color={textColor}>PKR {totalSpent.toFixed(2)}</Text>
+                        <Text fontWeight='bold' fontSize='lg' color={textColor}>PKR {totalPayments.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Text>
                       </Box>
                       <Box>
                         <Text fontSize='xs' color='gray.500' mb='4px'>Total Invoices</Text>
